@@ -1,0 +1,11 @@
+# PlatformIO build output
+.pio/
+
+# Private credentials - NEVER commit (template lives in secrets.h.example)
+src/secrets.h
+
+# Python / OS junk
+__pycache__/
+.DS_Store
+Thumbs.db
+.zcode/

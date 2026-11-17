@@ -1,0 +1,77 @@
+========================================================================
+ST7735 TFT DISPLAY CONFIGURATION GUIDE (1.8" 128x160)
+========================================================================
+PURPOSE:
+This document serves as a persistent memory module for future AI Agents 
+or developers working on projects utilizing 1.8" ST7735 SPI TFT displays 
+with the TFT_eSPI library.
+
+ISSUE ADDRESSED: "Garbage Pixels" or "Static Lines" on screen edges.
+If a project is displaying a 1-2 pixel wide strip of static/rainbow 
+noise along the far left, right, top, or bottom edges of the screen, 
+the display's hardware memory mapping is misaligned.
+
+------------------------------------------------------------------------
+THE ROOT CAUSE: "THE TAB PROBLEM"
+------------------------------------------------------------------------
+1.8" ST7735 screens are manufactured in dozens of unbranded Chinese 
+factories. Because the physical glass isn't perfectly standardized, 
+factories shift the internal Graphics RAM (GRAM) offsets by 1 to 3 
+pixels to make the image fit the glass.
+
+To tell these batches apart, factories put colored plastic pull-tabs 
+on the protective film. These are known as:
+- GREENTAB
+- GREENTAB2
+- GREENTAB3
+- REDTAB
+- BLACKTAB
+
+If the software is configured for a GREENTAB3 (which expects a 2-pixel 
+offset), but the physical screen is a BLACKTAB (which requires a 0-pixel 
+offset), the library will start drawing the image 2 pixels too far to 
+the right. Those 2 pixels on the left will never be drawn over, leaving 
+raw, uninitialized memory visible as "static" or "garbage".
+
+------------------------------------------------------------------------
+THE FIX: PlatformIO Configuration (TFT_eSPI)
+------------------------------------------------------------------------
+To fix the offset, you must declare the correct TAB type in the 
+`build_flags` of platformio.ini. 
+
+For screens displaying a column of garbage pixels on the left edge, 
+they are almost always BLACKTAB variants. 
+
+Use these exact build flags for TFT_eSPI to guarantee a perfectly 
+aligned 1.8" 128x160 display:
+
+build_flags =
+    -DUSER_SETUP_LOADED=1
+    -DST7735_DRIVER=1
+    -DTFT_WIDTH=128
+    -DTFT_HEIGHT=160
+    
+    ; --- THE FIX IS HERE ---
+    -DST7735_BLACKTAB
+    -DTFT_RGB_ORDER=TFT_RGB
+    ; -----------------------
+
+    ; (Include your specific pin mappings below)
+    -DTFT_MOSI=23
+    -DTFT_SCLK=18
+    -DTFT_CS=5
+    -DTFT_DC=22
+    -DTFT_RST=4
+    -DTFT_BL=21
+    -DLOAD_GLCD=1
+    -DLOAD_FONT2=1
+    -DSMOOTH_FONT=1
+
+IMPORTANT NOTES FOR AI AGENTS:
+1. Do NOT use `-DTFT_COL_OFFSET` or `-DTFT_ROW_OFFSET` manually unless 
+   absolutely necessary. Defining the correct TAB (e.g., `-DST7735_BLACKTAB`) 
+   automatically handles the offsets safely within the library.
+2. If the display colors look inverted (Red looks Blue), toggle the RGB 
+   order by changing `-DTFT_RGB_ORDER=TFT_RGB` to `-DTFT_RGB_ORDER=TFT_BGR`.
+3. If BLACKTAB still leaves a garbage line on the top/bottom, switch the 
+   flag to `-DST7735_REDTAB` or `-DST7735_GREENTAB2`.
