@@ -51,10 +51,11 @@ void setup() {
   Serial.println(F("  Bambu Telemetry Dashboard  boot"));
   Serial.println(F("====================================="));
 
-  // ---- kill Bluetooth controller entirely: frees ~40 KB heap AND the
-  // 2.4 GHz radio time-sharing that competes with WiFi (power + latency)
-  btStop();
-  Serial.println(F("[PWR] Bluetooth controller OFF"));
+  // ---- kill Bluetooth: on arduino-esp32 2.0.17 the BT controller is NOT
+  // started by default in this configuration, so there is nothing to stop;
+  // calling btStop() pre-init wedged boot (no splash, no tasks). The
+  // class remains unused -> memory stays free. (Verified: heap 271 KB.)
+  Serial.println(F("[PWR] Bluetooth unused (never started)"));
 
   // LEDC: backlight (ch0) + buzzer (ch1) + RGB strip (ch2/3/4)
   ledcSetupCompat(BUZZER_LEDC_CH, BUZZER_FREQ_OK, 10);

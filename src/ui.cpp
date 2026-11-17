@@ -613,7 +613,11 @@ static void uiTask(void* /*param*/) {
     TelemetryData d;
     telemetryRead(d);
 
-    if (view == VIEW_BOOT && ms - boot_start_ms >= BOOT_MS) view = VIEW_HOME;
+    if (view == VIEW_BOOT && ms - boot_start_ms >= BOOT_MS) {
+      view = VIEW_HOME;
+      startBeepPattern(1);   // boot-complete beep (verifies GPIO19 buzzer)
+      Serial.println(F("[UI] boot done -> HOME (beep)"));
+    }
 
     // --- timer expiry ---
     if (timerRunning() && !timer_fired && (int32_t)(ms - timer_end_ms) >= 0) {
