@@ -18,12 +18,11 @@ struct BtnState {
   bool     raw_high;        // last debounced level (true = released)
   uint32_t last_edge_ms;    // last debounced edge time
   bool     long_fired;      // LONG already emitted this hold
-  bool     press_emitted;   // PRESS already emitted this hold
   uint32_t last_release_ms; // for double-press detection
 };
 
-static BtnState b_menu   {PIN_BTN_MENU,   true, 0, false, false, 0};
-static BtnState b_select {PIN_BTN_SELECT, true, 0, false, false, 0};
+static BtnState b_menu   {PIN_BTN_MENU,   true, 0, false, 0};
+static BtnState b_select {PIN_BTN_SELECT, true, 0, false, 0};
 
 // event codes (match ui.h): 1=menu 2=select 3=menuLong 4=menuDouble 5=selLong
 static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
@@ -36,7 +35,6 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
       b.last_edge_ms = ms;
       if (!now_high) {                     // ---- pressed ----
         b.long_fired = false;
-        b.press_emitted = false;
       } else {                             // ---- released ----
         uint8_t ev = 0;
         if (&b == &b_menu &&
@@ -48,7 +46,7 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
         } else {
           b.last_release_ms = ms;
         }
-        if (b.press_emitted && !b.long_fired && ev == 0) {
+        if (!b.long_fired && ev == 0) {
           ev = (&b == &b_menu) ? 1 : 2;    // normal short press
         }
         return ev;
@@ -238,9 +236,11 @@ static void peripheralsTask(void* /*param*/) {
     telemetryRead(d);
 
     // --- buttons: state-machine driven, one event per press ---
-    uint8_t ev = 0;
-    if ((ev = buttonUpdate(b_menu, ms)))   ui_button_event = ev;
-    if ((ev = buttonUpdate(b_select, ms))) ui_button_event = ev;
+    // OR both buttons' events: a plain `if` would let select overwrite a
+    // menu event fired in the same 30 ms scan.
+    uint8_t ev = buttonUpdate(b_menu, ms);
+    ev |= (ev == 0) ? buttonUpdate(b_select, ms) : 0;
+    if (ev) ui_button_event = ev;
 
     // --- state transitions: beeps (skipped when sound disabled) ---
     if (options_sound_on() && d.state != prev_state) {

@@ -207,7 +207,7 @@ static void drawList(const char* title, const char* const* labels,
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("M:down  SEL:ok  Mx2:home  M-hold:back", 4, 120);
+  sprite.drawString("M:down SEL:ok Mx2:home", 4, 120);  // 38ch hint = 228px, clipped
 }
 
 // ---------------- menu row values / active marks ----------------------
@@ -329,10 +329,10 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
     }
   }
   sprite.setTextDatum(textdatum_t::middle_center);
-  sprite.setFont(&fonts::FreeSansBold12pt7b);
+  sprite.setFont(&fonts::FreeSansBold9pt7b);   // 12pt "100%" (61px) overflows r=30 ring
   sprite.setTextColor(COL_TXT, COL_BLACK);
   snprintf(buf, sizeof(buf), "%d%%", pct);
-  sprite.drawString(buf, cx, cy - 6);
+  sprite.drawString(buf, cx, cy - 8);
   sprite.setFont(&fonts::Font0);
   sprite.setTextColor(COL_TXT, COL_BLACK);
   sprite.drawString("PROGRESS", cx, cy + 15);
@@ -344,7 +344,7 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   static char v0[14], v1[14], v2[14];
   strncpy(v0, buf, sizeof(v0));
   snprintf(v1, sizeof(v1), "%d/%d", (int)d.bed_temp, (int)d.bed_target);
-  if (d.remain_min >= 0) snprintf(v2, sizeof(v2), "%02dh %02dm",
+  if (d.remain_min >= 0) snprintf(v2, sizeof(v2), "%dh%02dm",
                                   d.remain_min / 60, d.remain_min % 60);
   else                   snprintf(v2, sizeof(v2), "--");
   const char* vals[3] = {v0, v1, v2};
@@ -369,7 +369,7 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.setTextDatum(textdatum_t::top_left);
   sprite.setTextColor(COL_TXT, COL_BLACK);
   const char* job = (d.state == PST_RUNNING || d.state == PST_PREPARE)
-                      ? "A1: Printing..." : "A1: Idle";
+                      ? "Printing..." : "Idle";   // "A1: " prefix collided with timer
   sprite.drawString(job, 4, 114);
 
   // timer countdown (left-center of footer when armed)
@@ -400,20 +400,22 @@ static void drawOverlayFrame(const TelemetryData& d, uint32_t ms) {
   uint16_t bg = finish ? 0x05E0 : COL_OFFLINE;   // green / red
   sprite.fillSprite(bg);
   sprite.setTextDatum(textdatum_t::middle_center);
-  sprite.setFont(&fonts::FreeSansBold18pt7b);
+  sprite.setFont(&fonts::FreeSansBold12pt7b);   // 18pt "COMPLETE" (197px) > screen
   sprite.setTextColor(COL_TXT_BLACK, bg);
   sprite.drawString(finish ? "COMPLETE" : "FAILED", W / 2, 44);
   sprite.setFont(&fonts::FreeSansBold9pt7b);
   if (finish) {
-    // total filament consumed
+    // total filament consumed ("filament: 12345 g" 12pt = 194px > screen)
     char fbuf[20];
     if (d.filament_g >= 0) snprintf(fbuf, sizeof(fbuf), "filament: %d g",
                                     (int)(d.filament_g + 0.5f));
     else                   snprintf(fbuf, sizeof(fbuf), "print finished");
+    sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.drawString(fbuf, W / 2, 74);
   } else {
     char ebuf[20];
     snprintf(ebuf, sizeof(ebuf), "HMS errors: %d", d.hms_count);
+    sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.drawString(ebuf, W / 2, 74);
   }
   // pulsing OK hint
@@ -435,7 +437,7 @@ static void drawClockFrame(uint32_t ms) {
     char buf[12];
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
     sprite.setTextDatum(textdatum_t::middle_center);
-    sprite.setFont(&fonts::FreeSansBold24pt7b);
+    sprite.setFont(&fonts::FreeSansBold18pt7b);   // 24pt "23:59:59" = 180px > 160
     sprite.setTextColor(COL_TXT, COL_BLACK);
     sprite.drawString(buf, W / 2, H / 2 - 6);
     sprite.setFont(&fonts::Font0);
