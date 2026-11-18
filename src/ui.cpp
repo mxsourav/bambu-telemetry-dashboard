@@ -25,6 +25,7 @@
 #include "peripherals.h"
 #include "settings_manager.h"
 #include "spotify_service.h"
+#include "network.h"
 #include "boot_splash.h"
 #include "status_logo.h"
 
@@ -870,9 +871,11 @@ static void drawSpotifyLyricsFrame(uint32_t ms) {
 static void dispatchButtons(uint8_t ev) {
   if (!ev) return;
 
-  // custom image: any button exits back to home
+  // custom image: any button exits back to home and resumes MQTT
+  // (image mode had paused the telemetry connection)
   if (view == VIEW_CUSTOM_IMAGE) {
     uiClearCustomImage();
+    mqttResume();
     return;
   }
 
@@ -1104,7 +1107,8 @@ static void uiTask(void* /*param*/) {
     }
 
     // --- latch: FINISH/FAILED -> full-screen overlay until OK ---
-    if (ui_latched_result == 0) {
+    // (suppressed during image mode: the pushed image owns the screen)
+    if (ui_latched_result == 0 && !custom_image_active) {
       if (d.state == PST_FINISH) { ui_latched_result = 1; view = VIEW_OVERLAY; }
       else if (d.state == PST_FAILED) { ui_latched_result = 2; view = VIEW_OVERLAY; }
     }
@@ -1117,7 +1121,7 @@ static void uiTask(void* /*param*/) {
     // --- Auto-switch to Spotify Player when music is playing ---
     static bool s_spotify_auto_switched = false;
     if (spotifyIsActive()) {
-      if (view != VIEW_SPOTIFY && view != VIEW_SPOTIFY_LYRICS && view != VIEW_BOOT && view != VIEW_MENU && view != VIEW_LEDLIST && view != VIEW_TIMER) {
+      if (view != VIEW_SPOTIFY && view != VIEW_SPOTIFY_LYRICS && view != VIEW_BOOT && view != VIEW_MENU && view != VIEW_LEDLIST && view != VIEW_TIMER && view != VIEW_CUSTOM_IMAGE) {
         if (!s_spotify_auto_switched) {
           view = VIEW_SPOTIFY;
           s_spotify_auto_switched = true;

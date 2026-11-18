@@ -13,6 +13,35 @@ static WiFiClientSecure tlsClient;
 static PubSubClient mqtt(tlsClient);
 bool network_ever_connected = false;   // set true after first MQTT connect
 
+// ---------------- MQTT pause/resume (display image pushes) -------------
+// While an image is pushed/shown the TLS session is dropped: telemetry
+// stops overwriting the screen and ~45 KB of mbedTLS heap is freed for
+// the HTTP upload. WiFi stays connected. Any button press on the device
+// resumes MQTT (immediate reconnect).
+static volatile bool s_mqtt_paused = false;
+static uint32_t s_mqtt_last_attempt = 0;   // shared with mqttTask
+
+void mqttPause() {
+  if (s_mqtt_paused) return;
+  s_mqtt_paused = true;
+  mqtt.disconnect();
+  tlsClient.stop();                      // free TLS context + lwIP socket
+  TelemetryData d;
+  telemetryRead(d);
+  d.state = PST_DISCONNECTED;
+  telemetryWrite(d);
+  Serial.println(F("[MQTT] paused for display image (WiFi stays up)"));
+}
+
+void mqttResume() {
+  if (!s_mqtt_paused) return;
+  s_mqtt_paused = false;
+  s_mqtt_last_attempt = 0;               // reconnect on the very next loop
+  Serial.println(F("[MQTT] resume requested - reconnecting now"));
+}
+
+bool mqttIsPaused() { return s_mqtt_paused; }
+
 // ---------------- state-transition beeps / alarms --------------------
 // Peripherals task polls g_telemetry.state, so transitions are handled
 // there; this file only WRITES telemetry.
@@ -151,7 +180,7 @@ static void connectMQTT() {
 // ---------------- Task body -------------------------------------------
 static void mqttTask(void* /*param*/) {
   static uint32_t last_wifi_attempt = 0;
-  static uint32_t last_mqtt_attempt = 0;
+  s_mqtt_last_attempt = 0;
 
   // fast-start: begin immediately, retry aggressively (1.2 s) until the
   // first association, then back off to 5 s cycles for stability.
@@ -181,7 +210,7 @@ static void mqttTask(void* /*param*/) {
     static bool ip_logged = false;
     if (!ip_logged) {
       ip_logged = true;
-      last_mqtt_attempt = 0; // Trigger immediate MQTT connection attempt!
+      s_mqtt_last_attempt = 0; // Trigger immediate MQTT connection attempt!
       WiFi.setSleep(false);
       esp_wifi_set_ps(WIFI_PS_NONE);
       Serial.printf("[WiFi] connected, IP: %s (Radio sleep disabled)\n",
@@ -191,6 +220,11 @@ static void mqttTask(void* /*param*/) {
     }
 
     // --- MQTT (re)connection ---
+    if (s_mqtt_paused) {
+      // image mode: WiFi stays up, MQTT stays down, no retry churn
+      vTaskDelay(pdMS_TO_TICKS(200));
+      continue;
+    }
     if (!mqtt.connected()) {
       TelemetryData d;
       telemetryRead(d);
@@ -199,8 +233,8 @@ static void mqttTask(void* /*param*/) {
         telemetryWrite(d);
       }
       uint32_t retry_interval = network_ever_connected ? 4000 : 5000;
-      if (millis() - last_mqtt_attempt > retry_interval) {
-        last_mqtt_attempt = millis();
+      if (millis() - s_mqtt_last_attempt > retry_interval) {
+        s_mqtt_last_attempt = millis();
         connectMQTT();
       }
       vTaskDelay(pdMS_TO_TICKS(100));
@@ -228,7 +262,7 @@ static void mqttTask(void* /*param*/) {
       tlsClient.stop();
       td.state = PST_DISCONNECTED;
       telemetryWrite(td);
-      last_mqtt_attempt = millis();
+      s_mqtt_last_attempt = millis();
     }
 
     vTaskDelay(pdMS_TO_TICKS(50));

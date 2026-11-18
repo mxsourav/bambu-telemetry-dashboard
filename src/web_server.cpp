@@ -9,6 +9,7 @@
 #include "peripherals.h"
 #include "settings_manager.h"
 #include "spotify_service.h"
+#include "network.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -465,6 +466,10 @@ static void handleDisplayImageLoop() {
   if (upload.status == UPLOAD_FILE_START) {
     display_upload_success = false;
     display_upload_bytes = 0;
+    // Full-screen image mode: cut MQTT TLS (stops telemetry overwrites +
+    // frees ~45 KB heap for the upload). WiFi stays up; any button press
+    // on the device resumes MQTT.
+    mqttPause();
     Serial.println(F("[DISP] Image upload start"));
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (display_upload_bytes < targetBytes) {
@@ -509,12 +514,15 @@ static void handleDisplayImageDone() {
   if (display_upload_success) {
     server.send(200, "application/json", "{\"status\":\"ok\"}");
   } else {
+    // failed push: nothing to show -> bring telemetry straight back
+    mqttResume();
     server.send(400, "application/json", "{\"error\":\"No image data received\"}");
   }
 }
 
 static void handleDisplayClear() {
   uiClearCustomImage();
+  mqttResume();              // image gone via web -> telemetry returns
   sendCorsHeaders();
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
