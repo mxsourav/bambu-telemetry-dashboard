@@ -130,7 +130,7 @@ enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
                         VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS };
 static UiView view = VIEW_BOOT;
 static uint32_t boot_start_ms = 0;
-static uint16_t s_custom_image_buf[W * H];
+static uint16_t* s_custom_image_buf = nullptr;
 static bool custom_image_active = false;
 static bool custom_image_rendered = false;
 
@@ -156,6 +156,12 @@ void uiGetFrameSize(int& w, int& h) { w = W; h = H; }
 bool uiIsCustomImageActive() { return custom_image_active; }
 
 uint16_t* uiGetCustomImageBuffer() {
+  if (!s_custom_image_buf) {
+    s_custom_image_buf = (uint16_t*)malloc(W * H * sizeof(uint16_t));
+    if (s_custom_image_buf) {
+      memset(s_custom_image_buf, 0, W * H * sizeof(uint16_t));
+    }
+  }
   return s_custom_image_buf;
 }
 
@@ -167,14 +173,21 @@ void uiActivateCustomImage() {
 
 void uiShowCustomImage(const uint16_t* pixels) {
   if (pixels) {
-    memcpy(s_custom_image_buf, pixels, W * H * 2);
-    uiActivateCustomImage();
+    uint16_t* dst = uiGetCustomImageBuffer();
+    if (dst) {
+      memcpy(dst, pixels, W * H * 2);
+      uiActivateCustomImage();
+    }
   }
 }
 
 void uiClearCustomImage() {
   custom_image_active = false;
   custom_image_rendered = false;
+  if (s_custom_image_buf) {
+    free(s_custom_image_buf);
+    s_custom_image_buf = nullptr;
+  }
   if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
 }
 
@@ -1105,7 +1118,9 @@ static void uiTask(void* /*param*/) {
           static bool had_notif = false;
           bool has_notif = (millis() < notif_until_ms && notif_title[0]);
           if (!custom_image_rendered || has_notif || had_notif) {
-            sprite.pushImage(0, 0, W, H, s_custom_image_buf);
+            if (s_custom_image_buf) {
+              sprite.pushImage(0, 0, W, H, s_custom_image_buf);
+            }
             custom_image_rendered = true;
             had_notif = has_notif;
           } else {

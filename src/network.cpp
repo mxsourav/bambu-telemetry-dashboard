@@ -79,9 +79,9 @@ static void mqttCallback(char* topic, byte* payload, uint32_t length) {
 
 static bool isPrinterReachable() {
   WiFiClient probe;
-  probe.setTimeout(1);
-  // Fast 250ms TCP check to port 8883 - zero TLS allocation!
-  bool ok = probe.connect(PRINTER_IP, MQTT_PORT, 250);
+  probe.setTimeout(2);
+  // 1.5s TCP probe to port 8883 - zero TLS allocation!
+  bool ok = probe.connect(PRINTER_IP, MQTT_PORT, 1500);
   probe.stop(); // Always close probe socket immediately to prevent lwIP PCB descriptor leaks!
   return ok;
 }
@@ -105,23 +105,39 @@ static void connectMQTT() {
   snprintf(topic, sizeof(topic), "%s%s%s",
            MQTT_TOPIC_PREFIX, PRINTER_SN, MQTT_TOPIC_SUFFIX);
 
+  char req_topic[80];
+  snprintf(req_topic, sizeof(req_topic), "device/%s/request", PRINTER_SN);
+
   // Stop any previous hanging socket before starting a new connection
   tlsClient.stop();
 
   // Bambu broker uses a self-signed cert => setInsecure() skips CA
   // validation but keeps the TLS 1.2 tunnel encrypted.
   tlsClient.setInsecure();
-  tlsClient.setTimeout(2);         // 2 seconds timeout so printer-off never hangs Core 0
+  tlsClient.setHandshakeTimeout(10); // 10 seconds handshake timeout
   mqtt.setServer(PRINTER_IP, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
-  mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE);   // payloads exceed 2 KB
-  mqtt.setSocketTimeout(2);        // 2 seconds MQTT socket timeout
+  mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE); // payloads exceed 2 KB
+  mqtt.setSocketTimeout(10);                // 10 seconds socket timeout
 
-  Serial.printf("[MQTT] printer detected, connecting TLS to %s:%d ...\n", PRINTER_IP, MQTT_PORT);
-  if (mqtt.connect("bambu-dash", MQTT_USER, PRINTER_LAN_CODE)) {
+  Serial.printf("[MQTT] connecting TLS to %s:%d ... (free=%u, 8bit_free=%u, max_block=%u)\n",
+                PRINTER_IP, MQTT_PORT, (unsigned)ESP.getFreeHeap(),
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+
+  uint32_t t_start = millis();
+  bool conn = mqtt.connect("bambu-dash", MQTT_USER, PRINTER_LAN_CODE);
+  Serial.printf("[MQTT] connect returned %s in %u ms (rc=%d)\n",
+                conn ? "OK" : "FAIL", (unsigned)(millis() - t_start), mqtt.state());
+
+  if (conn) {
     network_ever_connected = true;
     Serial.printf("[MQTT] connected, subscribing to %s\n", topic);
     mqtt.subscribe(topic, 1);
+    // Request full initial telemetry payload immediately
+    const char* pushall_cmd = "{\"pushing\":{\"sequence_id\":\"1\",\"command\":\"pushall\"}}";
+    mqtt.publish(req_topic, pushall_cmd);
+    Serial.println(F("[MQTT] sent pushall command to printer"));
   } else {
     Serial.printf("[MQTT] connect failed, rc=%d\n", mqtt.state());
     tlsClient.stop(); // CRITICAL: Release lwIP socket descriptor & free SSL context!
@@ -165,6 +181,7 @@ static void mqttTask(void* /*param*/) {
     static bool ip_logged = false;
     if (!ip_logged) {
       ip_logged = true;
+      last_mqtt_attempt = 0; // Trigger immediate MQTT connection attempt!
       WiFi.setSleep(false);
       esp_wifi_set_ps(WIFI_PS_NONE);
       Serial.printf("[WiFi] connected, IP: %s (Radio sleep disabled)\n",
@@ -181,7 +198,7 @@ static void mqttTask(void* /*param*/) {
         d.state = PST_DISCONNECTED;
         telemetryWrite(d);
       }
-      uint32_t retry_interval = network_ever_connected ? 8000 : 25000;
+      uint32_t retry_interval = network_ever_connected ? 4000 : 5000;
       if (millis() - last_mqtt_attempt > retry_interval) {
         last_mqtt_attempt = millis();
         connectMQTT();
@@ -193,10 +210,20 @@ static void mqttTask(void* /*param*/) {
     // --- connected: pump client & check for silent telemetry stalls ---
     mqtt.loop();
 
+    static uint32_t last_pushall_ms = 0;
     TelemetryData td;
     telemetryRead(td);
-    if (td.last_update_ms > 0 && (millis() - td.last_update_ms > 20000)) {
-      Serial.println(F("[MQTT] telemetry stalled >20s, resetting connection..."));
+
+    // If no telemetry update received for >12s, refresh by sending pushall
+    if (millis() - td.last_update_ms > 12000 && (millis() - last_pushall_ms > 10000)) {
+      last_pushall_ms = millis();
+      char req_topic[80];
+      snprintf(req_topic, sizeof(req_topic), "device/%s/request", PRINTER_SN);
+      mqtt.publish(req_topic, "{\"pushing\":{\"sequence_id\":\"1\",\"command\":\"pushall\"}}");
+    }
+
+    if (td.last_update_ms > 0 && (millis() - td.last_update_ms > 40000)) {
+      Serial.println(F("[MQTT] telemetry stalled >40s, resetting connection..."));
       mqtt.disconnect();
       tlsClient.stop();
       td.state = PST_DISCONNECTED;

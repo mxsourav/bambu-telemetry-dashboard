@@ -128,53 +128,44 @@ static void handleScreenRle() {
     return;
   }
 
-  // When custom image is showing on screen, avoid streaming 61 KB of non-compressible RLE data
-  // which overloads lwIP socket buffers and causes client timeouts.
-  if (uiIsCustomImageActive()) {
+  // When custom image or Spotify artwork is showing on screen, avoid streaming heavy photo data
+  if (uiIsCustomImageActive() || spotifyIsActive()) {
+    sendCorsHeaders();
+    server.send(204, "text/plain", "");
+    return;
+  }
+
+  const int totalPixels = 160 * 128;
+  static uint8_t s_rle_buf[8192];
+  size_t rle_len = 0;
+  int i = 0;
+  bool overflow = false;
+
+  while (i < totalPixels) {
+    uint16_t col = fb[i];
+    uint8_t run = 1;
+    while (i + run < totalPixels && fb[i + run] == col && run < 255) {
+      run++;
+    }
+    if (rle_len + 3 > sizeof(s_rle_buf)) {
+      overflow = true;
+      break;
+    }
+    s_rle_buf[rle_len++] = run;
+    s_rle_buf[rle_len++] = (uint8_t)(col & 0xFF);
+    s_rle_buf[rle_len++] = (uint8_t)(col >> 8);
+    i += run;
+  }
+
+  if (overflow) {
     sendCorsHeaders();
     server.send(204, "text/plain", "");
     return;
   }
 
   sendCorsHeaders();
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "application/octet-stream", "");
-
-  const int totalPixels = 160 * 128;
-  uint8_t chunk[1536];
-  size_t chunkLen = 0;
-  int i = 0;
-
-  WiFiClient client = server.client();
-
-  while (i < totalPixels) {
-    if (!client.connected()) {
-      break; // Client aborted, stop pushing immediately and release socket
-    }
-    uint16_t col = fb[i];
-    uint8_t run = 1;
-    while (i + run < totalPixels && fb[i + run] == col && run < 255) {
-      run++;
-    }
-    chunk[chunkLen++] = run;
-    // Send true RGB565 Big-Endian over the wire (MSB first, LSB second)
-    // fb[i] on little-endian CPU has MSB in lower byte and LSB in upper byte
-    chunk[chunkLen++] = (uint8_t)(col & 0xFF);
-    chunk[chunkLen++] = (uint8_t)(col >> 8);
-    i += run;
-
-    if (chunkLen + 3 > sizeof(chunk)) {
-      server.sendContent((const char*)chunk, chunkLen);
-      chunkLen = 0;
-      vTaskDelay(pdMS_TO_TICKS(1));
-    }
-  }
-  if (chunkLen > 0 && client.connected()) {
-    server.sendContent((const char*)chunk, chunkLen);
-  }
-  if (client.connected()) {
-    server.sendContent(""); // Final 0-length chunk to properly terminate HTTP chunked stream
-  }
+  server.sendHeader("Connection", "close");
+  server.send_P(200, "application/octet-stream", (PGM_P)s_rle_buf, rle_len);
 }
 
 static void handleBuzzerTest() {
@@ -771,5 +762,5 @@ static void webTask(void* /*param*/) {
 
 void webServerTaskStart() {
   xTaskCreatePinnedToCore(
-      webTask, "webTask", 8192, nullptr, 2, nullptr, 0 /* Core 0 - priority 2 */);
+      webTask, "webTask", 8192, nullptr, 1, nullptr, 0 /* Core 0 - priority 1 */);
 }
