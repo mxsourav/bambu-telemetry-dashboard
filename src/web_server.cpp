@@ -131,31 +131,39 @@ static void handleScreenRle() {
   server.send(200, "application/octet-stream", "");
 
   const int totalPixels = 160 * 128;
-  const uint8_t* rawBytes = (const uint8_t*)fb;
-  uint8_t chunk[1024];
+  uint8_t chunk[1536];
   size_t chunkLen = 0;
   int i = 0;
 
+  WiFiClient client = server.client();
+
   while (i < totalPixels) {
+    if (!client.connected()) {
+      break; // Client aborted, stop pushing immediately and release socket
+    }
     uint16_t col = fb[i];
     uint8_t run = 1;
     while (i + run < totalPixels && fb[i + run] == col && run < 255) {
       run++;
     }
     chunk[chunkLen++] = run;
-    // Send Big-Endian RGB565 over the wire (MSB first, LSB second)
-    // Matches web client DataView getUint16(offset, false)
-    chunk[chunkLen++] = (uint8_t)(col >> 8);
+    // Send true RGB565 Big-Endian over the wire (MSB first, LSB second)
+    // fb[i] on little-endian CPU has MSB in lower byte and LSB in upper byte
     chunk[chunkLen++] = (uint8_t)(col & 0xFF);
+    chunk[chunkLen++] = (uint8_t)(col >> 8);
     i += run;
 
     if (chunkLen + 3 > sizeof(chunk)) {
       server.sendContent((const char*)chunk, chunkLen);
       chunkLen = 0;
+      vTaskDelay(pdMS_TO_TICKS(1));
     }
   }
-  if (chunkLen > 0) {
+  if (chunkLen > 0 && client.connected()) {
     server.sendContent((const char*)chunk, chunkLen);
+  }
+  if (client.connected()) {
+    server.sendContent(""); // Final 0-length chunk to properly terminate HTTP chunked stream
   }
 }
 
@@ -444,7 +452,8 @@ static void handleLedSet() {
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
-static bool display_upload_success = false;
+static bool   display_upload_success = false;
+static size_t display_upload_bytes   = 0;
 
 static void handleDisplayImageLoop() {
   HTTPUpload& upload = server.upload();
@@ -454,23 +463,24 @@ static void handleDisplayImageLoop() {
   const size_t targetBytes = 160 * 128 * 2;
   if (upload.status == UPLOAD_FILE_START) {
     display_upload_success = false;
+    display_upload_bytes = 0;
     Serial.println(F("[DISP] Image upload start"));
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (upload.totalSize <= targetBytes) {
+    if (display_upload_bytes < targetBytes) {
       size_t copyLen = upload.currentSize;
-      if (upload.totalSize + copyLen > targetBytes) {
-        copyLen = targetBytes - upload.totalSize;
+      if (display_upload_bytes + copyLen > targetBytes) {
+        copyLen = targetBytes - display_upload_bytes;
       }
-      memcpy(((uint8_t*)img) + upload.totalSize, upload.buf, copyLen);
+      memcpy(((uint8_t*)img) + display_upload_bytes, upload.buf, copyLen);
+      display_upload_bytes += copyLen;
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    display_upload_success = true;
-    Serial.printf("[DISP] Image upload done: %u bytes\n", upload.totalSize);
-    uiActivateCustomImage();
-    if (g_sd_mounted) {
-      if (!SD.exists("/images")) SD.mkdir("/images");
-      File f = SD.open("/images/screen.bin", FILE_WRITE);
-      if (f) { f.write((uint8_t*)img, targetBytes); f.close(); }
+    if (display_upload_bytes == targetBytes) {
+      display_upload_success = true;
+      uiActivateCustomImage();
+      Serial.printf("[DISP] Image upload done: %u bytes\n", (unsigned)display_upload_bytes);
+    } else {
+      Serial.printf("[DISP] Image upload incomplete: %u / %u bytes\n", (unsigned)display_upload_bytes, (unsigned)targetBytes);
     }
   }
 }
@@ -733,5 +743,5 @@ static void webTask(void* /*param*/) {
 
 void webServerTaskStart() {
   xTaskCreatePinnedToCore(
-      webTask, "webTask", 8192, nullptr, 1, nullptr, 0 /* Core 0 - priority 1 */);
+      webTask, "webTask", 8192, nullptr, 2, nullptr, 0 /* Core 0 - priority 2 */);
 }

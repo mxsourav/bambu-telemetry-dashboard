@@ -180,7 +180,8 @@ static void mqttTask(void* /*param*/) {
         d.state = PST_DISCONNECTED;
         telemetryWrite(d);
       }
-      if (millis() - last_mqtt_attempt > 6000) {
+      uint32_t retry_interval = network_ever_connected ? 8000 : 25000;
+      if (millis() - last_mqtt_attempt > retry_interval) {
         last_mqtt_attempt = millis();
         connectMQTT();
       }

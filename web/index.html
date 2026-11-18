@@ -694,7 +694,7 @@ function fetchScreen(){
   if(fetchingScreen) return;
   fetchingScreen = true;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 2000);
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
   const t0 = performance.now();
   fetch(getApiUrl('/api/control/screen_rle?t=' + Date.now()), { signal: controller.signal })
     .then(r => {
@@ -735,7 +735,7 @@ function fetchScreen(){
       fetchingScreen = false;
     });
 }
-setInterval(fetchScreen, 600); // Snappy, network-friendly live stream
+setInterval(fetchScreen, 800); // Snappy, network-friendly live stream
 fetchScreen();
 
 // --- Telemetry Polling ---
@@ -1058,8 +1058,8 @@ function previewImg(input){
         const g = imgData[i*4+1] >> 2;
         const b = imgData[i*4+2] >> 3;
         const c = (r << 11) | (g << 5) | b;
-        customRgb565[i*2]   = c & 0xFF;        // Low byte first (Little-Endian for ESP32 memory)
-        customRgb565[i*2+1] = (c >> 8) & 0xFF; // High byte second
+        customRgb565[i*2]   = (c >> 8) & 0xFF; // MSB first (Big-Endian for ST7735 SPI display)
+        customRgb565[i*2+1] = c & 0xFF;        // LSB second
       }
     };
     img.src = e.target.result;
@@ -1145,7 +1145,11 @@ function initSpotify() {
   const clientIdIn = document.getElementById('spotifyClientIdIn');
   if(clientIdIn) clientIdIn.value = savedClientId;
 
-  const savedSecret = localStorage.getItem('spotify_client_secret') || 'eb42da8944b74b64be17997b22b7ed42';
+  let savedSecret = localStorage.getItem('spotify_client_secret') || '';
+  if(savedSecret === 'eb42da8944b74b64be17997b22b7ed42') {
+    localStorage.removeItem('spotify_client_secret');
+    savedSecret = '';
+  }
   const secretIn = document.getElementById('spotifyClientSecretIn');
   if(secretIn) secretIn.value = savedSecret;
 
@@ -1240,22 +1244,26 @@ async function connectSpotify() {
 
 async function exchangeSpotifyCode(code) {
   const clientId = localStorage.getItem('spotify_client_id') || 'bc80d4154155425a939097ea6079c225';
-  const clientSecret = localStorage.getItem('spotify_client_secret') || 'eb42da8944b74b64be17997b22b7ed42';
+  let clientSecret = localStorage.getItem('spotify_client_secret') || '';
+  if(clientSecret === 'eb42da8944b74b64be17997b22b7ed42') clientSecret = '';
   const codeVerifier = localStorage.getItem('spotify_code_verifier');
   if(!clientId) return;
 
   const body = new URLSearchParams({
+    client_id: clientId,
     grant_type: 'authorization_code',
     code: code,
     redirect_uri: getSpotifyRedirectUri()
   });
 
-  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-  if(clientSecret) {
-    headers['Authorization'] = 'Basic ' + btoa(clientId + ':' + clientSecret);
-  } else if(codeVerifier) {
-    body.append('client_id', clientId);
+  if(codeVerifier) {
     body.append('code_verifier', codeVerifier);
+  }
+
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  // Spotify PKCE is for public clients without client secret. Never send Basic auth when using PKCE.
+  if(clientSecret && !codeVerifier) {
+    headers['Authorization'] = 'Basic ' + btoa(clientId + ':' + clientSecret);
   }
 
   try {
@@ -1292,19 +1300,20 @@ async function exchangeSpotifyCode(code) {
 
 async function refreshSpotifyToken() {
   const clientId = localStorage.getItem('spotify_client_id') || 'bc80d4154155425a939097ea6079c225';
-  const clientSecret = localStorage.getItem('spotify_client_secret') || 'eb42da8944b74b64be17997b22b7ed42';
+  let clientSecret = localStorage.getItem('spotify_client_secret') || '';
+  if(clientSecret === 'eb42da8944b74b64be17997b22b7ed42') clientSecret = '';
   if(!clientId || !spotifyRefreshToken) return false;
 
   const body = new URLSearchParams({
+    client_id: clientId,
     grant_type: 'refresh_token',
     refresh_token: spotifyRefreshToken
   });
 
   const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-  if(clientSecret) {
+  // Spotify PKCE is for public clients without client secret. Never send Basic auth when using PKCE.
+  if(clientSecret && !codeVerifier) {
     headers['Authorization'] = 'Basic ' + btoa(clientId + ':' + clientSecret);
-  } else {
-    body.append('client_id', clientId);
   }
 
   try {
@@ -1451,8 +1460,8 @@ function sendCoverToDesk(img) {
       const g6 = (idata[i * 4 + 1] >> 2) & 0x3F;
       const b5 = (idata[i * 4 + 2] >> 3) & 0x1F;
       const col = (r5 << 11) | (g6 << 5) | b5;
-      raw[i * 2]     = col & 0xFF;         // Low byte
-      raw[i * 2 + 1] = (col >> 8) & 0xFF;  // High byte
+      raw[i * 2]     = (col >> 8) & 0xFF;  // MSB first (Big-Endian for ST7735 SPI display)
+      raw[i * 2 + 1] = col & 0xFF;         // LSB second
     }
     const blob = new Blob([raw], { type: 'application/octet-stream' });
     const fd = new FormData();
@@ -1573,8 +1582,8 @@ function renderAndPushSpotify(trackName, artistName, img, progressMs, durationMs
     const g = imgData[i*4+1] >> 2;
     const b = imgData[i*4+2] >> 3;
     const c = (r << 11) | (g << 5) | b;
-    rgb565[i*2]   = (c >> 8) & 0xFF; // High byte first
-    rgb565[i*2+1] = c & 0xFF;        // Low byte second
+    rgb565[i*2]   = (c >> 8) & 0xFF; // MSB first (Big-Endian for ST7735 SPI display)
+    rgb565[i*2+1] = c & 0xFF;        // LSB second
   }
 
   const blob = new Blob([rgb565], {type: 'application/octet-stream'});

@@ -61,10 +61,10 @@ public:
     pc.pin_busy = -1;
     pc.panel_width  = 128;
     pc.panel_height = 160;
-    pc.memory_width = 132;
-    pc.memory_height = 162;
-    pc.offset_x = 4;  // In rotation 1: rowstart = 132 - (128 + 4) = 0 (eliminates top glitch)
-    pc.offset_y = 0;  // In rotation 1: colstart = 0 (perfect DMA 16-bit word alignment)
+    pc.memory_width = 128;
+    pc.memory_height = 160;
+    pc.offset_x = 0;  // BLACKTAB: colstart = 0, rowstart = 0 (clean edges, no top glitch)
+    pc.offset_y = 0;
     pc.offset_rotation = 0;
     pc.dummy_read_pixel = 8;
     pc.dummy_read_bits  = 1;
@@ -130,7 +130,7 @@ enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
                         VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS };
 static UiView view = VIEW_BOOT;
 static uint32_t boot_start_ms = 0;
-static uint16_t* custom_image_buf = nullptr;
+static uint16_t s_custom_image_buf[W * H];
 static bool custom_image_active = false;
 
 // Live Notification Overlay state
@@ -155,10 +155,7 @@ void uiGetFrameSize(int& w, int& h) { w = W; h = H; }
 bool uiIsCustomImageActive() { return custom_image_active; }
 
 uint16_t* uiGetCustomImageBuffer() {
-  if (!custom_image_buf) {
-    custom_image_buf = (uint16_t*)malloc(W * H * 2);
-  }
-  return custom_image_buf;
+  return s_custom_image_buf;
 }
 
 void uiActivateCustomImage() {
@@ -167,19 +164,14 @@ void uiActivateCustomImage() {
 }
 
 void uiShowCustomImage(const uint16_t* pixels) {
-  uint16_t* buf = uiGetCustomImageBuffer();
-  if (buf && pixels) {
-    memcpy(buf, pixels, W * H * 2);
+  if (pixels) {
+    memcpy(s_custom_image_buf, pixels, W * H * 2);
     uiActivateCustomImage();
   }
 }
 
 void uiClearCustomImage() {
   custom_image_active = false;
-  if (custom_image_buf) {
-    free(custom_image_buf);
-    custom_image_buf = nullptr;
-  }
   if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
 }
 
@@ -1100,8 +1092,8 @@ static void uiTask(void* /*param*/) {
       case VIEW_SPOTIFY:        drawSpotifyFrame(ms); break;
       case VIEW_SPOTIFY_LYRICS: drawSpotifyLyricsFrame(ms); break;
       case VIEW_CUSTOM_IMAGE:
-        if (custom_image_buf) {
-          sprite.pushImage(0, 0, W, H, custom_image_buf);
+        if (custom_image_active) {
+          sprite.pushImage(0, 0, W, H, s_custom_image_buf);
         }
         break;
     }
