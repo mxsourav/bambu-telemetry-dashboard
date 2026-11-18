@@ -15,7 +15,7 @@ static uint32_t s_token_expires_ms = 0;
 static uint32_t s_last_poll_ms = 0;
 
 static const char* SPOTIFY_CLIENT_ID = "bc80d4154155425a939097ea6079c225";
-static const char* SPOTIFY_CLIENT_SECRET = "eb42da8944b74b64be17997b22b7ed42";
+static const char* SPOTIFY_CLIENT_SECRET = "";
 
 static uint16_t* s_cover_art = nullptr;
 static bool s_has_cover_art = false;
@@ -83,12 +83,11 @@ static bool refreshAccessToken() {
 
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   
-  // Basic Auth with client_id:client_secret
-  String authRaw = String(SPOTIFY_CLIENT_ID) + ":" + String(SPOTIFY_CLIENT_SECRET);
-  // We can also pass client_id directly in post body
   String body = "grant_type=refresh_token&refresh_token=" + String(s_refresh_token) +
-                "&client_id=" + String(SPOTIFY_CLIENT_ID) +
-                "&client_secret=" + String(SPOTIFY_CLIENT_SECRET);
+                "&client_id=" + String(SPOTIFY_CLIENT_ID);
+  if (SPOTIFY_CLIENT_SECRET && SPOTIFY_CLIENT_SECRET[0]) {
+    body += "&client_secret=" + String(SPOTIFY_CLIENT_SECRET);
+  }
 
   int code = http.POST(body);
   if (code == 200) {
@@ -100,10 +99,12 @@ static bool refreshAccessToken() {
       uint32_t expSec = doc["expires_in"] | 3600;
       s_token_expires_ms = millis() + (expSec * 1000);
       http.end();
+      client.stop();
       return true;
     }
   }
   http.end();
+  client.stop();
   return false;
 }
 
@@ -151,4 +152,5 @@ void spotifyPollLoop() {
     s_last_poll_ms = now + 15000; // Backoff 15s on auth expiry
   }
   http.end();
+  client.stop();
 }

@@ -132,6 +132,7 @@ static UiView view = VIEW_BOOT;
 static uint32_t boot_start_ms = 0;
 static uint16_t s_custom_image_buf[W * H];
 static bool custom_image_active = false;
+static bool custom_image_rendered = false;
 
 // Live Notification Overlay state
 static char notif_title[24] = {0};
@@ -160,6 +161,7 @@ uint16_t* uiGetCustomImageBuffer() {
 
 void uiActivateCustomImage() {
   custom_image_active = true;
+  custom_image_rendered = false;
   view = VIEW_CUSTOM_IMAGE;
 }
 
@@ -172,6 +174,7 @@ void uiShowCustomImage(const uint16_t* pixels) {
 
 void uiClearCustomImage() {
   custom_image_active = false;
+  custom_image_rendered = false;
   if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
 }
 
@@ -1094,7 +1097,17 @@ static void uiTask(void* /*param*/) {
       case VIEW_SPOTIFY_LYRICS: drawSpotifyLyricsFrame(ms); break;
       case VIEW_CUSTOM_IMAGE:
         if (custom_image_active) {
-          sprite.pushImage(0, 0, W, H, s_custom_image_buf);
+          static bool had_notif = false;
+          bool has_notif = (millis() < notif_until_ms && notif_title[0]);
+          if (!custom_image_rendered || has_notif || had_notif) {
+            sprite.pushImage(0, 0, W, H, s_custom_image_buf);
+            custom_image_rendered = true;
+            had_notif = has_notif;
+          } else {
+            // Static image already drawn to screen; yield CPU and avoid 30 FPS DMA bus saturation
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+          }
         }
         break;
     }

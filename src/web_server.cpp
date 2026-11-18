@@ -52,6 +52,7 @@ static void sendCorsHeaders() {
   server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
   server.sendHeader("Access-Control-Allow-Headers", "Content-Type, Origin, Accept, X-Requested-With");
   server.sendHeader("Access-Control-Allow-Private-Network", "true");
+  server.sendHeader("Connection", "close");
 }
 
 static void handleOptions() {
@@ -111,6 +112,7 @@ static void handleStatus() {
   doc["theme_light"]  = uiGetThemeLight();
   doc["clock_12h"]    = uiGetClock12h();
   doc["led_inverted"] = ledGetInverted();
+  doc["custom_image"] = uiIsCustomImageActive();
 
   String out;
   serializeJson(doc, out);
@@ -123,6 +125,14 @@ static void handleScreenRle() {
   if (!fb) {
     sendCorsHeaders();
     server.send(503, "text/plain", "Frame unavailable");
+    return;
+  }
+
+  // When custom image is showing on screen, avoid streaming 61 KB of non-compressible RLE data
+  // which overloads lwIP socket buffers and causes client timeouts.
+  if (uiIsCustomImageActive()) {
+    sendCorsHeaders();
+    server.send(204, "text/plain", "");
     return;
   }
 
@@ -698,9 +708,11 @@ void webServerLoop() {
 }
 
 static void webTask(void* /*param*/) {
+  Serial.println(F("[WEB] webTask started, waiting for WiFi..."));
   while (WiFi.status() != WL_CONNECTED || WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
     vTaskDelay(pdMS_TO_TICKS(300));
   }
+  Serial.printf("[WEB] WiFi ready! IP=%s. Registering routes...\n", WiFi.localIP().toString().c_str());
   WiFi.setSleep(false);
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/status", HTTP_GET, handleStatus);

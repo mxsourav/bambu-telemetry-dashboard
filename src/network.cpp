@@ -4,6 +4,7 @@
 #include "telemetry.h"
 
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -81,9 +82,7 @@ static bool isPrinterReachable() {
   probe.setTimeout(1);
   // Fast 250ms TCP check to port 8883 - zero TLS allocation!
   bool ok = probe.connect(PRINTER_IP, MQTT_PORT, 250);
-  if (ok) {
-    probe.stop();
-  }
+  probe.stop(); // Always close probe socket immediately to prevent lwIP PCB descriptor leaks!
   return ok;
 }
 
@@ -166,7 +165,9 @@ static void mqttTask(void* /*param*/) {
     static bool ip_logged = false;
     if (!ip_logged) {
       ip_logged = true;
-      Serial.printf("[WiFi] connected, IP: %s\n",
+      WiFi.setSleep(false);
+      esp_wifi_set_ps(WIFI_PS_NONE);
+      Serial.printf("[WiFi] connected, IP: %s (Radio sleep disabled)\n",
                     WiFi.localIP().toString().c_str());
       configTime(5 * 3600 + 1800, 0, "pool.ntp.org", "time.nist.gov");
       Serial.println(F("[NTP] configured (IST)"));

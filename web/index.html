@@ -261,6 +261,22 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     </div>
   </div>
 
+  <!-- HTTPS Mixed-Content Alert (For Vercel / Cloud hosted dashboard) -->
+  <div id="httpsWarningBanner" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div style="font-weight:700;color:#F87171;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
+        <span>⚠️ Browser HTTPS Restriction</span>
+      </div>
+      <button onclick="document.getElementById('httpsWarningBanner').style.display='none'" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;font-size:0.9rem;">✕</button>
+    </div>
+    <div style="font-size:0.75rem;color:var(--txt-muted);margin:4px 0 8px 0;line-height:1.4;">
+      Web browsers block HTTPS sites from contacting local devices (<span class="bannerDirectIp">192.168.0.154</span>). To control your desk monitor without browser blocks, open the monitor's local address directly:
+    </div>
+    <a id="httpsDirectDeviceLink" href="http://192.168.0.154/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;font-weight:700;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
+      👉 Open Local Monitor (http://<span class="bannerDirectIp">192.168.0.154</span>)
+    </a>
+  </div>
+
   <!-- Navigation -->
   <div class="nav">
     <button class="active" onclick="tab('rem')">Remote</button>
@@ -457,8 +473,8 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
             <input type="text" id="spotifyClientIdIn" class="color-in" style="width:100%;text-align:left;margin-top:4px;" value="bc80d4154155425a939097ea6079c225" placeholder="Paste Spotify Client ID here">
           </div>
           <div>
-            <label style="font-size:0.7rem;color:var(--txt-muted);font-weight:600;">Spotify Client Secret:</label>
-            <input type="password" id="spotifyClientSecretIn" class="color-in" style="width:100%;text-align:left;margin-top:4px;" value="eb42da8944b74b64be17997b22b7ed42" placeholder="Paste Spotify Client Secret here">
+            <label style="font-size:0.7rem;color:var(--txt-muted);font-weight:600;">Spotify Client Secret (Optional for PKCE):</label>
+            <input type="password" id="spotifyClientSecretIn" class="color-in" style="width:100%;text-align:left;margin-top:4px;" value="" placeholder="Optional: Leave empty for PKCE or paste secret">
           </div>
           <button class="btn-primary" style="background:#1DB954;border-color:#1ed760;" onclick="connectSpotify()">Connect Spotify</button>
 
@@ -569,6 +585,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     <div class="modal-desc">Enter the IP address of your ESP32 Bambu Monitor on your local Wi-Fi network.</div>
     <input type="text" class="modal-input" id="ipInput" placeholder="192.168.0.154" value="192.168.0.154">
     <div id="ipModalStatus" style="font-size:0.75rem;margin:10px 0 2px 0;min-height:18px;line-height:1.3;"></div>
+    <div id="ipModalDirectBtn" style="display:none;margin-top:6px;">
+      <a id="ipModalDirectLink" href="http://192.168.0.154/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
+        👉 Open Direct Link (http://<span class="bannerDirectIp">192.168.0.154</span>)
+      </a>
+    </div>
     <div class="modal-btns">
       <button class="btn-secondary" onclick="closeIpModal()">Cancel</button>
       <button class="btn-primary" id="btnConnectIp" onclick="testAndSaveDeviceIp()">Connect & Test</button>
@@ -594,6 +615,20 @@ let deviceIp = getDeviceIp();
 document.getElementById('cIp').innerText = deviceIp;
 document.getElementById('ipInput').value = deviceIp;
 
+function updateIpUrls() {
+  document.querySelectorAll('.bannerDirectIp').forEach(el => el.innerText = deviceIp);
+  const dirLnk = document.getElementById('httpsDirectDeviceLink');
+  if(dirLnk) dirLnk.href = 'http://' + deviceIp + '/';
+  const modLnk = document.getElementById('ipModalDirectLink');
+  if(modLnk) modLnk.href = 'http://' + deviceIp + '/';
+}
+updateIpUrls();
+
+if(window.location.protocol === 'https:'){
+  const b = document.getElementById('httpsWarningBanner');
+  if(b) b.style.display = 'block';
+}
+
 function getApiUrl(endpoint){
   if(window.location.hostname === deviceIp){
     return endpoint;
@@ -607,6 +642,10 @@ function openIpModal(){
   if(st) { st.innerText = ""; }
   const btn = document.getElementById('btnConnectIp');
   if(btn) { btn.disabled = false; btn.innerText = "Connect & Test"; }
+  if(window.location.protocol === 'https:') {
+    const db = document.getElementById('ipModalDirectBtn');
+    if(db) db.style.display = 'block';
+  }
   document.getElementById('ipModal').classList.add('open');
 }
 function closeIpModal(){
@@ -635,6 +674,7 @@ async function testAndSaveDeviceIp(){
     localStorage.setItem('bambu_esp32_ip', val);
     document.getElementById('cIp').innerText = val;
     document.getElementById('cDot').className = 'dot';
+    updateIpUrls();
     if(st) { st.style.color = "var(--green)"; st.innerText = "✓ Connected! (RSSI: " + (d.wifi_rssi||"-") + " dBm, Heap: " + Math.round((d.heap_free||0)/1024) + " KB)"; }
     if(btn) { btn.innerText = "✓ Connected"; }
     pollStatus();
@@ -646,6 +686,8 @@ async function testAndSaveDeviceIp(){
     let errMsg = "Could not reach device at " + val + ". Make sure you are on the same Wi-Fi network.";
     if(window.location.protocol === 'https:') {
       errMsg = "Browser blocked HTTP call from HTTPS. Open http://" + val + "/ directly in your browser address bar.";
+      const db = document.getElementById('ipModalDirectBtn');
+      if(db) db.style.display = 'block';
     }
     if(st) { st.style.color = "#EF4444"; st.innerText = "❌ " + errMsg; }
     if(btn) { btn.disabled = false; btn.innerText = "Retry Connection"; }
@@ -731,10 +773,11 @@ const ctx = canvas.getContext('2d');
 let fetchingScreen = false;
 let screenAbortController = null;
 let isUploadBusy = false;
+let isCustomImageShowing = false;
 let lastScreenTime = 0;
 
 function fetchScreen(){
-  if(fetchingScreen || isUploadBusy) return;
+  if(fetchingScreen || isUploadBusy || isCustomImageShowing) return;
   fetchingScreen = true;
   screenAbortController = new AbortController();
   const timeoutId = setTimeout(() => {
@@ -745,10 +788,16 @@ function fetchScreen(){
   const t0 = performance.now();
   fetch(getApiUrl('/api/control/screen_rle?t=' + Date.now()), { signal: screenAbortController.signal })
     .then(r => {
+      if(r.status === 204){
+        // Custom image is active on device; pause live polling to preserve WiFi bandwidth
+        isCustomImageShowing = true;
+        return null;
+      }
       if(!r.ok) throw new Error("HTTP " + r.status);
       return r.arrayBuffer();
     })
     .then(buf => {
+      if(!buf) return;
       const view = new DataView(buf);
       const imgData = ctx.createImageData(160, 128);
       const d = imgData.data;
@@ -810,6 +859,14 @@ function pollStatus(){
       document.getElementById('tLay').innerText = (d.layer||'0/0');
       document.getElementById('tHeap').innerText = 'Heap: ' + ((d.heap_free||0)/1024).toFixed(0) + 'KB';
       if(d.sd_total_mb) document.getElementById('sdCap').innerText = ((d.sd_total_mb||0)/1024).toFixed(1) + ' GB';
+      if(typeof d.custom_image !== 'undefined'){
+        if(d.custom_image && !isCustomImageShowing){
+          isCustomImageShowing = true;
+        } else if(!d.custom_image && isCustomImageShowing){
+          isCustomImageShowing = false;
+          fetchScreen();
+        }
+      }
     })
     .catch(()=>{
       clearTimeout(to);
@@ -1180,6 +1237,12 @@ async function pushCustomImg(){
       statusEl.style.color = 'var(--green)';
       statusEl.innerText = "✓ Pushed image to display successfully!";
     }
+    // Render cropped image directly onto canvas preview so client doesn't need to fetch 61 KB RLE
+    const cropEl = document.getElementById('cropCanvas');
+    if(cropEl && ctx){
+      ctx.drawImage(cropEl, 0, 0);
+    }
+    isCustomImageShowing = true;
   } catch(e) {
     let msg = e.message;
     if(window.location.protocol === 'https:' && (msg.includes('Failed to fetch') || msg.includes('NetworkError'))){
@@ -1193,12 +1256,13 @@ async function pushCustomImg(){
   } finally {
     isUploadBusy = false;
     if(btn) btn.disabled = false;
-    setTimeout(fetchScreen, 200);
+    if(!isCustomImageShowing) setTimeout(fetchScreen, 200);
   }
 }
 
 function clearCustomImg(){
   const statusEl = document.getElementById('imgPushStatus');
+  isCustomImageShowing = false;
   if(screenAbortController){
     try { screenAbortController.abort(); } catch(e){}
     screenAbortController = null;
@@ -1329,7 +1393,11 @@ async function connectSpotify() {
   const clientSecret = document.getElementById('spotifyClientSecretIn')?.value.trim();
   if(!clientId) return alert('Please enter your Spotify Client ID!');
   localStorage.setItem('spotify_client_id', clientId);
-  if(clientSecret) localStorage.setItem('spotify_client_secret', clientSecret);
+  if(clientSecret && clientSecret !== 'eb42da8944b74b64be17997b22b7ed42') {
+    localStorage.setItem('spotify_client_secret', clientSecret);
+  } else {
+    localStorage.removeItem('spotify_client_secret');
+  }
 
   const codeVerifier = generateRandomString(64);
   const hashed = await sha256(codeVerifier);
@@ -1353,7 +1421,10 @@ async function connectSpotify() {
 async function exchangeSpotifyCode(code) {
   const clientId = localStorage.getItem('spotify_client_id') || 'bc80d4154155425a939097ea6079c225';
   let clientSecret = localStorage.getItem('spotify_client_secret') || '';
-  if(clientSecret === 'eb42da8944b74b64be17997b22b7ed42') clientSecret = '';
+  if(clientSecret === 'eb42da8944b74b64be17997b22b7ed42') {
+    clientSecret = '';
+    localStorage.removeItem('spotify_client_secret');
+  }
   const codeVerifier = localStorage.getItem('spotify_code_verifier');
   if(!clientId) return;
 
