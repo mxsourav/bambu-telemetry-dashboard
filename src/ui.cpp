@@ -460,7 +460,9 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.drawString(buf, cx, cy - 8);
   sprite.setFont(&fonts::Font0);
   sprite.setTextColor(COL_TXT, COL_BLACK);
-  sprite.drawString("PROGRESS", cx, cy + 15);
+  // "PROGRESS" at cy+15 sat ON the ring band (text spans x16..64; the ring
+  // crosses x29..34 at y91..99) - moved below the ring (bottom y=95)
+  sprite.drawString("PROGRESS", cx, 104);
 
   // ---- right metric cards ----
   const char* tags[3]   = {"NOZ", "BED", "TIME"};
@@ -476,7 +478,11 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
 
   for (int i = 0; i < 3; i++) {
     int y = 20 + i * 31;
-    sprite.fillRoundRect(80, y, 74, 27, 6, COL_CARD);
+    // Cards 29px tall (was 27): the 9pt value's glyph box top reaches
+    // ~17px above its bottom-datum anchor, so 27px cards forced the value
+    // into the tag row ("NOZ"/"TIM" were overwritten by the big digits).
+    // bottom datum (150, y+27) => digit top ~y+11, tag caps end y+9 -> clear.
+    sprite.fillRoundRect(80, y, 74, 29, 6, COL_CARD);
     sprite.setFont(&fonts::Font0);
     sprite.setTextDatum(textdatum_t::top_left);
     sprite.setTextColor(tcol[i], COL_CARD);
@@ -484,7 +490,7 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
     sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.setTextDatum(textdatum_t::bottom_right);
     sprite.setTextColor(COL_TXT, COL_CARD);
-    sprite.drawString(vals[i], 150, y + 24);
+    sprite.drawString(vals[i], 150, y + 27);
   }
 
   sprite.drawFastHLine(0, 112, W, COL_SEP);
@@ -493,9 +499,15 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_TXT, COL_BLACK);
+  // When the footer center is occupied (timer countdown or WiFi IP), the
+  // job label must stay under 30px wide or it collides with the centered
+  // text ("Printer Idle" ran x8..80 into the IP at x41..119).
+  bool center_used = timerRunning() || wifi_ok;
   const char* job = (d.state == PST_RUNNING || d.state == PST_PREPARE)
-                      ? "Printing..."
-                      : ((conn == CONN_ONLINE) ? "Printer Idle" : "Printer Off");
+                      ? (center_used ? "Print" : "Printing...")
+                      : (center_used ? ((conn == CONN_ONLINE) ? "Idle" : "Off")
+                                     : ((conn == CONN_ONLINE) ? "Printer Idle"
+                                                              : "Printer Off"));
   sprite.drawString(job, 8, 120);
 
   // timer countdown (left-center of footer when armed) or IP address
