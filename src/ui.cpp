@@ -33,6 +33,7 @@
 
 volatile uint8_t ui_button_event = 0;
 volatile uint32_t ui_button_hold_start_ms = 0;
+volatile bool g_tft_spi_busy = false;
 
 // ---------------- Display driver (ST7735S, landscape) -----------------
 class LGFX : public lgfx::LGFX_Device {
@@ -1146,7 +1147,9 @@ static void uiTask(void* /*param*/) {
     }
 
     // Push full frame to panel (LovyanGFX handles CS windowing and DMA cleanly)
+    g_tft_spi_busy = true;
     sprite.pushSprite(0, 0);
+    g_tft_spi_busy = false;
 
     vTaskDelayUntil(&last_wake, frame_ticks);
   }

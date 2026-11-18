@@ -18,6 +18,9 @@ extern volatile uint32_t ui_button_hold_start_ms;
 // Set by UI task on MQTT FINISH/FAILED; cleared ONLY by Select=OK.
 extern volatile uint8_t ui_latched_result;
 
+// True during active SPI transmission to the panel (used by peripherals task to reject crosstalk)
+extern volatile bool g_tft_spi_busy;
+
 // backlight percentage control (used by menu Brightness row)
 uint8_t  uiGetBacklight();
 void     uiSetBacklight(uint8_t pct);   // 40..100

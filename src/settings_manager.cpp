@@ -75,8 +75,40 @@ void settingsLoad() {
                 g_settings.led_override);
 }
 
+static SystemSettings s_saved_settings;
+static uint32_t s_last_save_ms = 0;
+static bool s_settings_initialized = false;
+
 void settingsSave() {
-  // 1. Save to NVS flash
+  uint32_t ms = millis();
+  // Throttle NVS flash writes: max once per 1000ms
+  if (s_settings_initialized && (ms - s_last_save_ms < 1000)) {
+    return;
+  }
+
+  // Check if any value actually changed before touching flash
+  bool changed = false;
+  if (!s_settings_initialized) {
+    changed = true;
+  } else {
+    changed = (g_settings.theme_light  != s_saved_settings.theme_light) ||
+              (g_settings.clock_12h    != s_saved_settings.clock_12h) ||
+              (g_settings.buzzer_mode  != s_saved_settings.buzzer_mode) ||
+              (g_settings.brightness   != s_saved_settings.brightness) ||
+              (g_settings.led_override != s_saved_settings.led_override) ||
+              (g_settings.led_r        != s_saved_settings.led_r) ||
+              (g_settings.led_g        != s_saved_settings.led_g) ||
+              (g_settings.led_b        != s_saved_settings.led_b) ||
+              (strncmp(g_settings.spotify_refresh_token, s_saved_settings.spotify_refresh_token, sizeof(g_settings.spotify_refresh_token)) != 0);
+  }
+
+  if (!changed) return; // Zero flash wear if values are identical
+
+  s_last_save_ms = ms;
+  s_saved_settings = g_settings;
+  s_settings_initialized = true;
+
+  // 1. Save only changed fields to NVS flash
   prefs.putBool("theme_light", g_settings.theme_light);
   prefs.putBool("clock_12h", g_settings.clock_12h);
   prefs.putUChar("buzzer_mode", g_settings.buzzer_mode);
@@ -106,10 +138,8 @@ void settingsSave() {
       serializeJsonPretty(doc, f);
       f.close();
       Serial.println(F("[SETTINGS] Configuration successfully written to SD card (/settings.json)"));
-    } else {
-      Serial.println(F("[SETTINGS] Warning: Failed to open /settings.json on SD for writing"));
     }
   }
 
-  Serial.println(F("[SETTINGS] Configuration saved to NVS and SD."));
+  Serial.println(F("[SETTINGS] Configuration committed to NVS."));
 }

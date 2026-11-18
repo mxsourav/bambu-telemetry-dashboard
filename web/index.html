@@ -714,7 +714,7 @@ function closeIpModal(){
 }
 
 async function testAndSaveDeviceIp(){
-  const val = document.getElementById('ipInput').value.trim();
+  let val = document.getElementById('ipInput').value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   if(!val) return;
   const st = document.getElementById('ipModalStatus');
   const btn = document.getElementById('btnConnectIp');
@@ -724,7 +724,7 @@ async function testAndSaveDeviceIp(){
 
   const testUrl = (window.location.hostname === val) ? '/api/status' : 'http://' + val + '/api/status';
   const c = new AbortController();
-  const to = setTimeout(() => c.abort(), 5000);
+  const to = setTimeout(() => c.abort(), 7000);
 
   try {
     const res = await fetch(testUrl, { signal: c.signal });
@@ -839,13 +839,21 @@ let lastScreenTime = 0;
 
 function fetchScreen(){
   if(fetchingScreen || isUploadBusy || isCustomImageShowing) return;
+
+  // Only poll screen mirroring when the Remote tab is active
+  const remTab = document.getElementById('p_rem');
+  if(!remTab || !remTab.classList.contains('active')){
+    setTimeout(fetchScreen, 1500);
+    return;
+  }
+
   fetchingScreen = true;
   screenAbortController = new AbortController();
   const timeoutId = setTimeout(() => {
     if(screenAbortController) {
       try { screenAbortController.abort(); } catch(e){}
     }
-  }, 4000);
+  }, 5000);
   const t0 = performance.now();
   fetch(getApiUrl('/api/control/screen_rle?t=' + Date.now()), { signal: screenAbortController.signal })
     .then(r => {
@@ -891,9 +899,11 @@ function fetchScreen(){
       clearTimeout(timeoutId);
       fetchingScreen = false;
       screenAbortController = null;
+      // Schedule next frame 1000ms after completion: gives WiFi radio and CPU plenty of idle time
+      setTimeout(fetchScreen, 1000);
     });
 }
-setInterval(fetchScreen, 800); // Snappy, network-friendly live stream
+// Start chained screen polling
 fetchScreen();
 
 // --- Telemetry Polling ---
@@ -901,7 +911,7 @@ let pollFailCount = 0;
 function pollStatus(){
   if(isUploadBusy) return;
   const c = new AbortController();
-  const to = setTimeout(() => c.abort(), 3500);
+  const to = setTimeout(() => c.abort(), 6000);
   fetch(getApiUrl('/api/status'), { signal: c.signal })
     .then(r => {
       clearTimeout(to);
@@ -934,7 +944,7 @@ function pollStatus(){
     .catch(()=>{
       clearTimeout(to);
       pollFailCount++;
-      if(pollFailCount >= 3) {
+      if(pollFailCount >= 4) {
         document.getElementById('cDot').className = 'dot offline';
         document.getElementById('tState').innerText = 'DISCONNECTED';
       }

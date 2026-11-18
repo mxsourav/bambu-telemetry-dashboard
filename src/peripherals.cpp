@@ -30,37 +30,67 @@ bool options_sound_on() {
 // ---------------- Button engine: state machine per button -------------
 // Active-LOW (direct switch to GND, ESP32 internal pullup, NO external resistors).
 // Unpressed = HIGH (1), Pressed = LOW (0).
-// 2-sample 20ms filter rejects mechanical bounce without adding lag.
+// 6-sample 60ms debouncing + 50ms hold requirement + SPI crosstalk rejection.
+extern volatile bool g_tft_spi_busy;
+
 struct BtnState {
   uint8_t  pin;
-  uint8_t  history;         // 4-bit sample shift register
+  uint16_t history;         // 16-bit sample shift register (160ms history)
   bool     pressed;         // debounced state: true = pressed, false = released
   uint32_t press_start_ms;  // millis() when press confirmed
   bool     long_fired;      // true if long press already emitted
   uint32_t last_event_ms;   // cooldown lockout between events
+  uint32_t glitch_win_ms;   // sliding 2s window for chatter rejection
+  uint8_t  glitch_count;    // count of events within current window
+  uint32_t lockout_ms;      // lockout timestamp if electrical chatter detected
 };
 
-static BtnState b_menu   {PIN_BTN_MENU,   0x0F, false, 0, false, 0};
-static BtnState b_select {PIN_BTN_SELECT, 0x0F, false, 0, false, 0};
+static BtnState b_menu   {PIN_BTN_MENU,   0xFFFF, false, 0, false, 0, 0, 0, 0};
+static BtnState b_select {PIN_BTN_SELECT, 0xFFFF, false, 0, false, 0, 0, 0, 0};
+
+static uint8_t buttonEmit(BtnState& b, uint32_t ms, uint8_t ev) {
+  if (ms - b.glitch_win_ms > 2000) {
+    b.glitch_win_ms = ms;
+    b.glitch_count = 0;
+  }
+  b.glitch_count++;
+  if (b.glitch_count > 3) {
+    // Excessive events within 2s indicates floating pin, RF interference or switch bounce
+    b.lockout_ms = ms + 3500; // Lock out pin for 3.5 seconds
+    Serial.printf("[BTN] Pin %d chatter/EMI detected (%d ev/2s) -> locked for 3.5s\n", b.pin, b.glitch_count);
+    return 0;
+  }
+  b.last_event_ms = ms;
+  return ev;
+}
 
 // event codes (match ui.h): 1=menu 2=select 3=menuLong 4=menuDouble 5=selLong
 static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
-  if (ms < 500) return 0; // boot stabilization lockout to prevent false triggers
+  if (ms < 1500) return 0; // 1.5s boot stabilization lockout to prevent boot chatter
 
-  // Read raw pin: active-LOW with internal pullup
-  // 1 = unpressed (pulled HIGH to 3.3V), 0 = pressed (shorted to GND)
-  uint8_t raw = digitalRead(b.pin) ? 1 : 0;
-  b.history = ((b.history << 1) & 0x0F) | raw;
-
-  // Short 60ms cooldown after an event to eliminate mechanical release chatter
-  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 60)) {
+  // If locked out due to chatter/EMI, suppress events and reset history
+  if (b.lockout_ms > ms) {
+    b.history = 0xFFFF;
+    b.pressed = false;
     return 0;
   }
 
-  // 2 consecutive LOW reads (20 ms) = CONFIRMED PRESSED
-  bool stable_pressed  = ((b.history & 0x03) == 0x00);
-  // 2 consecutive HIGH reads (20 ms) = CONFIRMED RELEASED
-  bool stable_released = ((b.history & 0x03) == 0x03);
+  // During active SPI display transfers, ignore pin sampling to reject capacitive crosstalk from adjacent GPIO 17 (TFT MOSI)
+  uint8_t raw = 1;
+  if (!g_tft_spi_busy) {
+    raw = digitalRead(b.pin) ? 1 : 0;
+  }
+  b.history = (b.history << 1) | raw;
+
+  // 150ms cooldown between events
+  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 150)) {
+    return 0;
+  }
+
+  // 6 consecutive LOW reads (60 ms) = CONFIRMED PRESSED
+  bool stable_pressed  = ((b.history & 0x3F) == 0x00);
+  // 6 consecutive HIGH reads (60 ms) = CONFIRMED RELEASED
+  bool stable_released = ((b.history & 0x3F) == 0x3F);
 
   // Transition: Released -> Pressed
   if (!b.pressed && stable_pressed) {
@@ -73,17 +103,16 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
   // While held: check for long-press threshold (500 ms)
   if (b.pressed && !b.long_fired && (ms - b.press_start_ms >= 500)) {
     b.long_fired = true;
-    b.last_event_ms = ms;
-    return (&b == &b_menu) ? 3 : 5; // 3=menu long (back), 5=select long
+    return buttonEmit(b, ms, (&b == &b_menu) ? 3 : 5); // 3=menu long, 5=select long
   }
 
   // Transition: Pressed -> Released
   if (b.pressed && stable_released) {
     b.pressed = false;
-    b.last_event_ms = ms;
-    if (!b.long_fired) {
-      // Instant short press response on release
-      return (&b == &b_menu) ? 1 : 2; // 1=menu short, 2=select short
+    uint32_t press_duration = ms - b.press_start_ms;
+    // Require at least 50 ms hold duration to reject fast EMI spikes
+    if (!b.long_fired && press_duration >= 50) {
+      return buttonEmit(b, ms, (&b == &b_menu) ? 1 : 2); // 1=menu short, 2=select short
     }
   }
 
