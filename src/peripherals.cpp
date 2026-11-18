@@ -54,10 +54,11 @@ static uint8_t buttonEmit(BtnState& b, uint32_t ms, uint8_t ev) {
     b.glitch_count = 0;
   }
   b.glitch_count++;
-  if (b.glitch_count > 3) {
-    // Excessive events within 2s indicates floating pin, RF interference or switch bounce
-    b.lockout_ms = ms + 3500; // Lock out pin for 3.5 seconds
-    Serial.printf("[BTN] Pin %d chatter/EMI detected (%d ev/2s) -> locked for 3.5s\n", b.pin, b.glitch_count);
+  if (b.glitch_count > 8) {
+    // 8+ events in 2s = real electrical chatter (EMI fires dozens/sec;
+    // a human scrolling a menu taps at most ~4/s, so 8 is safe).
+    b.lockout_ms = ms + 2000; // Lock out pin for 2 seconds
+    Serial.printf("[BTN] Pin %d chatter/EMI detected (%d ev/2s) -> locked for 2s\n", b.pin, b.glitch_count);
     return 0;
   }
   b.last_event_ms = ms;
@@ -82,8 +83,9 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
   }
   b.history = (b.history << 1) | raw;
 
-  // 150ms cooldown between events
-  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 150)) {
+  // 60ms cooldown between events (matches the 6-sample stable window;
+  // the old 150ms made rapid menu scrolling feel laggy)
+  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 60)) {
     return 0;
   }
 

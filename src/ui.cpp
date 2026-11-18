@@ -1100,6 +1100,19 @@ static void uiTask(void* /*param*/) {
       }
     }
 
+    // --- smooth progress interpolation between network polls (handover
+    //     Task 5): advance the bar every frame on Core 1 so it animates at
+    //     UI framerate instead of jumping once per 3-5s poll ---
+    static uint32_t s_prog_frame_ms = 0;
+    if (view == VIEW_SPOTIFY || view == VIEW_SPOTIFY_LYRICS) {
+      uint32_t delta = ms - s_prog_frame_ms;
+      if (g_spotify.is_playing &&
+          g_spotify.progress_ms + delta < g_spotify.duration_ms) {
+        g_spotify.progress_ms += delta;
+      }
+    }
+    s_prog_frame_ms = ms;
+
     // --- render ---
     switch (view) {
       case VIEW_BOOT:    drawBootFrame(ms - boot_start_ms); break;
