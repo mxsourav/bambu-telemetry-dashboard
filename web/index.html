@@ -526,20 +526,12 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
       <!-- Login Section -->
       <div id="spotifyLoginSection">
         <div style="font-size:0.75rem;color:var(--txt-muted);margin-bottom:10px;line-height:1.4;">
-          Display your live Spotify playback on the ST7735 screen and sync your RGB LED strip to album artwork!
+          Play music anywhere on this Spotify account &mdash; the monitor auto-follows it.
+          One-time login in your browser; the pairing survives reboots. No PC scripts.
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <div>
-            <label style="font-size:0.7rem;color:var(--txt-muted);font-weight:600;">Spotify Client ID:</label>
-            <input type="text" id="spotifyClientIdIn" class="color-in" style="width:100%;text-align:left;margin-top:4px;" value="bc80d4154155425a939097ea6079c225" placeholder="Paste Spotify Client ID here">
-          </div>
-          <div>
-            <label style="font-size:0.7rem;color:var(--txt-muted);font-weight:600;">Spotify Client Secret (Optional for PKCE):</label>
-            <input type="password" id="spotifyClientSecretIn" class="color-in" style="width:100%;text-align:left;margin-top:4px;" value="" placeholder="Optional: Leave empty for PKCE or paste secret">
-          </div>
-          <button class="btn-primary" style="background:#1DB954;border-color:#1ed760;" onclick="connectSpotify()">Connect Spotify</button>
-
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
+          <button class="btn-primary" style="background:#1DB954;border-color:#1ed760;" onclick="openSpotifyPairing()">Pair with Spotify</button>
+          <div style="margin-top:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">
             <label style="font-size:0.7rem;color:var(--txt-muted);font-weight:600;">Or Paste Refresh Token Directly:</label>
             <div style="display:flex;gap:6px;margin-top:4px;">
               <input type="text" id="spotifyRefreshTokenIn" class="color-in" style="flex:1;text-align:left;" placeholder="Paste Refresh Token here">
@@ -548,11 +540,10 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
           </div>
         </div>
         <div style="margin-top:12px;padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;font-size:0.7rem;color:var(--txt-muted);line-height:1.4;">
-          <strong style="color:#fff;">Quick 1-Minute Setup:</strong><br>
-          1. Go to <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:#1DB954;text-decoration:underline;">developer.spotify.com/dashboard</a> and create an App.<br>
-          2. In App Settings &rarr; Redirect URIs, add:<br>
-          <code id="spotifyRedirectUriDisplay" style="color:var(--cyan);word-break:break-all;font-size:0.68rem;background:rgba(0,0,0,0.4);padding:2px 4px;border-radius:4px;display:inline-block;margin:3px 0;"></code><br>
-          3. Copy your Client ID, paste it above, and click Connect!
+          <strong style="color:#fff;">How pairing works:</strong><br>
+          1. Tap <span style="color:#1DB954;">Pair with Spotify</span> &mdash; the monitor's pairing page opens.<br>
+          2. Log in on Spotify's own page (one time).<br>
+          3. You land back on the monitor with a green PAIRED screen. Done forever.
         </div>
       </div>
 
@@ -1405,6 +1396,13 @@ function getSpotifyRedirectUri() {
   return window.location.origin + window.location.pathname.replace(/\/$/, '') + '/';
 }
 
+// Opens the monitor's own pairing page: login link + permanent token
+// exchange happens ON the device (it holds the client secret), so the
+// browser never needs one. Pairing survives reboots (NVS + SD).
+function openSpotifyPairing() {
+  window.open('http://' + deviceIp + '/api/spotify/login', '_blank');
+}
+
 function initSpotify() {
   const redirEl = document.getElementById('spotifyRedirectUriDisplay');
   if(redirEl) redirEl.innerText = getSpotifyRedirectUri();
@@ -1439,8 +1437,11 @@ function initSpotify() {
 
   const code = urlParams.get('code');
   if(code) {
+    // OAuth code is handled by the auto-forward script at the top of the
+    // page (navigates to the monitor's /api/spotify/callback, which holds
+    // the real client secret). The old in-page PKCE exchange is retired -
+    // it caused "Invalid client secret" alerts.
     window.history.replaceState({}, document.title, window.location.pathname);
-    exchangeSpotifyCode(code);
     return;
   }
 
