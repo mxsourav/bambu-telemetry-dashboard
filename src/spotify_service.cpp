@@ -7,6 +7,8 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <JPEGDEC.h>
+#include <SD.h>
+#include "web_server.h"   // sdEnsureMounted()
 
 SpotifyTrackInfo g_spotify;
 
@@ -16,15 +18,26 @@ static uint32_t s_token_expires_ms = 0;
 static uint32_t s_last_poll_ms = 0;
 
 static const char* SPOTIFY_CLIENT_ID = "bc80d4154155425a939097ea6079c225";
-static const char* SPOTIFY_CLIENT_SECRET = "";
+static const char* SPOTIFY_CLIENT_SECRET = "eb42da8944b74b64be17997b22b7ed42";
+// Redirect registered in the Spotify dashboard (Vercel mirror of the web UI).
+// The device-embedded pairing page + the Vercel page's auto-forward script
+// make the whole flow phone-browser-only: no PC scripts, ever.
+static const char* SPOTIFY_REDIRECT_URI = "https://web-tau-five-60.vercel.app/";
+static const char* SPOTIFY_SCOPES =
+    "user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
 static bool s_has_cover_art = false;
 
 // ---------------- Task 4: autonomous cover art (handover) --------------
-// The decoder is heap-allocated per fetch (new/delete) instead of a static
-// class instance: JPEGIMAGE weighs ~16 KB of .bss which would permanently
-// cut the free heap the Bambu TLS connection depends on.
-static uint16_t s_last_cover_key = 0;   // hash of last successfully fetched art URL
+// ARCHITECTURE: the art JPEG is cached on the SD card (/art.jpg) and
+// decoded straight into the UI sprite buffers on demand. A 40 KB RAM
+// cover buffer is impossible on this firmware - runtime fragmentation
+// (TLS/JSON/RLE churn) shrinks the largest contiguous block below 20 KB,
+// and JPEGDEC reports "success" even when its draw callback aborts,
+// which previously poisoned the art flag and crashed the UI task.
+#define ART_CACHE_PATH "/art.jpg"
+static uint16_t s_last_cover_key = 0;   // hash of last cached art URL
+static volatile bool s_art_dirty = false; // new art cached, UI must render
 
 static uint16_t urlHash(const char* s) {
   uint16_t h = 5381;
@@ -32,19 +45,23 @@ static uint16_t urlHash(const char* s) {
   return h;
 }
 
-// JPEG draw callback: paste each MCU block into the 160x128 RGB565 cover
-// buffer with clipping (decoded image may be offset/overflow the screen).
-// Pixel type defaults to little endian = LovyanGFX native byte order; if
-// album colors render wrong on the panel, call setPixelType(RGB565_BIG_ENDIAN).
+// Centering offsets applied in the callback (JPEGDEC must never receive
+// negative decode coordinates - that corrupts its internal state).
+static int s_art_ox = 0, s_art_oy = 0;
+static uint16_t* s_art_dst = nullptr;
+
+// JPEG draw callback: paste each MCU block into the target framebuffer
+// (sprite RAM, 160 px stride) with clipping. Pixel type defaults to
+// little endian = LovyanGFX native RGB565 byte order.
 static int jpegDrawCb(JPEGDRAW* p) {
-  uint16_t* dst = (uint16_t*)uiGetCustomImageBuffer();
+  uint16_t* dst = s_art_dst;
   if (!dst) return 0;
   for (int row = 0; row < p->iHeight; row++) {
-    int dy = p->y + row;
+    int dy = p->y + row + s_art_oy;
     if (dy < 0 || dy >= 128) continue;
     const uint16_t* src = p->pPixels + row * p->iWidth;
     for (int col = 0; col < p->iWidth; col++) {
-      int dx = p->x + col;
+      int dx = p->x + col + s_art_ox;
       if (dx < 0 || dx >= 160) continue;
       dst[dy * 160 + dx] = src[col];
     }
@@ -52,65 +69,97 @@ static int jpegDrawCb(JPEGDRAW* p) {
   return 1;
 }
 
-static bool fetchCoverArt(const char* url) {
-  // Heap guard: never risk the persistent Bambu TLS connection for art.
-  // Steady-state is ~80 KB; the fetch peaks at ~50 KB transient (TLS
-  // handshake + 300px JPEG), so 75 KB keeps a comfortable margin.
-  if (ESP.getFreeHeap() < 75000) {
-    Serial.printf("[SPOTIFY] skip cover fetch (heap %u too low)\n",
-                  (unsigned)ESP.getFreeHeap());
-    return false;
-  }
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(6000);
-  HTTPClient http;
-  if (!http.begin(client, url)) return false;
-  int code = http.GET();
-  if (code != 200) { http.end(); return false; }
-  int len = http.getSize();
-  if (len <= 0 || len > 65536) { http.end(); return false; }
+bool spotifyArtDirty() { return s_art_dirty; }
+void spotifyClearArtDirty() { s_art_dirty = false; }
 
-  uint8_t* buf = (uint8_t*)malloc(len);
-  if (!buf) { http.end(); return false; }
-  size_t got = 0;
-  WiFiClient* stream = http.getStreamPtr();
-  uint32_t t0 = millis();
-  while (got < (size_t)len && millis() - t0 < 8000) {
-    size_t avail = stream->available();
-    if (avail) {
-      size_t want = (avail < (size_t)(len - got)) ? avail : (size_t)(len - got);
-      int n = stream->readBytes(buf + got, want);
-      if (n <= 0) break;
-      got += n;
-    } else {
-      vTaskDelay(1);
-    }
-  }
-  http.end();                          // TLS context freed BEFORE decode
-  if (got != (size_t)len) { free(buf); return false; }
+// Decode /art.jpg (SD) into a caller-supplied 160-stride framebuffer.
+// Runs in the UI task; no big heap allocation - JPEGDEC reads the file
+// incrementally through its 2 KB internal buffer.
+bool spotifyRenderArtToBuffer(uint16_t* dst160) {
+  if (!sdEnsureMounted() || !SD.exists(ART_CACHE_PATH)) return false;
+  File f = SD.open(ART_CACHE_PATH, FILE_READ);
+  if (!f) return false;
 
   bool ok = false;
   JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
   if (jpeg) {
-    if (jpeg->openRAM(buf, len, jpegDrawCb) == 1) {
+    if (jpeg->open(f, jpegDrawCb) == 1) {
       int w = jpeg->getWidth(), h = jpeg->getHeight();
-      // scale via decode() options (JPEGDEC 1.x API): smallest divisor so
-      // the width fits the 160px panel
       int opt = 0, div = 1;            // 0=1/1, 2=1/2, 4=1/4, 8=1/8
       if (w > 160) { opt = JPEG_SCALE_HALF;    div = 2; }
       if (w > 320) { opt = JPEG_SCALE_QUARTER; div = 4; }
       if (w > 640) { opt = JPEG_SCALE_EIGHTH;  div = 8; }
       int sw = w / div, sh = h / div;
-      int ox = (160 - sw) / 2, oy = (128 - sh) / 2;   // center; cb clips
-      spotifySetCoverArtValid(false);  // hide stale art while re-decoding
-      if (jpeg->decode(ox, oy, opt) == 1) ok = true;
+      s_art_ox = (160 - sw) / 2;
+      s_art_oy = (128 - sh) / 2;       // may be negative; callback clips
+      s_art_dst = dst160;
+      ok = (jpeg->decode(0, 0, opt) == 1);
+      s_art_dst = nullptr;
       jpeg->close();
     }
     delete jpeg;
   }
-  free(buf);
-  if (ok) spotifySetCoverArtValid(true);
+  f.close();
+  return ok;
+}
+
+// Stream-download a JPEG (or copy an SD-local path) to the SD art cache.
+// Chunked 1.5 KB buffer only - never needs a big contiguous heap block.
+static bool cacheArtFromUrl(const char* url) {
+  if (!sdEnsureMounted()) return false;
+  SD.remove(ART_CACHE_PATH);
+  File out = SD.open(ART_CACHE_PATH, FILE_WRITE);
+  if (!out) return false;
+  bool ok = false;
+  if (url[0] == '/') {                       // local SD path (diagnostics)
+    File in = SD.open(url, FILE_READ);
+    if (in) {
+      uint8_t chunk[1536];
+      size_t n;
+      ok = true;
+      while ((n = in.read(chunk, sizeof(chunk))) > 0)
+        if (out.write(chunk, n) != n) { ok = false; break; }
+      in.close();
+    }
+  } else {                                   // https (i.scdn.co album art)
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setTimeout(6000);
+    HTTPClient http;
+    if (http.begin(client, url)) {
+      int code = http.GET();
+      if (code == 200) {
+        WiFiClient* stream = http.getStreamPtr();
+        uint8_t chunk[1536];
+        int len = http.getSize();
+        uint32_t t0 = millis();
+        ok = true;
+        while (ok && (len < 0 || len > 0) && millis() - t0 < 8000) {
+          size_t avail = stream->available();
+          if (avail) {
+            size_t want = sizeof(chunk);
+            if (len > 0 && avail > (size_t)len) avail = len;
+            if (avail > want) avail = want;
+            int n = stream->readBytes(chunk, avail);
+            if (n <= 0) { ok = false; break; }
+            if (out.write(chunk, n) != n) { ok = false; break; }
+            if (len > 0) len -= n;
+          } else {
+            vTaskDelay(1);
+          }
+        }
+        if (len > 0) ok = false;             // incomplete download
+      }
+      http.end();
+    }
+  }
+  out.close();
+  if (ok) {
+    s_art_dirty = true;                      // UI task renders on next frame
+    Serial.println(F("[SPOTIFY] art cached to SD (/art.jpg)"));
+  } else {
+    SD.remove(ART_CACHE_PATH);
+  }
   return ok;
 }
 
@@ -168,6 +217,90 @@ void spotifySetRefreshToken(const char* token) {
 
 const char* spotifyGetRefreshToken() {
   return s_refresh_token;
+}
+
+// ---------------- on-device pairing (no PC scripts) --------------------
+#include <mbedtls/base64.h>
+
+static String b64encode(const String& in) {
+  size_t olen = 0;
+  size_t out_len = ((in.length() + 2) / 3) * 4 + 1;
+  unsigned char* out = (unsigned char*)malloc(out_len);
+  if (!out) return "";
+  mbedtls_base64_encode(out, out_len, &olen,
+                        (const unsigned char*)in.c_str(), in.length());
+  String s((const char*)out, olen);
+  free(out);
+  return s;
+}
+
+static String urlEncode(const char* s) {
+  String out;
+  char hex[4];
+  for (const char* p = s; *p; p++) {
+    char c = *p;
+    bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+    if (safe) out += c;
+    else { snprintf(hex, sizeof(hex), "%%%02X", (uint8_t)c); out += hex; }
+  }
+  return out;
+}
+
+void spotifyBuildAuthUrl(char* buf, size_t len) {
+  snprintf(buf, len,
+           "https://accounts.spotify.com/authorize?client_id=%s"
+           "&response_type=code&redirect_uri=%s&scope=%s",
+           SPOTIFY_CLIENT_ID,
+           urlEncode(SPOTIFY_REDIRECT_URI).c_str(),
+           urlEncode(SPOTIFY_SCOPES).c_str());
+}
+
+bool spotifyExchangeCode(const char* code) {
+  if (!code || !code[0] || WiFi.status() != WL_CONNECTED) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(8000);
+  HTTPClient http;
+  if (!http.begin(client, "https://accounts.spotify.com/api/token")) return false;
+
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  http.addHeader("Authorization",
+                 "Basic " + b64encode(String(SPOTIFY_CLIENT_ID) + ":" +
+                                      SPOTIFY_CLIENT_SECRET));
+  String body = "grant_type=authorization_code&code=" + urlEncode(code) +
+                "&redirect_uri=" + urlEncode(SPOTIFY_REDIRECT_URI);
+  int httpCode = http.POST(body);
+  bool ok = false;
+  if (httpCode == 200) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, http.getString());
+    if (!err) {
+      const char* rt = doc["refresh_token"] | "";
+      const char* at = doc["access_token"] | "";
+      if (rt[0]) {
+        spotifySetRefreshToken(rt);       // persists NVS + SD, clears access token
+        if (at[0]) {                      // cache the fresh access token too
+          strncpy(s_access_token, at, sizeof(s_access_token) - 1);
+          uint32_t expSec = doc["expires_in"] | 3600;
+          s_token_expires_ms = millis() + (expSec * 1000);
+        }
+        Serial.println(F("[SPOTIFY] paired OK - refresh token saved (survives reboots)"));
+        ok = true;
+      }
+    }
+  } else {
+    Serial.printf("[SPOTIFY] code exchange failed: HTTP %d\n", httpCode);
+  }
+  http.end();
+  return ok;
+}
+
+bool spotifyTestCoverArt(const char* url) {
+  // Stage the given JPEG (URL or SD path) into the art cache; the UI task
+  // renders it into the sprites on the next Spotify frame.
+  return cacheArtFromUrl(url);
 }
 
 static bool refreshAccessToken() {
@@ -263,12 +396,11 @@ void spotifyPollLoop() {
       }
       spotifySetTrackInfo(name, artist, prog, dur, is_playing, art);
 
-      // fetch + decode art only when the track actually changed
+      // cache art on SD when the track actually changed (UI renders it)
       if (is_playing && g_spotify.image_url[0]) {
         uint16_t key = urlHash(g_spotify.image_url);
-        if (key != s_last_cover_key && fetchCoverArt(g_spotify.image_url)) {
-          s_last_cover_key = key;
-          Serial.println(F("[SPOTIFY] cover art decoded"));
+        if (key != s_last_cover_key) {
+          if (cacheArtFromUrl(g_spotify.image_url)) s_last_cover_key = key;
         }
       }
     }

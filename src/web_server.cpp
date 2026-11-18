@@ -708,6 +708,103 @@ static void handleSpotifyToken() {
   server.send(200, "application/json", out);
 }
 
+// ---------------- Spotify on-device pairing (no PC scripts) ------------
+static const char* PAIR_PAGE_HTML = R"HTML(<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STAN studio - Spotify Pairing</title>
+<style>
+body{background:#070708;color:#f4f4f5;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;
+flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}
+h1{font-size:1.3rem;margin:0 0 6px}p{color:#a1a1aa;font-size:.85rem;line-height:1.5;max-width:26rem;margin:8px 0}
+.btn{display:inline-block;background:#1DB954;color:#000;font-weight:700;font-size:1rem;padding:14px 26px;
+border-radius:12px;text-decoration:none;margin:14px 0 22px;border:none;cursor:pointer}
+input{width:100%;max-width:26rem;padding:11px;border-radius:10px;border:1px solid #27272a;background:#18181b;
+color:#f4f4f5;font-size:.85rem;text-align:center}
+#st{margin-top:14px;font-size:.85rem;color:#06B6D4;min-height:1.2em}
+.ok{color:#10B981}.err{color:#FF2D55}
+a.home{color:#06B6D4;font-size:.8rem;text-decoration:none;margin-top:18px;display:inline-block}
+</style></head><body>
+<h1>ST&#916;N studio. &mdash; Spotify Pairing</h1>
+<p>One-time login. After this the monitor auto-follows your Spotify from any
+device &mdash; and the pairing <b>survives reboots</b>. No PC scripts, ever.</p>
+%STATUS%
+<a class="btn" id="loginBtn" href="%AUTHURL%">Login with Spotify</a>
+<p style="font-size:.78rem">If Spotify lands you on a page that won't open,
+copy the <code>code=...</code> value from its address bar and paste it here:</p>
+<input id="codeIn" placeholder="paste code= value here">
+<div class="btn" id="pairBtn" style="background:#06B6D4;color:#000">Pair Device</div>
+<div id="st"></div>
+<a class="home" href="/">&#8592; back to dashboard</a>
+<script>
+document.getElementById('pairBtn').onclick = function(){
+  var c = document.getElementById('codeIn').value.trim();
+  if(!c){ return; }
+  if(c.indexOf('code=') >= 0){ c = c.split('code=')[1].split('&')[0]; }
+  var st = document.getElementById('st');
+  st.textContent = 'Exchanging code with Spotify...';
+  fetch('/api/spotify/callback',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:c})}).then(function(r){return r.text()})
+    .then(function(t){
+      if(t.indexOf('"paired":true')>=0){ st.className='ok'; st.textContent='PAIRED! Music now drives the display. You can close this page.'; }
+      else { st.className='err'; st.textContent='Pairing failed: '+t; }
+    }).catch(function(e){ st.className='err'; st.textContent='Error: '+e; });
+};
+</script></body></html>)HTML";
+
+static void handleSpotifyLogin() {
+  char authUrl[400];
+  spotifyBuildAuthUrl(authUrl, sizeof(authUrl));
+  bool paired = spotifyGetRefreshToken()[0] != 0;
+  String status = paired
+      ? String("<p class=\"ok\">Status: PAIRED &#10003; (re-pair only to switch accounts)</p>")
+      : String("<p>Status: not paired yet</p>");
+  String html = PAIR_PAGE_HTML;
+  html.replace("%STATUS%", status);
+  html.replace("%AUTHURL%", authUrl);
+  sendCorsHeaders();
+  server.send(200, "text/html", html);
+}
+
+static void handleSpotifyCallback() {
+  String code = server.hasArg("code") ? server.arg("code") : "";
+  if (code.isEmpty() && server.hasArg("plain")) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, server.arg("plain"))) {
+      code = doc["code"] | "";
+    }
+  }
+  bool ok = spotifyExchangeCode(code.c_str());
+  if (server.hasArg("plain") || server.method() == HTTP_POST) {
+    // API-style reply (used by the pairing page and the Vercel forward)
+    sendCorsHeaders();
+    server.send(200, "application/json",
+                ok ? "{\"paired\":true}" : "{\"paired\":false,\"error\":\"exchange failed\"}");
+    return;
+  }
+  String html = String("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<style>body{background:#070708;color:#f4f4f5;font-family:sans-serif;display:flex;"
+    "flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}"
+    "h1{font-size:1.3rem}p{color:#a1a1aa}</style></head><body><h1>")
+    + (ok ? "&#10003; Spotify PAIRED" : "&#10007; Pairing failed")
+    + "</h1><p>"
+    + (ok ? "The refresh token is saved on the monitor (NVS + SD card) and survives reboots. Play music anywhere - the display follows automatically."
+          : "Copy the <code>code=...</code> value from Spotify's redirect URL and paste it at <a style='color:#06B6D4' href='/api/spotify/login'>the pairing page</a>.")
+    + "</p><a style='color:#06B6D4' href='/'>&#8592; dashboard</a></body></html>";
+  server.send(200, "text/html", html);
+}
+
+static void handleSpotifyTestArt() {
+  if (!server.hasArg("url")) {
+    sendCorsHeaders();
+    server.send(400, "application/json", "{\"error\":\"missing url\"}");
+    return;
+  }
+  bool ok = spotifyTestCoverArt(server.arg("url").c_str());
+  sendCorsHeaders();
+  server.send(200, "application/json", ok ? "{\"decoded\":true}" : "{\"decoded\":false}");
+}
+
 // ---------------- Server Task & Lifecycle -----------------------------
 void webServerLoop() {
   server.handleClient();
@@ -745,6 +842,10 @@ static void webTask(void* /*param*/) {
   server.on("/api/spotify/cover", HTTP_POST, handleSpotifyCoverDone, handleSpotifyCoverLoop);
   server.on("/api/spotify/token", HTTP_POST, handleSpotifyToken);
   server.on("/api/spotify/token", HTTP_GET, handleSpotifyToken);
+  server.on("/api/spotify/login", HTTP_GET, handleSpotifyLogin);
+  server.on("/api/spotify/callback", HTTP_GET, handleSpotifyCallback);
+  server.on("/api/spotify/callback", HTTP_POST, handleSpotifyCallback);
+  server.on("/api/spotify/testart", HTTP_GET, handleSpotifyTestArt);
 
   server.onNotFound([]() {
     if (server.method() == HTTP_OPTIONS) {

@@ -659,6 +659,25 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
 </div>
 
 <script>
+// --- Spotify OAuth auto-forward --------------------------------------
+// Spotify redirects here (registered redirect_uri) with ?code=... after a
+// successful login. Top-level navigation to the monitor's local HTTP address
+// is allowed from an HTTPS page, so hand the code straight to the device:
+// it exchanges the code for a permanent refresh token (NVS+SD, survives
+// reboots) - no PC scripts, ever.
+(function(){
+  const p = new URLSearchParams(window.location.search);
+  const code = p.get("code");
+  if (code) {
+    let ip = null;
+    try { ip = localStorage.getItem('bambu_esp32_ip'); } catch(e){}
+    if (!ip) ip = "192.168.0.154";
+    window.location.replace("http://" + ip + "/api/spotify/callback?code=" +
+                            encodeURIComponent(code));
+  }
+})();
+</script>
+<script>
 // --- IP Configuration & Host Management ---
 const DEFAULT_IP = "192.168.0.154";
 function getDeviceIp(){

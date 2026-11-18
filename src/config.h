@@ -24,14 +24,15 @@
 #define PIN_BUZZER         19     // Buzzer output (LEDC PWM tone or Active DC)
 
 // ---------------- SD card (separate SPI - HSPI, matrix-routed) -------
-//   CS=15, SCK=25, MOSI=13, MISO=26
-// (MISO moved off strapping pin 12 to GPIO 26 to avoid the MTDI boot
-//  hazard entirely; 26 also hosts the TFT backlight PWM which is unused
-//  when BLK is jumpered to 3.3V - safe to share.)
+//   CS=15, SCK=25, MOSI=13, MISO=35
+// (MISO moved 26 -> 35: GPIO 26 actively drives the TFT backlight PWM,
+//  which fought the SD MISO signal when BLK was not jumpered to 3.3V -
+//  intermittent SD mounts, corrupted writes and runtime crashes. GPIO 35
+//  is input-only, strapping-safe and otherwise unused - dedicated MISO.)
 #define PIN_SD_CS      15
 #define PIN_SD_SCK     25
 #define PIN_SD_MOSI    13
-#define PIN_SD_MISO    26
+#define PIN_SD_MISO    35
 #define SD_SPI_HOST    HSPI_HOST   // TFT stays on VSPI - no bus contention
 
 // ---------------- Analog RGB strip (common anode via MOSFETs) --------

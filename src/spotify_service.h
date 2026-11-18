@@ -27,3 +27,17 @@ const uint16_t* spotifyGetCoverArt();
 uint8_t* spotifyGetCoverArtBuffer();
 void spotifySetCoverArtValid(bool valid);
 void spotifyClearCoverArt();
+
+// ---- on-device pairing (no PC scripts) ----
+// Builds the Spotify authorize URL the browser should open
+void spotifyBuildAuthUrl(char* buf, size_t len);
+// Exchanges an authorization code for permanent tokens (persists NVS+SD)
+bool spotifyExchangeCode(const char* code);
+// Diagnostic: stage a JPEG (URL or SD path) into the SD art cache
+bool spotifyTestCoverArt(const char* url);
+
+// ---- cover art render pipeline (SD-cached, zero big heap blocks) ----
+bool spotifyArtDirty();                  // new art staged, needs UI render
+void spotifyClearArtDirty();
+// Decode /art.jpg into a 160-stride RGB565 framebuffer (UI task context)
+bool spotifyRenderArtToBuffer(uint16_t* dst160);

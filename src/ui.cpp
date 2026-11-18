@@ -714,11 +714,20 @@ static void drawTimerFrame(uint32_t ms) {
   sprite.drawString("M-hold: back", 4, 120);
 }
 
+static bool s_art_in_frame = false;   // sprite buffer currently holds art
+
 static void drawSpotifyFrame(uint32_t ms) {
   // 1. Cover Artwork (Full 160x128 screen)
-  if (spotifyHasCoverArt()) {
-    sprite.pushImage(0, 0, W, H, spotifyGetCoverArt());
-  } else {
+  // Art is decoded once from the SD cache straight into the sprite buffer
+  // (zero big heap blocks - a RAM cover buffer was impossible on this
+  // firmware: largest contiguous block < 20 KB under runtime churn). The
+  // sprite content persists between frames, so the art needs no source
+  // after the one-time decode; only the scrim area redraws per frame.
+  if (spotifyArtDirty() || !s_art_in_frame) {
+    spotifyClearArtDirty();
+    s_art_in_frame = spotifyRenderArtToBuffer((uint16_t*)sprite.getBuffer());
+  }
+  if (!s_art_in_frame) {
     sprite.fillSprite(COL_BLACK);
     // Stylized vinyl record in upper center
     int cx = 80, cy = 34;
@@ -1133,6 +1142,10 @@ static void uiTask(void* /*param*/) {
       }
     }
     s_prog_frame_ms = ms;
+
+    // art lives in the sprite buffers only while the cover view is up;
+    // any other view (incl. lyrics) overwrites both buffers
+    if (view != VIEW_SPOTIFY) s_art_in_frame = false;
 
     // --- render ---
     switch (view) {
