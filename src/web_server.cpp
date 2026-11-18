@@ -638,47 +638,57 @@ static void handleSpotifyNow() {
     const char* lyric_cur = doc["lyric_cur"] | nullptr;
     const char* lyric_next = doc["lyric_next"] | nullptr;
     spotifySetTrackInfo(title, artist, prog, dur, playing, img_url, lyric_cur, lyric_next);
+    if (playing) {
+      uiActivateSpotify();
+    }
   }
   sendCorsHeaders();
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
-static uint8_t s_cover_upload_buf[56 * 56 * 2];
 static size_t  s_cover_upload_len = 0;
 
 static void handleSpotifyCoverLoop() {
   HTTPUpload& upload = server.upload();
-  const size_t targetBytes = 56 * 56 * 2;
+  const size_t targetBytes = 160 * 128 * 2;
+  uint8_t* dst = spotifyGetCoverArtBuffer();
+  if (!dst) return;
+
   if (upload.status == UPLOAD_FILE_START) {
     s_cover_upload_len = 0;
+    spotifySetCoverArtValid(false);
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (s_cover_upload_len < targetBytes) {
       size_t copyLen = upload.currentSize;
       if (s_cover_upload_len + copyLen > targetBytes) {
         copyLen = targetBytes - s_cover_upload_len;
       }
-      memcpy(s_cover_upload_buf + s_cover_upload_len, upload.buf, copyLen);
+      memcpy(dst + s_cover_upload_len, upload.buf, copyLen);
       s_cover_upload_len += copyLen;
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (s_cover_upload_len == targetBytes) {
-      spotifySetCoverArt((const uint16_t*)s_cover_upload_buf);
-      Serial.println(F("[SPOTIFY] Cover art received via upload"));
+      spotifySetCoverArtValid(true);
+      uiActivateSpotify();
+      Serial.println(F("[SPOTIFY] Fullscreen 160x128 cover art received via upload"));
     }
   }
 }
 
 static void handleSpotifyCoverDone() {
   sendCorsHeaders();
-  if (s_cover_upload_len == 56 * 56 * 2) {
+  server.sendHeader("Connection", "close");
+  const size_t targetBytes = 160 * 128 * 2;
+  if (s_cover_upload_len == targetBytes) {
     server.send(200, "application/json", "{\"status\":\"ok\"}");
     return;
   }
   if (server.hasArg("plain")) {
     String body = server.arg("plain");
-    const size_t reqSize = 56 * 56 * 2;
-    if (body.length() >= reqSize) {
+    if (body.length() >= targetBytes) {
       spotifySetCoverArt((const uint16_t*)body.c_str());
+      uiActivateSpotify();
     }
   }
   server.send(200, "application/json", "{\"status\":\"ok\"}");

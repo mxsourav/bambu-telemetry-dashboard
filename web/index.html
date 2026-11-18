@@ -94,78 +94,135 @@ body{
 .glare{position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,rgba(255,255,255,0.06) 0%,transparent 60%);pointer-events:none;}
 .screen-meta{width:100%;display:flex;justify-content:space-between;margin-top:8px;font-size:0.65rem;color:var(--txt-muted);font-weight:600;}
 
-/* Virtual D-Pad / Controller */
+/* Virtual D-Pad Deck (Ditto Same) */
 .remote-ctrl{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:12px;width:100%;}
-.dpad-container{
-  display:grid;
-  grid-template-columns:64px 64px 64px;
-  grid-template-rows:64px 64px 64px;
-  gap:6px;
-  align-items:center;
-  justify-content:center;
-  background:rgba(18,18,24,0.55);
-  backdrop-filter:blur(24px);
-  padding:14px;
-  border-radius:32px;
-  border:1px solid rgba(255,255,255,0.08);
-  box-shadow:inset 0 2px 12px rgba(0,0,0,0.6),0 10px 28px rgba(0,0,0,0.45);
-}
-.dpad-btn{
-  background:rgba(255,255,255,0.06);
-  border:1px solid rgba(255,255,255,0.1);
-  border-top:1px solid rgba(255,255,255,0.22);
+.dpad-card{
+  position:relative;
+  width:100%;
+  max-width:440px;
+  background:#0c0c0e;
   border-radius:18px;
-  color:var(--txt);
+  padding:16px 14px 20px 14px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.05);
+  border:1px solid #181920;
+  border-bottom:2px solid #eab308;
+  box-sizing:border-box;
+}
+.dpad-track-v{
+  position:absolute;
+  top:38px;
+  bottom:38px;
+  left:50%;
+  width:6px;
+  transform:translateX(-50%);
+  background:#17181e;
+  border-radius:3px;
+  z-index:1;
+}
+.dpad-track-h{
+  position:absolute;
+  left:18%;
+  right:18%;
+  top:50%;
+  height:6px;
+  transform:translateY(-50%);
+  background:#17181e;
+  border-radius:3px;
+  z-index:1;
+}
+.dpad-grid{
+  position:relative;
+  display:grid;
+  grid-template-columns:1fr 1.15fr 1fr;
+  grid-template-rows:50px 50px 50px;
+  gap:12px 14px;
+  align-items:center;
+  justify-items:center;
+  z-index:2;
+}
+.dpad-key{
+  position:relative;
+  z-index:2;
+  width:100%;
+  height:100%;
+  background:linear-gradient(180deg, #1b1c23 0%, #121318 100%);
+  border:1px solid rgba(255,255,255,0.05);
+  border-top:1px solid rgba(255,255,255,0.12);
+  border-radius:12px;
+  box-shadow:0 5px 12px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.08);
   display:flex;
-  flex-direction:column;
   align-items:center;
   justify-content:center;
   cursor:pointer;
   user-select:none;
-  transition:all 0.1s cubic-bezier(0.16,1,0.3,1);
-  box-shadow:0 4px 12px rgba(0,0,0,0.35);
-  width:100%;
-  height:100%;
+  box-sizing:border-box;
+  transition:transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
 }
-.dpad-btn:active{transform:scale(0.92);background:rgba(255,255,255,0.2);}
-.dpad-up{grid-column:2;grid-row:1;}
-.dpad-left{grid-column:1;grid-row:2;}
-.dpad-center{
-  grid-column:2;grid-row:2;
-  border-radius:50%;
-  background:rgba(6,182,212,0.14);
-  border:2px solid rgba(6,182,212,0.45);
-  box-shadow:0 0 18px rgba(6,182,212,0.3);
-  font-weight:800;
-  font-size:0.9rem;
-  color:#fff;
-  letter-spacing:0.04em;
+.dpad-key:hover{
+  background:linear-gradient(180deg, #22232c 0%, #15161d 100%);
 }
-.dpad-center:active{background:rgba(6,182,212,0.4);transform:scale(0.9);}
-.dpad-right{grid-column:3;grid-row:2;}
-.dpad-down{grid-column:2;grid-row:3;}
-.dpad-btn svg{width:24px;height:24px;fill:currentColor;pointer-events:none;}
+.dpad-key:active{
+  transform:scale(0.95);
+  box-shadow:0 2px 6px rgba(0,0,0,0.8),inset 0 2px 4px rgba(0,0,0,0.6);
+  background:#0f1014;
+}
+.dpad-key-up{grid-column:2;grid-row:1;}
+.dpad-key-left{grid-column:1;grid-row:2;}
+.dpad-key-ok{grid-column:2;grid-row:2;}
+.dpad-key-right{grid-column:3;grid-row:2;}
+.dpad-key-down{grid-column:2;grid-row:3;}
+.dpad-key-back{grid-column:3;grid-row:3;justify-self:start;width:78px;}
 
-.nav-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%;}
-.nav-action-btn{
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.08);
-  border-top:1px solid rgba(255,255,255,0.2);
-  border-radius:14px;
-  padding:12px 4px;
-  color:var(--txt);
-  font-size:0.7rem;
+.nav-chevron{
+  width:18px;
+  height:18px;
+  fill:none;
+  stroke:#00D3F2;
+  stroke-width:2.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  pointer-events:none;
+}
+.nav-label-ok{
+  color:#00D3F2;
+  font-size:1.05rem;
+  font-weight:700;
+  letter-spacing:0.08em;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  pointer-events:none;
+}
+.nav-label-back{
+  color:#FF2056;
+  font-size:0.8rem;
+  font-weight:700;
+  letter-spacing:0.12em;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  pointer-events:none;
+}
+
+/* Extra utility buttons below dpad */
+.nav-sub-actions{display:flex;gap:10px;width:100%;max-width:440px;justify-content:center;}
+.nav-sub-btn{
+  flex:1;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;
+  padding:8px 6px;
+  color:var(--txt-muted);
+  font-size:0.68rem;
   font-weight:700;
   display:flex;
-  flex-direction:column;
   align-items:center;
+  justify-content:center;
   gap:5px;
   cursor:pointer;
-  transition:all 0.12s;
-  box-shadow:0 4px 10px rgba(0,0,0,0.3);
+  transition:all 0.1s;
 }
-.nav-action-btn:active{transform:scale(0.93);background:rgba(255,255,255,0.16);}
-.nav-action-btn svg{width:18px;height:18px;fill:currentColor;}
+.nav-sub-btn:hover{color:#fff;background:rgba(255,255,255,0.08);}
+.nav-sub-btn:active{transform:scale(0.95);}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;margin-right:6px;vertical-align:middle;}
 
 /* Telemetry Grid */
 .tele-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -305,47 +362,51 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
       </div>
     </div>
 
-    <!-- VisionOS D-Pad & Control Deck -->
+    <!-- VisionOS D-Pad & Control Deck (Ditto Same) -->
     <div class="remote-ctrl">
-      <div class="dpad-container">
-        <!-- UP -->
-        <button class="dpad-btn dpad-up" onclick="sendBtn('up')" title="Up (▲)">
-          <svg viewBox="0 0 24 24"><path d="M12 4l-7 7h4v9h6v-9h4z"/></svg>
-        </button>
-        <!-- LEFT -->
-        <button class="dpad-btn dpad-left" onclick="sendBtn('left')" title="Left (◀)">
-          <svg viewBox="0 0 24 24"><path d="M4 12l7-7v4h9v6h-9v4z"/></svg>
-        </button>
-        <!-- OK / SELECT -->
-        <button class="dpad-btn dpad-center" onclick="sendBtn('ok')" title="OK / Select">
-          <span>OK</span>
-        </button>
-        <!-- RIGHT -->
-        <button class="dpad-btn dpad-right" onclick="sendBtn('right')" title="Right (▶)">
-          <svg viewBox="0 0 24 24"><path d="M20 12l-7 7v-4H4v-6h9V5z"/></svg>
-        </button>
-        <!-- DOWN -->
-        <button class="dpad-btn dpad-down" onclick="sendBtn('down')" title="Down (▼)">
-          <svg viewBox="0 0 24 24"><path d="M12 20l7-7h-4V4h-6v9H5z"/></svg>
-        </button>
+      <div class="dpad-card">
+        <div class="dpad-track-v"></div>
+        <div class="dpad-track-h"></div>
+        <div class="dpad-grid">
+          <!-- UP -->
+          <button class="dpad-key dpad-key-up" onclick="sendBtn('up')" title="Up (▲)">
+            <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="6 15 12 9 18 15"/></svg>
+          </button>
+          <!-- LEFT -->
+          <button class="dpad-key dpad-key-left" onclick="sendBtn('left')" title="Left (◀)">
+            <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <!-- OK / SELECT -->
+          <button class="dpad-key dpad-key-ok" onclick="sendBtn('ok')" title="OK / Select">
+            <span class="nav-label-ok">OK</span>
+          </button>
+          <!-- RIGHT -->
+          <button class="dpad-key dpad-key-right" onclick="sendBtn('right')" title="Right (▶)">
+            <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <!-- DOWN -->
+          <button class="dpad-key dpad-key-down" onclick="sendBtn('down')" title="Down (▼)">
+            <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <!-- BACK -->
+          <button class="dpad-key dpad-key-back" onclick="sendBtn('back')" title="Back">
+            <span class="nav-label-back">BACK</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Quick Action Navigation Switches -->
-      <div class="nav-actions">
-        <button class="nav-action-btn" onclick="sendBtn('back')">
-          <svg viewBox="0 0 24 24"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
-          <span>BACK</span>
-        </button>
-        <button class="nav-action-btn" onclick="sendBtn('home')">
-          <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <!-- Quick Action Utilities -->
+      <div class="nav-sub-actions">
+        <button class="nav-sub-btn" onclick="sendBtn('home')">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           <span>HOME</span>
         </button>
-        <button class="nav-action-btn" onclick="sendBtn('menu')">
-          <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        <button class="nav-sub-btn" onclick="sendBtn('menu')">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           <span>MENU</span>
         </button>
-        <button class="nav-action-btn" onclick="testBuzzer()">
-          <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        <button class="nav-sub-btn" onclick="testBuzzer()">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
           <span>BEEP</span>
         </button>
       </div>
@@ -657,13 +718,13 @@ async function testAndSaveDeviceIp(){
   if(!val) return;
   const st = document.getElementById('ipModalStatus');
   const btn = document.getElementById('btnConnectIp');
-  if(btn) { btn.disabled = true; btn.innerText = "⏳ Connecting..."; }
-  if(st) { st.style.color = "var(--cyan)"; st.innerText = "Pinging http://" + val + "/api/status ..."; }
+  if(btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Connecting...'; }
+  if(st) { st.style.color = "var(--cyan)"; st.innerText = "Connecting to http://" + val + " ..."; }
   document.getElementById('cDot').className = 'dot connecting';
 
   const testUrl = (window.location.hostname === val) ? '/api/status' : 'http://' + val + '/api/status';
   const c = new AbortController();
-  const to = setTimeout(() => c.abort(), 3000);
+  const to = setTimeout(() => c.abort(), 5000);
 
   try {
     const res = await fetch(testUrl, { signal: c.signal });
@@ -676,7 +737,7 @@ async function testAndSaveDeviceIp(){
     document.getElementById('cDot').className = 'dot';
     updateIpUrls();
     if(st) { st.style.color = "var(--green)"; st.innerText = "✓ Connected! (RSSI: " + (d.wifi_rssi||"-") + " dBm, Heap: " + Math.round((d.heap_free||0)/1024) + " KB)"; }
-    if(btn) { btn.innerText = "✓ Connected"; }
+    if(btn) { btn.disabled = false; btn.innerText = "✓ Connected"; }
     pollStatus();
     loadFs('/');
     setTimeout(closeIpModal, 600);
@@ -836,16 +897,18 @@ setInterval(fetchScreen, 800); // Snappy, network-friendly live stream
 fetchScreen();
 
 // --- Telemetry Polling ---
+let pollFailCount = 0;
 function pollStatus(){
   if(isUploadBusy) return;
   const c = new AbortController();
-  const to = setTimeout(() => c.abort(), 2500);
+  const to = setTimeout(() => c.abort(), 3500);
   fetch(getApiUrl('/api/status'), { signal: c.signal })
     .then(r => {
       clearTimeout(to);
       return r.json();
     })
     .then(d => {
+      pollFailCount = 0;
       document.getElementById('cDot').className = 'dot';
       let ps = d.print_state || 'IDLE';
       if(ps === 'OFFLINE') ps = 'STANDBY / OFF';
@@ -870,8 +933,11 @@ function pollStatus(){
     })
     .catch(()=>{
       clearTimeout(to);
-      document.getElementById('cDot').className = 'dot offline';
-      document.getElementById('tState').innerText = 'DISCONNECTED';
+      pollFailCount++;
+      if(pollFailCount >= 3) {
+        document.getElementById('cDot').className = 'dot offline';
+        document.getElementById('tState').innerText = 'DISCONNECTED';
+      }
     });
 }
 setInterval(pollStatus, 2000);
@@ -1193,6 +1259,7 @@ async function pushCustomImg(){
     screenAbortController = null;
   }
   isUploadBusy = true;
+  await new Promise(r => setTimeout(r, 120)); // Settle in-flight socket traffic
 
   if(statusEl){
     statusEl.style.color = 'var(--cyan)';
@@ -1603,22 +1670,20 @@ async function pollSpotifyPlayer() {
 
     const artImg = document.getElementById('spotifyAlbumArt');
     if(albumArtUrl && window.s_lastSentCoverUrl !== albumArtUrl) {
-      artImg.src = albumArtUrl;
-      const onLoaded = () => {
+      window.s_lastSentCoverUrl = albumArtUrl;
+      const offImg = new Image();
+      offImg.crossOrigin = "anonymous";
+      offImg.onload = () => {
         if(document.getElementById('spotifySyncLed').checked) {
-          syncLedFromAlbumArt(artImg);
+          syncLedFromAlbumArt(offImg);
         }
-        sendCoverToDesk(artImg);
-        window.s_lastSentCoverUrl = albumArtUrl;
+        sendCoverToDesk(offImg);
         if(document.getElementById('spotifyStreamToScreen').checked) {
-          renderAndPushSpotify(trackName, artistName, artImg, progressMs, durationMs, isPlaying);
+          renderAndPushSpotify(trackName, artistName, offImg, progressMs, durationMs, isPlaying);
         }
       };
-      if(artImg.complete && artImg.naturalWidth > 0) {
-        onLoaded();
-      } else {
-        artImg.onload = onLoaded;
-      }
+      offImg.src = albumArtUrl;
+      artImg.src = albumArtUrl;
     } else if(document.getElementById('spotifyStreamToScreen').checked) {
       renderAndPushSpotify(trackName, artistName, artImg, progressMs, durationMs, isPlaying);
     }
@@ -1628,13 +1693,23 @@ async function pollSpotifyPlayer() {
 function sendCoverToDesk(img) {
   try {
     const c = document.createElement('canvas');
-    c.width = 56;
-    c.height = 56;
+    c.width = 160;
+    c.height = 128;
     const cx = c.getContext('2d');
-    cx.drawImage(img, 0, 0, 56, 56);
-    const idata = cx.getImageData(0, 0, 56, 56).data;
-    const raw = new Uint8Array(56 * 56 * 2);
-    for (let i = 0; i < 56 * 56; i++) {
+
+    // Scale and aspect center-crop to 160x128 full screen
+    const natW = img.naturalWidth || img.width || 160;
+    const natH = img.naturalHeight || img.height || 128;
+    const scale = Math.max(160 / natW, 128 / natH);
+    const sw = 160 / scale;
+    const sh = 128 / scale;
+    const sx = (natW - sw) / 2;
+    const sy = (natH - sh) / 2;
+    cx.drawImage(img, sx, sy, sw, sh, 0, 0, 160, 128);
+
+    const idata = cx.getImageData(0, 0, 160, 128).data;
+    const raw = new Uint8Array(160 * 128 * 2);
+    for (let i = 0; i < 160 * 128; i++) {
       const r5 = (idata[i * 4] >> 3) & 0x1F;
       const g6 = (idata[i * 4 + 1] >> 2) & 0x3F;
       const b5 = (idata[i * 4 + 2] >> 3) & 0x1F;
@@ -1689,69 +1764,100 @@ function syncLedFromAlbumArt(img) {
 }
 
 function renderAndPushSpotify(trackName, artistName, img, progressMs, durationMs, isPlaying) {
-  sCtx.fillStyle = '#0b0d11';
-  sCtx.fillRect(0, 0, 160, 128);
-
-  // Top header: Spotify green accent
-  sCtx.fillStyle = '#1DB954';
-  sCtx.fillRect(0, 0, 160, 2);
-  sCtx.font = 'bold 8px sans-serif';
-  sCtx.fillText('SPOTIFY NOW PLAYING', 6, 11);
-
-  // Status icon / text
-  sCtx.fillStyle = isPlaying ? '#1DB954' : '#888';
-  sCtx.fillText(isPlaying ? 'PLAYING' : 'PAUSED', 115, 11);
-
-  // Album Artwork (50x50)
-  if(img && img.complete && img.naturalWidth > 0) {
+  // 1. Fullscreen Cover Artwork (160x128)
+  if(img && img.complete && (img.naturalWidth > 0 || img.width > 0)) {
     try {
-      sCtx.drawImage(img, 6, 18, 50, 50);
+      const natW = img.naturalWidth || img.width || 160;
+      const natH = img.naturalHeight || img.height || 128;
+      const scale = Math.max(160 / natW, 128 / natH);
+      const sw = 160 / scale;
+      const sh = 128 / scale;
+      const sx = (natW - sw) / 2;
+      const sy = (natH - sh) / 2;
+      sCtx.drawImage(img, sx, sy, sw, sh, 0, 0, 160, 128);
     } catch(e) {
-      sCtx.fillStyle = '#1c2028';
-      sCtx.fillRect(6, 18, 50, 50);
+      sCtx.fillStyle = '#08090c';
+      sCtx.fillRect(0, 0, 160, 128);
     }
   } else {
-    sCtx.fillStyle = '#1c2028';
-    sCtx.fillRect(6, 18, 50, 50);
+    sCtx.fillStyle = '#08090c';
+    sCtx.fillRect(0, 0, 160, 128);
+    sCtx.fillStyle = '#161922';
+    sCtx.beginPath(); sCtx.arc(80, 36, 30, 0, Math.PI * 2); sCtx.fill();
+    sCtx.strokeStyle = '#282d3c'; sCtx.lineWidth = 1;
+    sCtx.beginPath(); sCtx.arc(80, 36, 22, 0, Math.PI * 2); sCtx.stroke();
+    sCtx.fillStyle = '#1DB954';
+    sCtx.beginPath(); sCtx.arc(80, 36, 7, 0, Math.PI * 2); sCtx.fill();
   }
 
-  sCtx.strokeStyle = 'rgba(255,255,255,0.2)';
-  sCtx.strokeRect(6, 18, 50, 50);
+  // 2. High-contrast Glassmorphic Scrim Card across bottom (y=66..124)
+  sCtx.fillStyle = 'rgba(8, 9, 12, 0.92)';
+  if (sCtx.roundRect) {
+    sCtx.beginPath();
+    sCtx.roundRect(4, 66, 152, 58, 7);
+    sCtx.fill();
+    sCtx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    sCtx.lineWidth = 1;
+    sCtx.stroke();
+  } else {
+    sCtx.fillRect(4, 66, 152, 58);
+  }
 
-  // Track Name
-  sCtx.fillStyle = '#ffffff';
-  sCtx.font = 'bold 10px sans-serif';
+  // Top highlight border
+  sCtx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  sCtx.beginPath();
+  sCtx.moveTo(12, 66);
+  sCtx.lineTo(148, 66);
+  sCtx.stroke();
+
+  // Equalizer / Paused icon
+  if (isPlaying) {
+    sCtx.fillStyle = '#1DB954';
+    sCtx.fillRect(138, 74, 2, 7);
+    sCtx.fillRect(142, 71, 2, 10);
+    sCtx.fillRect(146, 75, 2, 6);
+  } else {
+    sCtx.fillStyle = '#666';
+    sCtx.fillRect(141, 72, 2, 8);
+    sCtx.fillRect(145, 72, 2, 8);
+  }
+
+  // 3. Track Title (White, bold)
+  sCtx.fillStyle = '#FFFFFF';
+  sCtx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   const cleanTrack = trackName.length > 15 ? trackName.substring(0, 14) + '...' : trackName;
-  sCtx.fillText(cleanTrack, 62, 32);
+  sCtx.fillText(cleanTrack, 12, 81);
 
-  // Artist Name
-  sCtx.fillStyle = '#8a939e';
-  sCtx.font = '8px sans-serif';
+  // Artist (Cyan)
+  sCtx.fillStyle = '#00F2FE';
+  sCtx.font = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   const cleanArtist = artistName.length > 18 ? artistName.substring(0, 17) + '...' : artistName;
-  sCtx.fillText(cleanArtist, 62, 46);
+  sCtx.fillText(cleanArtist, 12, 94);
 
-  // Progress Bar
+  // 4. Progress Bar
   const pct = Math.min(1.0, Math.max(0.0, progressMs / durationMs));
-  sCtx.fillStyle = '#222832';
-  sCtx.fillRect(6, 78, 148, 4);
+  sCtx.fillStyle = '#222630';
+  sCtx.fillRect(12, 102, 136, 3);
   sCtx.fillStyle = '#1DB954';
-  sCtx.fillRect(6, 78, Math.round(148 * pct), 4);
+  const fillW = Math.round(136 * pct);
+  sCtx.fillRect(12, 102, fillW, 3);
 
-  // Time elapsed & total
+  // Knob head
+  sCtx.fillStyle = '#FFFFFF';
+  sCtx.beginPath();
+  sCtx.arc(12 + fillW, 103.5, 3, 0, Math.PI * 2);
+  sCtx.fill();
+
+  // 5. Timestamps
   const fmt = ms => {
     const s = Math.floor(ms / 1000);
     return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
   };
-  sCtx.fillStyle = '#656d78';
+  sCtx.fillStyle = '#8a939e';
   sCtx.font = '8px monospace';
-  sCtx.fillText(fmt(progressMs), 6, 94);
+  sCtx.fillText(fmt(progressMs), 12, 117);
   const totalStr = fmt(durationMs);
-  sCtx.fillText(totalStr, 160 - 6 - (totalStr.length * 5), 94);
-
-  // Bottom footer hint
-  sCtx.fillStyle = 'rgba(255,255,255,0.25)';
-  sCtx.font = '7px sans-serif';
-  sCtx.fillText('STΔN visionOS · Tap button to exit', 6, 118);
+  sCtx.fillText(totalStr, 148 - (totalStr.length * 5), 117);
 
   // Convert to RGB565 Uint8Array
   const imgData = sCtx.getImageData(0, 0, 160, 128).data;

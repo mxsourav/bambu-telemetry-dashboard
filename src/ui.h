@@ -33,6 +33,9 @@ void uiShowCustomImage(const uint16_t* pixels);
 void uiClearCustomImage();
 bool uiIsCustomImageActive();
 
+// Spotify display activation
+void uiActivateSpotify();
+
 // Theme and Clock Format
 bool uiGetThemeLight();
 void uiSetThemeLight(bool light);

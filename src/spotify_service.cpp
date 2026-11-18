@@ -20,19 +20,36 @@ static const char* SPOTIFY_CLIENT_SECRET = "";
 static uint16_t* s_cover_art = nullptr;
 static bool s_has_cover_art = false;
 
-void spotifySetCoverArt(const uint16_t* pixels56x56) {
-  if (!s_cover_art) s_cover_art = (uint16_t*)malloc(56 * 56 * 2);
-  if (s_cover_art && pixels56x56) {
-    memcpy(s_cover_art, pixels56x56, 56 * 56 * 2);
+void spotifySetCoverArt(const uint16_t* pixels160x128) {
+  if (!s_cover_art) {
+    s_cover_art = (uint16_t*)malloc(160 * 128 * 2);
+  }
+  if (s_cover_art && pixels160x128) {
+    memcpy(s_cover_art, pixels160x128, 160 * 128 * 2);
     s_has_cover_art = true;
   }
 }
 
 bool spotifyHasCoverArt() { return s_has_cover_art && (s_cover_art != nullptr); }
 const uint16_t* spotifyGetCoverArt() { return s_cover_art; }
+
+uint8_t* spotifyGetCoverArtBuffer() {
+  if (!s_cover_art) {
+    s_cover_art = (uint16_t*)malloc(160 * 128 * 2);
+  }
+  return (uint8_t*)s_cover_art;
+}
+
+void spotifySetCoverArtValid(bool valid) {
+  s_has_cover_art = valid && (s_cover_art != nullptr);
+}
+
 void spotifyClearCoverArt() {
   s_has_cover_art = false;
-  if (s_cover_art) { free(s_cover_art); s_cover_art = nullptr; }
+  if (s_cover_art) {
+    free(s_cover_art);
+    s_cover_art = nullptr;
+  }
 }
 
 void spotifyServiceInit() {

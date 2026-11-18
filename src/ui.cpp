@@ -178,6 +178,12 @@ void uiClearCustomImage() {
   if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
 }
 
+void uiActivateSpotify() {
+  custom_image_active = false;
+  custom_image_rendered = false;
+  view = VIEW_SPOTIFY;
+}
+
 // menu state
 static int8_t menu_focus = 0;       // row in current list
 static int8_t timer_sel = 0;        // index into TIMER_OPTS
@@ -679,98 +685,97 @@ static void drawTimerFrame(uint32_t ms) {
 }
 
 static void drawSpotifyFrame(uint32_t ms) {
-  sprite.fillSprite(COL_BLACK);
-
-  // 1. Cover Artwork (56x56 at x=8, y=14)
-  int ax = 8, ay = 14, aw = 56, ah = 56;
+  // 1. Cover Artwork (Full 160x128 screen)
   if (spotifyHasCoverArt()) {
-    sprite.pushImage(ax, ay, aw, ah, spotifyGetCoverArt());
-    sprite.drawRoundRect(ax - 1, ay - 1, aw + 2, ah + 2, 4, COL_SPOTIFY_GREEN); // Spotify Green border
+    sprite.pushImage(0, 0, W, H, spotifyGetCoverArt());
   } else {
-    sprite.fillRoundRect(ax, ay, aw, ah, 8, COL_CARD);
-    sprite.drawRoundRect(ax, ay, aw, ah, 8, COL_SPOTIFY_GREEN); // Spotify Green outline
-
-    // Stylized Vinyl record / avatar in the box
-    int cx = ax + aw / 2, cy = ay + ah / 2;
-    sprite.fillCircle(cx, cy, 22, 0x1082);
-    sprite.drawCircle(cx, cy, 16, 0x2129);
+    sprite.fillSprite(COL_BLACK);
+    // Stylized vinyl record in upper center
+    int cx = 80, cy = 34;
+    sprite.fillCircle(cx, cy, 30, 0x1082);
+    sprite.drawCircle(cx, cy, 24, 0x2129);
+    sprite.drawCircle(cx, cy, 16, 0x2965);
     sprite.drawCircle(cx, cy, 10, 0x318A);
-    // Center label
     sprite.fillCircle(cx, cy, 6, COL_SPOTIFY_GREEN);
     sprite.fillCircle(cx, cy, 2, COL_BLACK);
   }
 
-  // 2. Track Title & Artist
+  // 2. High-contrast Glassmorphic Scrim Card across bottom (y=66..124)
+  const int cardX = 4;
+  const int cardY = 66;
+  const int cardW = 152;
+  const int cardH = 58;
+
+  // Solid dark obsidian backing for 100% legibility over any bright/colorful artwork
+  sprite.fillRoundRect(cardX, cardY, cardW, cardH, 7, 0x0841);
+  sprite.drawRoundRect(cardX, cardY, cardW, cardH, 7, 0x2145);
+
+  // Subtle top highlight border for glass effect
+  sprite.drawFastHLine(cardX + 8, cardY, cardW - 16, 0x39E7);
+
+  // Animated Equalizer bars (or Paused indicator) in card top-right
+  if (g_spotify.is_playing) {
+    for (int b = 0; b < 3; b++) {
+      int h = 3 + (int)(abs(sin((ms / 130.0) + b * 1.3)) * 8);
+      sprite.fillRect(cardX + cardW - 20 + b * 5, cardY + 18 - h, 3, h, COL_SPOTIFY_GREEN);
+    }
+  } else {
+    sprite.fillRect(cardX + cardW - 16, cardY + 9, 2, 7, COL_MUTED);
+    sprite.fillRect(cardX + cardW - 12, cardY + 9, 2, 7, COL_MUTED);
+  }
+
+  // 3. Track Title & Artist
   sprite.setTextDatum(textdatum_t::top_left);
   sprite.setFont(&fonts::Font2);
-  sprite.setTextColor(COL_TXT, COL_BLACK);
-  char titleBuf[20];
-  strncpy(titleBuf, g_spotify.title, sizeof(titleBuf) - 1);
+  sprite.setTextColor(COL_TXT, 0x0841);
+  char titleBuf[24];
+  const char* rawTitle = g_spotify.title[0] ? g_spotify.title : "No Track";
+  strncpy(titleBuf, rawTitle, sizeof(titleBuf) - 1);
   titleBuf[sizeof(titleBuf) - 1] = 0;
-  if (strlen(g_spotify.title) > 13) {
+  if (strlen(titleBuf) > 13) {
     titleBuf[11] = '.'; titleBuf[12] = '.'; titleBuf[13] = 0;
   }
-  sprite.drawString(titleBuf, 72, 16);
+  sprite.drawString(titleBuf, cardX + 8, cardY + 6);
 
   // Artist
-  char artistBuf[24];
-  strncpy(artistBuf, g_spotify.artist, sizeof(artistBuf) - 1);
+  char artistBuf[28];
+  const char* rawArtist = g_spotify.artist[0] ? g_spotify.artist : "Spotify";
+  strncpy(artistBuf, rawArtist, sizeof(artistBuf) - 1);
   artistBuf[sizeof(artistBuf) - 1] = 0;
-  if (strlen(g_spotify.artist) > 16) {
-    artistBuf[14] = '.'; artistBuf[15] = '.'; artistBuf[16] = 0;
+  if (strlen(artistBuf) > 17) {
+    artistBuf[15] = '.'; artistBuf[16] = '.'; artistBuf[17] = 0;
   }
   sprite.setFont(&fonts::Font0);
-  sprite.setTextColor(COL_CYAN, COL_BLACK);
-  sprite.drawString(artistBuf, 72, 36);
+  sprite.setTextColor(COL_CYAN, 0x0841);
+  sprite.drawString(artistBuf, cardX + 8, cardY + 23);
 
-  // Animated Equalizer bars (bouncing rhythmically)
-  if (g_spotify.is_playing) {
-    for (int b = 0; b < 4; b++) {
-      int h = 4 + (int)(abs(sin((ms / 150.0) + b * 1.2)) * 12);
-      sprite.fillRect(72 + b * 5, 68 - h, 3, h, COL_SPOTIFY_GREEN);
-    }
-    sprite.setFont(&fonts::Font0);
-    sprite.setTextColor(COL_SPOTIFY_GREEN, COL_BLACK);
-    sprite.drawString("PLAYING", 96, 58);
-  } else {
-    sprite.setFont(&fonts::Font0);
-    sprite.setTextColor(COL_MUTED, COL_BLACK);
-    sprite.drawString("PAUSED", 72, 58);
-  }
-
-  // 3. Music Timeline Bar in Bottom with Live Progress ("Nothing else on screen")
+  // 4. Sleek Progress Bar with Track Glow
   uint32_t prog = g_spotify.progress_ms;
   uint32_t dur = g_spotify.duration_ms > 0 ? g_spotify.duration_ms : 1;
   float pct = (float)prog / (float)dur;
   if (pct > 1.0f) pct = 1.0f;
   if (pct < 0.0f) pct = 0.0f;
 
-  int bx = 10, by = 86, bw = 140, bh = 4;
-  sprite.fillRoundRect(bx, by, bw, bh, 2, COL_CARD);
+  int bx = cardX + 8, by = cardY + 36, bw = cardW - 16, bh = 3;
+  sprite.fillRoundRect(bx, by, bw, bh, 1, 0x2129); // track background
   int fillW = (int)(bw * pct);
   if (fillW > 0) {
-    sprite.fillRoundRect(bx, by, fillW, bh, 2, COL_SPOTIFY_GREEN);
+    sprite.fillRoundRect(bx, by, fillW, bh, 1, COL_SPOTIFY_GREEN);
   }
-  sprite.fillCircle(bx + fillW, by + bh / 2, 4, COL_TXT);
+  sprite.fillCircle(bx + fillW, by + bh / 2, 3, COL_TXT); // glowing white knob
 
-  // Time text: Elapsed / Total
+  // 5. Time text: Elapsed / Total
   char curTime[12], totalTime[12];
   snprintf(curTime, sizeof(curTime), "%d:%02d", (prog / 1000) / 60, (prog / 1000) % 60);
   snprintf(totalTime, sizeof(totalTime), "%d:%02d", (dur / 1000) / 60, (dur / 1000) % 60);
 
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::top_left);
-  sprite.setTextColor(COL_TXT, COL_BLACK);
-  sprite.drawString(curTime, 10, 96);
+  sprite.setTextColor(0xAD55, 0x0841);
+  sprite.drawString(curTime, bx, cardY + 44);
 
   sprite.setTextDatum(textdatum_t::top_right);
-  sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString(totalTime, 150, 96);
-
-  // Subtle bottom hint
-  sprite.setTextDatum(textdatum_t::middle_center);
-  sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("SEL: Lyrics    M: Exit", W / 2, 118);
+  sprite.drawString(totalTime, bx + bw, cardY + 44);
 }
 
 static void drawSpotifyLyricsFrame(uint32_t ms) {
