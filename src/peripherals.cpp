@@ -2,6 +2,7 @@
 #include "config.h"
 #include "telemetry.h"
 #include "ui.h"
+#include "settings_manager.h"
 
 #include <Arduino.h>
 
@@ -125,6 +126,10 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
 static uint32_t siren_start_ms = 0;
 static uint32_t siren_test_until_ms = 0;
 static bool     siren_active = false;
+// Bark engine state (siren policy, see peripheralsTask):
+static bool     finish_bark = false;       // loop fanfare while FINISH latched
+static uint32_t finish_bark_last_ms = 0;
+static uint32_t siren_burst_until = 0;     // auto-mute deadline (mode 0); 0=unlimited
 
 void triggerSirenTest(uint32_t duration_ms) {
   siren_active = true;
@@ -415,27 +420,62 @@ static void peripheralsTask(void* /*param*/) {
                     digitalRead(PIN_BTN_MENU), digitalRead(PIN_BTN_SELECT));
     }
 
-    // --- state transitions: beeps (skipped when sound disabled) ---
+    // --- state transitions: beeps / barks (skipped when muted) ---
+    // Siren policy (g_settings.siren_mode):
+    //   0 = AUTO-MUTE: one notification burst (~2 s) then silent
+    //   1 = UNTIL-OK : FINISH loops the fanfare and FAILED/HMS loops the
+    //                  siren until the user ACKs on the overlay (OK button)
     if (options_sound_on() && d.state != prev_state) {
-      if (d.state == PST_FINISH)    startBeepPattern(2);  // double beep
+      if (d.state == PST_FINISH) {
+        if (g_settings.siren_mode == 1) {
+          finish_bark = true;             // loop fanfare until latch cleared
+          finish_bark_last_ms = 0;
+        } else {
+          startBeepPattern(2);            // single fanfare (legacy)
+        }
+      }
       else if (d.state == PST_RUNNING && prev_state != PST_RUNNING)
-        startBeepPattern(1);                              // single ack
-      else if (d.state == PST_FAILED) siren_active = true;
+        startBeepPattern(1);              // single ack
+      else if (d.state == PST_FAILED) {
+        siren_burst_until = (g_settings.siren_mode == 1) ? 0 : ms + 2200;
+        siren_active = true;
+        siren_start_ms = ms;
+      }
       prev_state = d.state;
     }
 
-    // --- error siren (hms > 0, PST_FAILED, or manual test) ---
+    // --- FINISH fanfare loop: barks until OK clears the latch ---
+    if (finish_bark) {
+      if (ui_latched_result != 1 || g_settings.siren_mode != 1) {
+        finish_bark = false;              // user ACKed (or mode switched)
+      } else if (finish_bark_last_ms == 0 ||
+                 ms - finish_bark_last_ms >= 1200) {
+        finish_bark_last_ms = ms;
+        startBeepPattern(2);              // repeat fanfare every 1.2 s
+      }
+    }
+
+    // --- error siren (hms > 0 / FAILED / latched FAILED, or manual test) ---
+    bool err_cond = (d.hms_count > 0) || (d.state == PST_FAILED) ||
+                    (g_settings.siren_mode == 1 && ui_latched_result == 2);
     bool test_running = (siren_test_until_ms > ms);
-    if (d.hms_count > 0 || d.state == PST_FAILED || test_running) {
+    // auto-mute: burst deadline passed -> stay silent until cond re-occurs
+    bool auto_muted = (siren_burst_until != 0) &&
+                      ((int32_t)(ms - siren_burst_until) >= 0);
+    if ((err_cond || test_running) && !(auto_muted && !test_running)) {
       if (!siren_active) {
         siren_active = true;
         siren_start_ms = ms;
+        if (err_cond) {                   // fresh error: restart burst window
+          siren_burst_until = (g_settings.siren_mode == 1) ? 0 : ms + 2200;
+        }
       }
     } else {
       if (siren_active) {
         siren_active = false;
         toneStop();
       }
+      if (!err_cond) siren_burst_until = 0;   // condition cleared -> rearm
     }
 
     if (siren_active) {

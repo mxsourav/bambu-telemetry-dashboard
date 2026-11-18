@@ -10,6 +10,10 @@ struct SystemSettings {
   uint8_t  led_r        = 255;
   uint8_t  led_g        = 255;
   uint8_t  led_b        = 255;
+  // Alert bark policy (FINISH / FAILED / HMS):
+  // 0 = auto-mute after the first notification burst
+  // 1 = bark continuously until the user ACKs on the overlay (OK button)
+  uint8_t  siren_mode   = 0;
   char     spotify_refresh_token[160] = {0};
 };
 

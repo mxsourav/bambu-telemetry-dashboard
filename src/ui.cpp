@@ -209,11 +209,12 @@ static bool     timer_fired = false;
 
 // ---------------- Button dispatch helpers -----------------------------
 // list row counts
-#define MENU_ROWS      10
+#define MENU_ROWS      11
 #define LEDLIST_ROWS   9
 
 static const char* MENU_LABELS[MENU_ROWS] = {
-  "Spotify", "LED Control", "Sound", "Brightness", "Clock", "Theme", "Clock Fmt", "About", "Timer", "Back" };
+  "Spotify", "LED Control", "Sound", "Siren", "Brightness", "Clock",
+  "Theme", "Clock Fmt", "About", "Timer", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
   "Auto-Sync", "OFF", "RAINBOW", "RED", "GREEN", "BLUE", "WHITE",
@@ -321,11 +322,13 @@ static const char* menuValue(int i) {
       uint8_t m = getBuzzerMode();
       return (m == 0) ? "Passive" : (m == 1) ? "Active" : "Off";
     }
-    case 3: {
+    case 3:  // siren policy
+      return g_settings.siren_mode ? "Till OK" : "Auto";
+    case 4: {
       snprintf(buf, sizeof(buf), "%d%%", uiGetBacklight());
       return buf;
     }
-    case 4: {  // clock preview
+    case 5: {  // clock preview
       struct tm t;
       if (getLocalTime(&t, 0)) {
         if (uiGetClock12h()) {
@@ -339,10 +342,10 @@ static const char* menuValue(int i) {
       }
       return "--:--";
     }
-    case 5: return uiGetThemeLight() ? "Light" : "Dark";
-    case 6: return uiGetClock12h() ? "12H" : "24H";
-    case 7: return ">";
-    case 8: {  // timer status
+    case 6: return uiGetThemeLight() ? "Light" : "Dark";
+    case 7: return uiGetClock12h() ? "12H" : "24H";
+    case 8: return ">";
+    case 9: {  // timer status
       if (!timerRunning()) return "Off";
       int left = (timer_end_ms - millis()) / 1000;
       snprintf(buf, sizeof(buf), "%dm%02ds", left / 60, left % 60);
@@ -354,10 +357,11 @@ static const char* menuValue(int i) {
 
 static bool menuActive(int i) {
   switch (i) {
-    case 1: return options_sound_on();
-    case 4: return uiGetThemeLight();
-    case 5: return uiGetClock12h();
-    case 7: return timerRunning();
+    case 2: return options_sound_on();
+    case 3: return g_settings.siren_mode != 0;   // highlighted = till-OK
+    case 6: return uiGetThemeLight();
+    case 7: return uiGetClock12h();
+    case 9: return timerRunning();
     default: return false;
   }
 }
@@ -916,7 +920,12 @@ static void dispatchButtons(uint8_t ev) {
           case 0: view = VIEW_SPOTIFY; break;
           case 1: view = VIEW_LEDLIST; menu_focus = 0; break;
           case 2: applySoundToggle(); break;
-          case 3: {  // brightness cycle
+          case 3: {  // siren policy: Auto-Mute <-> Until OK
+            g_settings.siren_mode = g_settings.siren_mode ? 0 : 1;
+            settingsSave();
+            break;
+          }
+          case 4: {  // brightness cycle
             uint8_t b = uiGetBacklight();
             b = (b >= 100) ? 40 : b + 30;
             uiSetBacklight(b);
@@ -924,18 +933,18 @@ static void dispatchButtons(uint8_t ev) {
             settingsSave();
             break;
           }
-          case 4: view = VIEW_CLOCK; break;
-          case 5: { // Theme Dark/Light
+          case 5: view = VIEW_CLOCK; break;
+          case 6: { // Theme Dark/Light
             uiSetThemeLight(!uiGetThemeLight());
             break;
           }
-          case 6: { // Clock Fmt 12H/24H
+          case 7: { // Clock Fmt 12H/24H
             uiSetClock12h(!uiGetClock12h());
             break;
           }
-          case 7: view = VIEW_ABOUT; break;
-          case 8: view = VIEW_TIMER; timer_sel = 0; break;
-          case 9: view = VIEW_HOME; menu_focus = 0; break;
+          case 8: view = VIEW_ABOUT; break;
+          case 9: view = VIEW_TIMER; timer_sel = 0; break;
+          case 10: view = VIEW_HOME; menu_focus = 0; break;
         }
       }
       break;

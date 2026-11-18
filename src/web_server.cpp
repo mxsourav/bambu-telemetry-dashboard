@@ -581,6 +581,7 @@ static void handleSettingsGet() {
   doc["brightness"]   = g_settings.brightness;
   doc["led_override"] = g_settings.led_override;
   doc["led_inverted"] = ledGetInverted();
+  doc["siren_mode"]   = g_settings.siren_mode;   // 0=auto-mute 1=bark till OK
   String out;
   serializeJson(doc, out);
   sendCorsHeaders();
@@ -609,6 +610,10 @@ static void handleSettingsSet() {
     }
     if (!doc["led_inverted"].isNull()) {
       ledSetInverted(doc["led_inverted"]);
+    }
+    if (!doc["siren_mode"].isNull()) {
+      g_settings.siren_mode = doc["siren_mode"] | 0;
+      if (g_settings.siren_mode > 1) g_settings.siren_mode = 1;
     }
     settingsSave();
   }

@@ -34,6 +34,7 @@ void settingsLoad() {
         g_settings.led_r        = doc["led_r"] | 255;
         g_settings.led_g        = doc["led_g"] | 255;
         g_settings.led_b        = doc["led_b"] | 255;
+        g_settings.siren_mode   = doc["siren_mode"] | 0;
         const char* srt = doc["spotify_refresh_token"] | "";
         if (srt && srt[0]) strncpy(g_settings.spotify_refresh_token, srt, sizeof(g_settings.spotify_refresh_token) - 1);
         loaded_from_sd = true;
@@ -54,6 +55,7 @@ void settingsLoad() {
     g_settings.led_r        = prefs.getUChar("led_r", 255);
     g_settings.led_g        = prefs.getUChar("led_g", 255);
     g_settings.led_b        = prefs.getUChar("led_b", 255);
+    g_settings.siren_mode   = prefs.getUChar("siren_mode", 0);
     String srtNvs = prefs.getString("sp_rtoken", "");
     if (srtNvs.length() > 0) strncpy(g_settings.spotify_refresh_token, srtNvs.c_str(), sizeof(g_settings.spotify_refresh_token) - 1);
     Serial.println(F("[SETTINGS] Loaded configuration from NVS Preferences"));
@@ -99,6 +101,7 @@ void settingsSave() {
               (g_settings.led_r        != s_saved_settings.led_r) ||
               (g_settings.led_g        != s_saved_settings.led_g) ||
               (g_settings.led_b        != s_saved_settings.led_b) ||
+              (g_settings.siren_mode   != s_saved_settings.siren_mode) ||
               (strncmp(g_settings.spotify_refresh_token, s_saved_settings.spotify_refresh_token, sizeof(g_settings.spotify_refresh_token)) != 0);
   }
 
@@ -117,6 +120,7 @@ void settingsSave() {
   prefs.putUChar("led_r", g_settings.led_r);
   prefs.putUChar("led_g", g_settings.led_g);
   prefs.putUChar("led_b", g_settings.led_b);
+  prefs.putUChar("siren_mode", g_settings.siren_mode);
   prefs.putString("sp_rtoken", g_settings.spotify_refresh_token);
 
   // 2. Save to SD card if present
@@ -132,6 +136,7 @@ void settingsSave() {
       doc["led_r"]        = g_settings.led_r;
       doc["led_g"]        = g_settings.led_g;
       doc["led_b"]        = g_settings.led_b;
+      doc["siren_mode"]   = g_settings.siren_mode;
       if (g_settings.spotify_refresh_token[0]) {
         doc["spotify_refresh_token"] = g_settings.spotify_refresh_token;
       }
