@@ -378,9 +378,9 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
     sprite.fillRect(7 + i * 3, 9 + 4 - bh, 2, bh, c);
   }
   uint16_t st_col = (conn == CONN_ONLINE) ? COL_ONLINE
-                    : (wifi_ok ? COL_CONNECT : COL_OFFLINE);
+                    : (wifi_ok ? COL_CYAN : COL_OFFLINE);
   const char* st = (conn == CONN_ONLINE) ? printStateName(d.state)
-                   : (wifi_ok ? "OFFLINE" : "NO WIFI");
+                   : (wifi_ok ? "STANDBY" : "NO WIFI");
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(st_col, COL_BLACK);
@@ -471,7 +471,8 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_TXT, COL_BLACK);
   const char* job = (d.state == PST_RUNNING || d.state == PST_PREPARE)
-                      ? "Printing..." : "Idle";
+                      ? "Printing..."
+                      : ((conn == CONN_ONLINE) ? "Printer Idle" : "Printer Off");
   sprite.drawString(job, 8, 120);
 
   // timer countdown (left-center of footer when armed) or IP address

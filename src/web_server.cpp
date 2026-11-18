@@ -475,10 +475,15 @@ static void handleDisplayImageLoop() {
       display_upload_bytes += copyLen;
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (display_upload_bytes == targetBytes) {
+    if (display_upload_bytes >= targetBytes) {
       display_upload_success = true;
       uiActivateCustomImage();
       Serial.printf("[DISP] Image upload done: %u bytes\n", (unsigned)display_upload_bytes);
+    } else if (display_upload_bytes >= (targetBytes - 512)) {
+      memset(((uint8_t*)img) + display_upload_bytes, 0, targetBytes - display_upload_bytes);
+      display_upload_success = true;
+      uiActivateCustomImage();
+      Serial.printf("[DISP] Image upload padded: %u / %u bytes\n", (unsigned)display_upload_bytes, (unsigned)targetBytes);
     } else {
       Serial.printf("[DISP] Image upload incomplete: %u / %u bytes\n", (unsigned)display_upload_bytes, (unsigned)targetBytes);
     }
@@ -487,6 +492,7 @@ static void handleDisplayImageLoop() {
 
 static void handleDisplayImageDone() {
   sendCorsHeaders();
+  server.sendHeader("Connection", "close");
   if (!display_upload_success && server.hasArg("plain")) {
     uint16_t* img = uiGetCustomImageBuffer();
     if (img) {
