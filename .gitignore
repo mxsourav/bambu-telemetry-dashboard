@@ -9,3 +9,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .zcode/
+
+# Temporary dumps & scratch scripts
+*.png
+*.bmp
+*.jpg
+scratch*
+graphify-out/
+tools/current_thumb.jpg

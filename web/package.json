@@ -1,0 +1,5 @@
+{
+  "name": "stan-studio-bambu-controller",
+  "version": "1.0.0",
+  "description": "STΔN studio. visionOS Controller for ESP32 3D Printer Monitor"
+}

@@ -19,9 +19,9 @@
 #define TFT_RGB_INVERT 0      // RGB order (verified)
 
 // ---------------- Inputs / outputs ----------------------------------
-#define PIN_BTN_MENU   32     // INPUT_PULLUP, active LOW
-#define PIN_BTN_SELECT 33     // INPUT_PULLUP, active LOW
-#define PIN_BUZZER     19     // LEDC PWM tone output (moved off 25 for SD)
+#define PIN_BTN_MENU       4      // INPUT_PULLUP, active LOW
+#define PIN_BTN_SELECT     16     // INPUT_PULLUP, active LOW
+#define PIN_BUZZER         19     // Buzzer output (LEDC PWM tone or Active DC)
 
 // ---------------- SD card (separate SPI - HSPI, matrix-routed) -------
 //   CS=15, SCK=25, MOSI=13, MISO=26
@@ -55,9 +55,10 @@
 
 // ---------------- Buzzer ---------------------------------------------
 #define BUZZER_LEDC_CH  1     // channel 0 = backlight, 1 = buzzer
-#define BUZZER_FREQ_OK  2000  // completion beep
-#define BUZZER_FREQ_LO  1000  // siren low tone
-#define BUZZER_FREQ_HI  2500  // siren high tone
+#define BUZZER_FREQ_OK    2000  // completion beep
+#define BUZZER_FREQ_LO    1000  // siren low tone
+#define BUZZER_FREQ_HI    2500  // siren high tone
+#define BUZZER_FREQ_CLICK 1600  // gentle low-volume button click
 
 // ---------------- SD card (optional; stub init in main.cpp) ----------
 // Mounted at boot if a card is present; logs result. Not yet used for
@@ -72,10 +73,10 @@
 #define TELEMETRY_MUTEX_TIMEOUT_MS 100
 
 // ---------------- UI --------------------------------------------------
-#define UI_TARGET_FPS   100   // frame pacing on Core 1 (100fps capable)
+#define UI_TARGET_FPS   30    // 30 fps pacing on Core 1 - fluid animations, zero CPU starvation
 // Button engine timing (ms)
 #define BTN_DEBOUNCE_MS   20  // stable-sample window
-#define BTN_LONG_MS       600 // hold duration => LONG event (once)
+#define BTN_LONG_MS       500 // hold duration => LONG event (once)
 #define BTN_DOUBLE_MS     350 // release-to-release gap => DOUBLE (menu only)
 
 // ---------------- FreeRTOS task stack sizes (bytes) ------------------

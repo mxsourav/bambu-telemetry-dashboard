@@ -20,8 +20,11 @@
  * ===================================================================== */
 #include "ui.h"
 #include "config.h"
+#include <WiFi.h>
 #include "telemetry.h"
 #include "peripherals.h"
+#include "settings_manager.h"
+#include "spotify_service.h"
 #include "boot_splash.h"
 #include "status_logo.h"
 
@@ -58,14 +61,16 @@ public:
     pc.pin_busy = -1;
     pc.panel_width  = 128;
     pc.panel_height = 160;
-    pc.offset_x = 0;
-    pc.offset_y = 0;
+    pc.memory_width = 132;
+    pc.memory_height = 162;
+    pc.offset_x = 4;  // In rotation 1: rowstart = 132 - (128 + 4) = 0 (eliminates top glitch)
+    pc.offset_y = 0;  // In rotation 1: colstart = 0 (perfect DMA 16-bit word alignment)
     pc.offset_rotation = 0;
     pc.dummy_read_pixel = 8;
     pc.dummy_read_bits  = 1;
     pc.readable  = false;
     pc.invert    = false;
-    pc.rgb_order = TFT_RGB_INVERT ? 0 : 1;
+    pc.rgb_order = 1;  // 1 = MAD_RGB (Physical panel native RGB order)
     pc.dlen_16bit = false;
     pc.bus_shared = false;
     _panel.config(pc);
@@ -74,34 +79,45 @@ public:
 };
 
 static LGFX tft;
-static LGFX_Sprite buf0(&tft);
-static LGFX_Sprite buf1(&tft);
-static LGFX_Sprite* back = &buf0;
-#define sprite (*back)
+static LGFX_Sprite sprite(&tft);
 #define W 160
 #define H 128
 #define BOOT_MS 5000
 
-// ---------------- Palette (Apple dark mode) ---------------------------
-#define COL_BLACK     0x0000
-#define COL_CARD      0x18E3
-#define COL_SEP       0x1082
-#define COL_TXT       0xFFFF
-#define COL_TXT_BLACK 0x0000
-#define COL_MUTED     0x6B4D
-#define COL_ONLINE    0x07E0
-#define COL_OFFLINE   0xF800
-#define COL_CONNECT   0xFFE0
-#define COL_CYAN      0x04FF
-#define COL_AMBER     0xFD20
-#define COL_SALMON    0xFB68
-#define COL_LBLUE     0x7DDF
-#define COL_YELLOW    0xFF00   // paused overlay
+// ---------------- Palette (Adaptive Dark / Light mode) ----------------
+bool uiGetThemeLight() { return g_settings.theme_light; }
+void uiSetThemeLight(bool light) {
+  g_settings.theme_light = light;
+  settingsSave();
+}
+
+bool uiGetClock12h() { return g_settings.clock_12h; }
+void uiSetClock12h(bool is12h) {
+  g_settings.clock_12h = is12h;
+  settingsSave();
+}
+
+#define COL_BLACK     (uint16_t)(uiGetThemeLight() ? 0xFFFF : 0x0000)
+#define COL_CARD      (uint16_t)(uiGetThemeLight() ? 0xEF7D : 0x18E3)
+#define COL_SEP       (uint16_t)(uiGetThemeLight() ? 0xCE59 : 0x1082)
+#define COL_TXT       (uint16_t)(uiGetThemeLight() ? 0x0000 : 0xFFFF)
+#define COL_TXT_BLACK (uint16_t)(uiGetThemeLight() ? 0xFFFF : 0x0000)
+#define COL_MUTED     (uint16_t)(uiGetThemeLight() ? 0x738E : 0x6B4D)
+#define COL_ONLINE    (uint16_t)0x07E0
+#define COL_OFFLINE   (uint16_t)0xF800
+#define COL_CONNECT   (uint16_t)0xFFE0
+#define COL_CYAN      (uint16_t)(uiGetThemeLight() ? 0x03B7 : 0x04FF)
+#define COL_AMBER     (uint16_t)(uiGetThemeLight() ? 0xD380 : 0xFD20)
+#define COL_SALMON    (uint16_t)(uiGetThemeLight() ? 0xD1E2 : 0xFB68)
+#define COL_LBLUE     (uint16_t)(uiGetThemeLight() ? 0x3377 : 0x7DDF)
+#define COL_YELLOW    (uint16_t)0xFF00   // paused overlay
+#define COL_RED       (uint16_t)0xF800
+#define COL_SPOTIFY_GREEN (uint16_t)0x1DCA
 
 // ---------------- Connection state ------------------------------------
 enum ConnState : uint8_t { CONN_OFFLINE = 0, CONN_CONNECTING, CONN_ONLINE };
 static ConnState connStateOf(const TelemetryData& d) {
-  if (d.state == PST_DISCONNECTED) {
+  if (d.state == PST_DISCONNECTED || (d.last_update_ms > 0 && millis() - d.last_update_ms > 15000)) {
     extern bool network_ever_connected;
     return network_ever_connected ? CONN_CONNECTING : CONN_OFFLINE;
   }
@@ -110,9 +126,62 @@ static ConnState connStateOf(const TelemetryData& d) {
 
 // ---------------- View state ------------------------------------------
 enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
-                        VIEW_CLOCK, VIEW_TIMER, VIEW_OVERLAY };
+                        VIEW_CLOCK, VIEW_TIMER, VIEW_OVERLAY, VIEW_CUSTOM_IMAGE, VIEW_ABOUT,
+                        VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS };
 static UiView view = VIEW_BOOT;
 static uint32_t boot_start_ms = 0;
+static uint16_t* custom_image_buf = nullptr;
+static bool custom_image_active = false;
+
+// Live Notification Overlay state
+static char notif_title[24] = {0};
+static char notif_msg[48] = {0};
+static uint32_t notif_until_ms = 0;
+
+void uiShowNotification(const char* title, const char* msg, uint32_t duration_ms) {
+  if (title) strncpy(notif_title, title, sizeof(notif_title) - 1);
+  else notif_title[0] = 0;
+  if (msg) strncpy(notif_msg, msg, sizeof(notif_msg) - 1);
+  else notif_msg[0] = 0;
+  notif_until_ms = millis() + (duration_ms > 0 ? duration_ms : 4000);
+  startBeepPattern(1); // pleasant notification chime
+}
+
+const uint16_t* uiGetFramebuffer() {
+  return (const uint16_t*)sprite.getBuffer();
+}
+void uiGetFrameSize(int& w, int& h) { w = W; h = H; }
+
+bool uiIsCustomImageActive() { return custom_image_active; }
+
+uint16_t* uiGetCustomImageBuffer() {
+  if (!custom_image_buf) {
+    custom_image_buf = (uint16_t*)malloc(W * H * 2);
+  }
+  return custom_image_buf;
+}
+
+void uiActivateCustomImage() {
+  custom_image_active = true;
+  view = VIEW_CUSTOM_IMAGE;
+}
+
+void uiShowCustomImage(const uint16_t* pixels) {
+  uint16_t* buf = uiGetCustomImageBuffer();
+  if (buf && pixels) {
+    memcpy(buf, pixels, W * H * 2);
+    uiActivateCustomImage();
+  }
+}
+
+void uiClearCustomImage() {
+  custom_image_active = false;
+  if (custom_image_buf) {
+    free(custom_image_buf);
+    custom_image_buf = nullptr;
+  }
+  if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
+}
 
 // menu state
 static int8_t menu_focus = 0;       // row in current list
@@ -125,11 +194,11 @@ static bool     timer_fired = false;
 
 // ---------------- Button dispatch helpers -----------------------------
 // list row counts
-#define MENU_ROWS      7
+#define MENU_ROWS      10
 #define LEDLIST_ROWS   9
 
 static const char* MENU_LABELS[MENU_ROWS] = {
-  "LED Control", "Sound", "Brightness", "Clock", "Timer", "Reset", "Back" };
+  "Spotify", "LED Control", "Sound", "Brightness", "Clock", "Theme", "Clock Fmt", "About", "Timer", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
   "Auto-Sync", "OFF", "RAINBOW", "RED", "GREEN", "BLUE", "WHITE",
@@ -142,14 +211,24 @@ static void applySoundToggle();
 // ============================================================
 static void drawBootFrame(uint32_t ms) {
   sprite.fillSprite(COL_TXT);
-  sprite.pushImage((W - STAN_W) / 2, 38, STAN_W, STAN_H, stan_bits);
+  sprite.pushImage((W - STAN_W) / 2, 28, STAN_W, STAN_H, stan_bits);
   sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setFont(&fonts::FreeSans9pt7b);
   sprite.setTextColor(COL_TXT_BLACK, COL_TXT);
   int32_t word_w = sprite.textWidth("studio.");
-  sprite.drawString("studio.", W / 2, 88);
+  sprite.drawString("studio.", W / 2, 74);
   int32_t stem_w = sprite.textWidth("studio");
-  sprite.fillCircle(W / 2 + stem_w - word_w / 2 + 4, 88, 2, 0xF800);
+  sprite.fillCircle(W / 2 + stem_w - word_w / 2 + 4, 74, 2, 0xF800);
+
+  sprite.setFont(&fonts::Font0);
+  if (WiFi.isConnected()) {
+    sprite.setTextColor(0x03E0, COL_TXT); // green
+    sprite.drawString(WiFi.localIP().toString().c_str(), W / 2, 94);
+  } else {
+    sprite.setTextColor(0x8410, COL_TXT); // gray
+    sprite.drawString("Connecting WiFi...", W / 2, 94);
+  }
+
   if (ms > 400) {
     int pw = (int)((long)(W - 80) * (ms - 400) / (BOOT_MS - 600));
     if (pw > W - 80) pw = W - 80;
@@ -189,18 +268,19 @@ static void drawList(const char* title, const char* const* labels,
     bool active = activeFn ? activeFn(idx) : false;
     sprite.setFont(&fonts::Font0);
     sprite.setTextDatum(textdatum_t::middle_left);
-    sprite.setTextColor(focused ? COL_TXT : (active ? COL_CYAN : COL_TXT),
+    sprite.setTextColor(active ? COL_CYAN : COL_TXT,
                         focused ? 0x2129 : COL_BLACK);
     sprite.drawString(labels[idx], 10, y + row_h / 2);
     // right-hand value/indicator
-    if (valueFn) {
-      const char* val = valueFn(idx);
-      if (val) {
-        sprite.setTextDatum(textdatum_t::middle_right);
-        sprite.setTextColor(focused ? COL_CYAN : COL_MUTED,
-                            focused ? 0x2129 : COL_BLACK);
-        sprite.drawString(val, W - 10, y + row_h / 2);
-      }
+    const char* val = valueFn ? valueFn(idx) : nullptr;
+    sprite.setTextDatum(textdatum_t::middle_right);
+    if (val) {
+      sprite.setTextColor(focused ? COL_CYAN : COL_MUTED,
+                          focused ? 0x2129 : COL_BLACK);
+      sprite.drawString(val, W - 10, y + row_h / 2);
+    } else if (active) {
+      sprite.setTextColor(COL_CYAN, focused ? 0x2129 : COL_BLACK);
+      sprite.drawString("[x]", W - 10, y + row_h / 2);
     }
   }
   sprite.drawFastHLine(0, 112, W, COL_SEP);
@@ -214,24 +294,45 @@ static void drawList(const char* title, const char* const* labels,
 static bool timerRunning() { return timer_end_ms != 0; }
 
 static const char* menuValue(int i) {
-  static char buf[12];
+  static char buf[16];
   switch (i) {
-    case 1: return options_sound_on() ? "On" : "Off";
-    case 3: {  // clock preview
+    case 0: {
+      if (spotifyIsActive()) {
+        return g_spotify.is_playing ? "Playing" : "Paused";
+      }
+      return "Idle";
+    }
+    case 2: {
+      uint8_t m = getBuzzerMode();
+      return (m == 0) ? "Passive" : (m == 1) ? "Active" : "Off";
+    }
+    case 3: {
+      snprintf(buf, sizeof(buf), "%d%%", uiGetBacklight());
+      return buf;
+    }
+    case 4: {  // clock preview
       struct tm t;
       if (getLocalTime(&t, 0)) {
-        snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
+        if (uiGetClock12h()) {
+          int h12 = t.tm_hour % 12;
+          if (h12 == 0) h12 = 12;
+          snprintf(buf, sizeof(buf), "%d:%02d %s", h12, t.tm_min, (t.tm_hour >= 12) ? "PM" : "AM");
+        } else {
+          snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
+        }
         return buf;
       }
       return "--:--";
     }
-    case 4: {  // timer status
+    case 5: return uiGetThemeLight() ? "Light" : "Dark";
+    case 6: return uiGetClock12h() ? "12H" : "24H";
+    case 7: return ">";
+    case 8: {  // timer status
       if (!timerRunning()) return "Off";
       int left = (timer_end_ms - millis()) / 1000;
       snprintf(buf, sizeof(buf), "%dm%02ds", left / 60, left % 60);
       return buf;
     }
-    case 5: return reset_arm ? "SURE?" : "";
     default: return nullptr;
   }
 }
@@ -239,7 +340,9 @@ static const char* menuValue(int i) {
 static bool menuActive(int i) {
   switch (i) {
     case 1: return options_sound_on();
-    case 4: return timerRunning();
+    case 4: return uiGetThemeLight();
+    case 5: return uiGetClock12h();
+    case 7: return timerRunning();
     default: return false;
   }
 }
@@ -275,23 +378,30 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.fillSprite(COL_BLACK);
 
   // ---- status bar (centerline y=9) ----
+  bool wifi_ok = WiFi.isConnected();
   ConnState conn = connStateOf(d);
   for (int i = 0; i < 4; i++) {
     int bh = 2 + i * 2;
-    uint16_t c = (conn == CONN_ONLINE && i < 3) ? COL_CYAN : COL_MUTED;
-    sprite.fillRect(4 + i * 3, 9 + 4 - bh, 2, bh, c);
+    uint16_t c = (wifi_ok && i < 3) ? COL_CYAN : COL_MUTED;
+    sprite.fillRect(7 + i * 3, 9 + 4 - bh, 2, bh, c);
   }
   uint16_t st_col = (conn == CONN_ONLINE) ? COL_ONLINE
-                    : (conn == CONN_CONNECTING) ? COL_CONNECT : COL_OFFLINE;
+                    : (wifi_ok ? COL_CONNECT : COL_OFFLINE);
   const char* st = (conn == CONN_ONLINE) ? printStateName(d.state)
-                   : (conn == CONN_CONNECTING) ? "CONNECTING" : "OFFLINE";
+                   : (wifi_ok ? "OFFLINE" : "NO WIFI");
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(st_col, COL_BLACK);
-  sprite.setCursor(24, 9);
-  sprite.print(st);
-  sprite.pushImage(W - LOGO_W - 4, (18 - LOGO_H) / 2, LOGO_W, LOGO_H,
-                   logo_bits, 0x0001);
+  sprite.drawString(st, 24, 9);
+
+  // Normal sans-serif non-bold brand with signature red dot
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::middle_right);
+  sprite.setTextColor(COL_RED, COL_BLACK);
+  sprite.drawString(".", W - 8, 9);
+  sprite.setTextColor(COL_TXT, COL_BLACK);
+  sprite.drawString("STAN studio", W - 14, 9);
+
   sprite.drawFastHLine(0, 18, W, COL_SEP);
 
   // ---- PAUSED overlay (non-latched): yellow full-screen ----
@@ -338,7 +448,7 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
   sprite.drawString("PROGRESS", cx, cy + 15);
 
   // ---- right metric cards ----
-  const char* tags[3]   = {"NOZZLE", "BED", "TIME"};
+  const char* tags[3]   = {"NOZ", "BED", "TIME"};
   const uint16_t tcol[3] = {COL_AMBER, COL_SALMON, COL_LBLUE};
   snprintf(buf, sizeof(buf), "%d/%d", (int)d.nozzle_temp, (int)d.nozzle_target);
   static char v0[14], v1[14], v2[14];
@@ -351,28 +461,28 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
 
   for (int i = 0; i < 3; i++) {
     int y = 20 + i * 31;
-    sprite.fillRoundRect(83, y, 76, 27, 6, COL_CARD);
+    sprite.fillRoundRect(80, y, 74, 27, 6, COL_CARD);
     sprite.setFont(&fonts::Font0);
     sprite.setTextDatum(textdatum_t::top_left);
     sprite.setTextColor(tcol[i], COL_CARD);
-    sprite.drawString(tags[i], 86, y + 3);
+    sprite.drawString(tags[i], 84, y + 3);
     sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.setTextDatum(textdatum_t::bottom_right);
     sprite.setTextColor(COL_TXT, COL_CARD);
-    sprite.drawString(vals[i], 154, y + 24);
+    sprite.drawString(vals[i], 150, y + 24);
   }
 
   sprite.drawFastHLine(0, 112, W, COL_SEP);
 
   // ---- footer: job + filament + timer + hint ----
   sprite.setFont(&fonts::Font0);
-  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_TXT, COL_BLACK);
   const char* job = (d.state == PST_RUNNING || d.state == PST_PREPARE)
-                      ? "Printing..." : "Idle";   // "A1: " prefix collided with timer
-  sprite.drawString(job, 4, 114);
+                      ? "Printing..." : "Idle";
+  sprite.drawString(job, 8, 120);
 
-  // timer countdown (left-center of footer when armed)
+  // timer countdown (left-center of footer when armed) or IP address
   if (timerRunning()) {
     int left = (int)((timer_end_ms - ms) / 1000);
     if (left < 0) left = 0;
@@ -381,15 +491,19 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
     sprite.setTextColor(timer_fired ? ((ms / 300) % 2 ? COL_AMBER : COL_TXT)
                                     : COL_LBLUE, COL_BLACK);
     sprite.drawString(buf, W / 2, 120);
+  } else if (wifi_ok) {
+    sprite.setTextDatum(textdatum_t::middle_center);
+    sprite.setTextColor(COL_MUTED, COL_BLACK);
+    sprite.drawString(WiFi.localIP().toString().c_str(), W / 2, 120);
   }
 
   // filament bottom-right
   char fbuf[12] = "--";
   if (d.filament_g >= 0)
     snprintf(fbuf, sizeof(fbuf), "%dg", (int)(d.filament_g + 0.5f));
-  sprite.setTextDatum(textdatum_t::top_right);
+  sprite.setTextDatum(textdatum_t::middle_right);
   sprite.setTextColor(d.filament_g >= 0 ? COL_CYAN : COL_MUTED, COL_BLACK);
-  sprite.drawString(fbuf, 156, 114);
+  sprite.drawString(fbuf, W - 8, 120);
 }
 
 // ============================================================
@@ -427,31 +541,119 @@ static void drawOverlayFrame(const TelemetryData& d, uint32_t ms) {
 }
 
 // ============================================================
-//  CLOCK / TIMER screens
+//  CLOCK / TIMER / ABOUT screens
 // ============================================================
 static void drawClockFrame(uint32_t ms) {
   (void)ms;
   sprite.fillSprite(COL_BLACK);
   struct tm t;
   if (getLocalTime(&t, 0)) {
-    char buf[12];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    char buf[16];
+    char dateBuf[24];
+    const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+    // Date at top - minimal, elegant, centered
+    snprintf(dateBuf, sizeof(dateBuf), "%s, %02d %s", days[t.tm_wday], t.tm_mday, months[t.tm_mon]);
+    sprite.setFont(&fonts::Font2);
     sprite.setTextDatum(textdatum_t::middle_center);
-    sprite.setFont(&fonts::FreeSansBold18pt7b);   // 24pt "23:59:59" = 180px > 160
-    sprite.setTextColor(COL_TXT, COL_BLACK);
-    sprite.drawString(buf, W / 2, H / 2 - 6);
-    sprite.setFont(&fonts::Font0);
-    sprite.setTextColor(COL_MUTED, COL_BLACK);
-    sprite.drawString("IST  (NTP)", W / 2, H / 2 + 22);
+    sprite.setTextColor(COL_CYAN, COL_BLACK);
+    sprite.drawString(dateBuf, W / 2, 32);
+
+    // Large Digits in Center
+    if (uiGetClock12h()) {
+      int h12 = t.tm_hour % 12;
+      if (h12 == 0) h12 = 12;
+      snprintf(buf, sizeof(buf), "%d:%02d:%02d", h12, t.tm_min, t.tm_sec);
+      const char* ampm = (t.tm_hour >= 12) ? "PM" : "AM";
+
+      // Dynamically measure both to center the entire time+AM/PM block
+      sprite.setFont(&fonts::FreeSansBold18pt7b);
+      int32_t time_w = sprite.textWidth(buf);
+      sprite.setFont(&fonts::Font2);
+      int32_t ampm_w = sprite.textWidth(ampm);
+
+      const int gap = 6;
+      int32_t total_w = time_w + gap + ampm_w;
+      int32_t start_x = (W - total_w) / 2;
+      int32_t baseline_y = 74;
+
+      // Draw Time digits
+      sprite.setFont(&fonts::FreeSansBold18pt7b);
+      sprite.setTextDatum(textdatum_t::middle_left);
+      sprite.setTextColor(COL_TXT, COL_BLACK);
+      sprite.drawString(buf, start_x, baseline_y);
+
+      // Draw AM/PM with clean size and breathing room
+      sprite.setFont(&fonts::Font2);
+      sprite.setTextDatum(textdatum_t::middle_left);
+      sprite.setTextColor((t.tm_hour >= 12) ? COL_AMBER : COL_CYAN, COL_BLACK);
+      sprite.drawString(ampm, start_x + time_w + gap, baseline_y + 2);
+    } else {
+      snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+      sprite.setFont(&fonts::FreeSansBold18pt7b);
+      sprite.setTextDatum(textdatum_t::middle_center);
+      sprite.setTextColor(COL_TXT, COL_BLACK);
+      sprite.drawString(buf, W / 2, 74);
+    }
   } else {
     sprite.setTextDatum(textdatum_t::middle_center);
-    sprite.setFont(&fonts::FreeSansBold12pt7b);
+    sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.setTextColor(COL_MUTED, COL_BLACK);
-    sprite.drawString("no NTP sync", W / 2, H / 2);
+    sprite.drawString("Syncing Time...", W / 2, H / 2);
   }
+}
+
+static void drawAboutFrame(uint32_t ms) {
+  (void)ms;
+  sprite.fillSprite(COL_BLACK);
+
+  // Top header with visionOS styling
+  sprite.setFont(&fonts::Font2);
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextColor(COL_TXT, COL_BLACK);
+  sprite.drawString("ABOUT & DEV", 8, 4);
+  sprite.setTextColor(COL_CYAN, COL_BLACK);
+  sprite.drawString("v2.4", W - 32, 4);
+  sprite.drawFastHLine(0, 18, W, COL_SEP);
+
+  // Card 1: System info
+  sprite.fillRoundRect(4, 22, W - 8, 25, 4, COL_CARD);
   sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::middle_left);
+  sprite.setTextColor(COL_MUTED, COL_CARD);
+  sprite.drawString("OS / Hardware", 8, 29);
+  sprite.setTextColor(COL_TXT, COL_CARD);
+  sprite.drawString("STAN studio OS (ESP32)", 8, 40);
+
+  // Card 2: Developer data
+  sprite.fillRoundRect(4, 50, W - 8, 42, 4, COL_CARD);
+  sprite.setTextColor(COL_MUTED, COL_CARD);
+  sprite.drawString("Developer Data", 8, 57);
+
+  sprite.setTextColor(COL_CYAN, COL_CARD);
+  sprite.drawString("GitHub:", 8, 69);
+  sprite.setTextColor(COL_TXT, COL_CARD);
+  sprite.drawString("mxsourav.dev", 52, 69);
+
+  sprite.setTextColor(COL_SALMON, COL_CARD);
+  sprite.drawString("Insta:", 8, 81);
+  sprite.setTextColor(COL_TXT, COL_CARD);
+  sprite.drawString("@mxsourav.dev", 52, 81);
+
+  // Network IP
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("M-hold: back", 4, 120);
+  sprite.drawString("IP:", 8, 102);
+  sprite.setTextColor(COL_ONLINE, COL_BLACK);
+  sprite.drawString(WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "No Wi-Fi", 28, 102);
+
+  // Footer
+  sprite.drawFastHLine(0, 114, W, COL_SEP);
+  sprite.setTextDatum(textdatum_t::middle_center);
+  sprite.setTextColor(COL_MUTED, COL_BLACK);
+  sprite.drawString("Press any button to return", W / 2, 122);
 }
 
 static void drawTimerFrame(uint32_t ms) {
@@ -480,30 +682,187 @@ static void drawTimerFrame(uint32_t ms) {
   sprite.drawString("M-hold: back", 4, 120);
 }
 
+static void drawSpotifyFrame(uint32_t ms) {
+  sprite.fillSprite(COL_BLACK);
+
+  // 1. Cover Artwork (56x56 at x=8, y=14)
+  int ax = 8, ay = 14, aw = 56, ah = 56;
+  if (spotifyHasCoverArt()) {
+    sprite.pushImage(ax, ay, aw, ah, spotifyGetCoverArt());
+    sprite.drawRoundRect(ax - 1, ay - 1, aw + 2, ah + 2, 4, COL_SPOTIFY_GREEN); // Spotify Green border
+  } else {
+    sprite.fillRoundRect(ax, ay, aw, ah, 8, COL_CARD);
+    sprite.drawRoundRect(ax, ay, aw, ah, 8, COL_SPOTIFY_GREEN); // Spotify Green outline
+
+    // Stylized Vinyl record / avatar in the box
+    int cx = ax + aw / 2, cy = ay + ah / 2;
+    sprite.fillCircle(cx, cy, 22, 0x1082);
+    sprite.drawCircle(cx, cy, 16, 0x2129);
+    sprite.drawCircle(cx, cy, 10, 0x318A);
+    // Center label
+    sprite.fillCircle(cx, cy, 6, COL_SPOTIFY_GREEN);
+    sprite.fillCircle(cx, cy, 2, COL_BLACK);
+  }
+
+  // 2. Track Title & Artist
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setFont(&fonts::Font2);
+  sprite.setTextColor(COL_TXT, COL_BLACK);
+  char titleBuf[20];
+  strncpy(titleBuf, g_spotify.title, sizeof(titleBuf) - 1);
+  titleBuf[sizeof(titleBuf) - 1] = 0;
+  if (strlen(g_spotify.title) > 13) {
+    titleBuf[11] = '.'; titleBuf[12] = '.'; titleBuf[13] = 0;
+  }
+  sprite.drawString(titleBuf, 72, 16);
+
+  // Artist
+  char artistBuf[24];
+  strncpy(artistBuf, g_spotify.artist, sizeof(artistBuf) - 1);
+  artistBuf[sizeof(artistBuf) - 1] = 0;
+  if (strlen(g_spotify.artist) > 16) {
+    artistBuf[14] = '.'; artistBuf[15] = '.'; artistBuf[16] = 0;
+  }
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextColor(COL_CYAN, COL_BLACK);
+  sprite.drawString(artistBuf, 72, 36);
+
+  // Animated Equalizer bars (bouncing rhythmically)
+  if (g_spotify.is_playing) {
+    for (int b = 0; b < 4; b++) {
+      int h = 4 + (int)(abs(sin((ms / 150.0) + b * 1.2)) * 12);
+      sprite.fillRect(72 + b * 5, 68 - h, 3, h, COL_SPOTIFY_GREEN);
+    }
+    sprite.setFont(&fonts::Font0);
+    sprite.setTextColor(COL_SPOTIFY_GREEN, COL_BLACK);
+    sprite.drawString("PLAYING", 96, 58);
+  } else {
+    sprite.setFont(&fonts::Font0);
+    sprite.setTextColor(COL_MUTED, COL_BLACK);
+    sprite.drawString("PAUSED", 72, 58);
+  }
+
+  // 3. Music Timeline Bar in Bottom with Live Progress ("Nothing else on screen")
+  uint32_t prog = g_spotify.progress_ms;
+  uint32_t dur = g_spotify.duration_ms > 0 ? g_spotify.duration_ms : 1;
+  float pct = (float)prog / (float)dur;
+  if (pct > 1.0f) pct = 1.0f;
+  if (pct < 0.0f) pct = 0.0f;
+
+  int bx = 10, by = 86, bw = 140, bh = 4;
+  sprite.fillRoundRect(bx, by, bw, bh, 2, COL_CARD);
+  int fillW = (int)(bw * pct);
+  if (fillW > 0) {
+    sprite.fillRoundRect(bx, by, fillW, bh, 2, COL_SPOTIFY_GREEN);
+  }
+  sprite.fillCircle(bx + fillW, by + bh / 2, 4, COL_TXT);
+
+  // Time text: Elapsed / Total
+  char curTime[12], totalTime[12];
+  snprintf(curTime, sizeof(curTime), "%d:%02d", (prog / 1000) / 60, (prog / 1000) % 60);
+  snprintf(totalTime, sizeof(totalTime), "%d:%02d", (dur / 1000) / 60, (dur / 1000) % 60);
+
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextColor(COL_TXT, COL_BLACK);
+  sprite.drawString(curTime, 10, 96);
+
+  sprite.setTextDatum(textdatum_t::top_right);
+  sprite.setTextColor(COL_MUTED, COL_BLACK);
+  sprite.drawString(totalTime, 150, 96);
+
+  // Subtle bottom hint
+  sprite.setTextDatum(textdatum_t::middle_center);
+  sprite.setTextColor(COL_MUTED, COL_BLACK);
+  sprite.drawString("SEL: Lyrics    M: Exit", W / 2, 118);
+}
+
+static void drawSpotifyLyricsFrame(uint32_t ms) {
+  (void)ms;
+  sprite.fillSprite(COL_BLACK);
+
+  // Header: Track & Artist
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::top_center);
+  sprite.setTextColor(COL_CYAN, COL_BLACK);
+  char headBuf[36];
+  snprintf(headBuf, sizeof(headBuf), "%s - %s", g_spotify.title, g_spotify.artist);
+  if (strlen(headBuf) > 26) { headBuf[23] = '.'; headBuf[24] = '.'; headBuf[25] = 0; }
+  sprite.drawString(headBuf, W / 2, 8);
+  sprite.drawFastHLine(8, 20, W - 16, COL_SEP);
+
+  // Center: Current Lyric line (Large & Bold, Glowing)
+  sprite.setFont(&fonts::Font2);
+  sprite.setTextDatum(textdatum_t::middle_center);
+  sprite.setTextColor(COL_TXT, COL_BLACK);
+  const char* curL = g_spotify.lyric_cur[0] ? g_spotify.lyric_cur : "♫ Music Playing ♫";
+  sprite.drawString(curL, W / 2, 46);
+
+  // Next Lyric line (Muted)
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextColor(COL_MUTED, COL_BLACK);
+  const char* nextL = g_spotify.lyric_next[0] ? g_spotify.lyric_next : "";
+  sprite.drawString(nextL, W / 2, 70);
+
+  // Mini Timeline bar
+  uint32_t prog = g_spotify.progress_ms;
+  uint32_t dur = g_spotify.duration_ms > 0 ? g_spotify.duration_ms : 1;
+  float pct = (float)prog / (float)dur;
+  if (pct > 1.0f) pct = 1.0f;
+  sprite.fillRoundRect(10, 88, 140, 3, 1, COL_CARD);
+  if (pct > 0.0f) sprite.fillRoundRect(10, 88, (int)(140 * pct), 3, 1, COL_SPOTIFY_GREEN);
+
+  // Time & exit hint
+  char curTime[12];
+  snprintf(curTime, sizeof(curTime), "%d:%02d", (prog / 1000) / 60, (prog / 1000) % 60);
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.drawString(curTime, 10, 96);
+
+  sprite.setTextDatum(textdatum_t::middle_center);
+  sprite.setTextColor(COL_MUTED, COL_BLACK);
+  sprite.drawString("SEL: Cover    M: Exit", W / 2, 118);
+}
+
 // ============================================================
 //  BUTTON DISPATCH
 // ============================================================
 static void dispatchButtons(uint8_t ev) {
   if (!ev) return;
 
+  // custom image: any button exits back to home
+  if (view == VIEW_CUSTOM_IMAGE) {
+    uiClearCustomImage();
+    return;
+  }
+
   // overlay: select = OK (clear latch), any menu action also exits
   if (view == VIEW_OVERLAY) {
-    if (ev == 2 || ev == 5 || ev == 4) {
+    if (ev == 1 || ev == 2 || ev == 3 || ev == 4 || ev == 5) {
       ui_latched_result = 0;
       view = VIEW_HOME;
     }
     return;
   }
 
-  // menu double-press = HOME from anywhere
-  if (ev == 4) { view = VIEW_HOME; reset_arm = 0; return; }
-  // menu long = back one level
-  if (ev == 3) {
+  // HOME event (10): return to main dashboard
+  if (ev == 10) {
+    ui_latched_result = 0;
+    view = VIEW_HOME;
+    reset_arm = 0;
+    return;
+  }
+
+  // menu double-press (ev == 4), long-press (ev == 3), or LEFT (ev == 8) = back one level
+  if (ev == 4 || ev == 3 || ev == 8) {
     switch (view) {
       case VIEW_MENU:    view = VIEW_HOME; break;
-      case VIEW_LEDLIST: view = VIEW_MENU; break;
-      case VIEW_CLOCK:
-      case VIEW_TIMER:   view = VIEW_MENU; break;
+      case VIEW_LEDLIST: view = VIEW_MENU; menu_focus = 1; break;
+      case VIEW_CLOCK:   view = VIEW_MENU; menu_focus = 4; break;
+      case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 7; break;
+      case VIEW_TIMER:   view = VIEW_MENU; menu_focus = 8; break;
+      case VIEW_SPOTIFY:
+      case VIEW_SPOTIFY_LYRICS: view = VIEW_HOME; break;
       default:           view = VIEW_HOME; break;
     }
     reset_arm = 0;
@@ -512,63 +871,129 @@ static void dispatchButtons(uint8_t ev) {
 
   switch (view) {
     case VIEW_HOME:
-      if (ev == 1) { view = VIEW_MENU; menu_focus = 0; }
+      // Menu (1), Select (2), UP (6), DOWN (7), RIGHT (9) opens Settings from Home
+      if (ev == 1 || ev == 2 || ev == 6 || ev == 7 || ev == 9) {
+        view = VIEW_MENU;
+        menu_focus = 0;
+      }
       break;
 
     case VIEW_MENU:
-      if (ev == 1) menu_focus = (menu_focus + 1) % MENU_ROWS;
-      else if (ev == 2) {
+      if (ev == 6) { // UP
+        menu_focus = (menu_focus - 1 + MENU_ROWS) % MENU_ROWS;
+      } else if (ev == 1 || ev == 7) { // DOWN
+        menu_focus = (menu_focus + 1) % MENU_ROWS;
+      } else if (ev == 2 || ev == 9) { // OK / RIGHT
+        startBeepPattern(1); // confirmation beep
         switch (menu_focus) {
-          case 0: view = VIEW_LEDLIST; menu_focus = 0; break;
-          case 1: applySoundToggle(); break;
-          case 2: {  // brightness cycle 40/60/80/100
+          case 0: view = VIEW_SPOTIFY; break;
+          case 1: view = VIEW_LEDLIST; menu_focus = 0; break;
+          case 2: applySoundToggle(); break;
+          case 3: {  // brightness cycle
             uint8_t b = uiGetBacklight();
-            b = (b >= 100) ? 40 : b + 20;
+            b = (b >= 100) ? 40 : b + 30;
             uiSetBacklight(b);
+            g_settings.brightness = b;
+            settingsSave();
             break;
           }
-          case 3: view = VIEW_CLOCK; break;
-          case 4: view = VIEW_TIMER; timer_sel = 0; break;
-          case 5:  // reset: double-press arm
-            if (reset_arm) ESP.restart();
-            reset_arm = 1;
+          case 4: view = VIEW_CLOCK; break;
+          case 5: { // Theme Dark/Light
+            uiSetThemeLight(!uiGetThemeLight());
             break;
-          case 6: view = VIEW_HOME; break;
+          }
+          case 6: { // Clock Fmt 12H/24H
+            uiSetClock12h(!uiGetClock12h());
+            break;
+          }
+          case 7: view = VIEW_ABOUT; break;
+          case 8: view = VIEW_TIMER; timer_sel = 0; break;
+          case 9: view = VIEW_HOME; menu_focus = 0; break;
         }
       }
       break;
 
     case VIEW_LEDLIST:
-      if (ev == 1) menu_focus = (menu_focus + 1) % LEDLIST_ROWS;
-      else if (ev == 2) {
+      if (ev == 6) { // UP
+        menu_focus = (menu_focus - 1 + LEDLIST_ROWS) % LEDLIST_ROWS;
+      } else if (ev == 1 || ev == 7) { // DOWN
+        menu_focus = (menu_focus + 1) % LEDLIST_ROWS;
+      } else if (ev == 2 || ev == 9) { // OK / RIGHT
+        startBeepPattern(1); // confirmation beep
         if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 0; }
-        else ledSetOverride(menu_focus);   // 0..7 map directly
+        else {
+          ledSetOverride(menu_focus);   // 0..7 map directly
+          g_settings.led_override = menu_focus;
+          settingsSave();
+        }
       }
       break;
 
     case VIEW_CLOCK:
-      if (ev == 2) view = VIEW_MENU;
+      if (ev == 2 || ev == 9) { // SELECT or RIGHT: Toggle 12h / 24h format!
+        beepButton();
+        uiSetClock12h(!uiGetClock12h());
+      } else if (ev != 0) { // Any Menu press, hold, back or home exits clock back to menu
+        beepButton();
+        view = VIEW_MENU;
+        menu_focus = 4;
+      }
+      break;
+
+    case VIEW_ABOUT:
+      if (ev != 0) {
+        beepButton();
+        view = VIEW_MENU;
+        menu_focus = 7;
+      }
       break;
 
     case VIEW_TIMER:
       if (timer_fired) {
-        if (ev == 2 || ev == 5) { timer_fired = false; timer_end_ms = 0; }
+        if (ev != 0) { timer_fired = false; timer_end_ms = 0; }
       } else if (timerRunning()) {
-        if (ev == 2) timer_end_ms = 0;    // stop
+        if (ev == 2 || ev == 9) timer_end_ms = 0;    // stop
       } else {
-        if (ev == 1) timer_sel = (timer_sel + 1) % TIMER_OPT_COUNT;
-        else if (ev == 2) {
+        if (ev == 6) timer_sel = (timer_sel - 1 + TIMER_OPT_COUNT) % TIMER_OPT_COUNT; // UP
+        else if (ev == 1 || ev == 7) timer_sel = (timer_sel + 1) % TIMER_OPT_COUNT; // DOWN
+        else if (ev == 2 || ev == 9) { // OK / RIGHT
           timer_end_ms = millis() + TIMER_OPTS[timer_sel] * 60000UL;
           timer_fired = false;
           view = VIEW_HOME;
         }
       }
       break;
+
+    case VIEW_SPOTIFY:
+      if (ev == 2 || ev == 9) { // SELECT: Toggle to Lyrics!
+        beepButton();
+        view = VIEW_SPOTIFY_LYRICS;
+      } else if (ev != 0) {
+        beepButton();
+        view = VIEW_HOME;
+      }
+      break;
+
+    case VIEW_SPOTIFY_LYRICS:
+      if (ev == 2 || ev == 9) { // SELECT: Toggle back to Cover!
+        beepButton();
+        view = VIEW_SPOTIFY;
+      } else if (ev != 0) {
+        beepButton();
+        view = VIEW_HOME;
+      }
+      break;
   }
 }
 
 static void applySoundToggle() {
-  setSoundEnabled(!options_sound_on());
+  uint8_t m = (getBuzzerMode() + 1) % 3;
+  setBuzzerMode(m);
+  g_settings.buzzer_mode = m;
+  settingsSave();
+  if (m != 2) {
+    beepButton(); // audible feedback with newly selected mode
+  }
 }
 
 // ---------------- Backlight control (menu Brightness row) --------------
@@ -577,11 +1002,13 @@ uint8_t uiGetBacklight() { return bl_pct; }
 void uiSetBacklight(uint8_t pct) {
   if (pct > 100) pct = 100;
   bl_pct = pct;
+  if (PIN_TFT_BL != PIN_SD_MISO) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(PIN_TFT_BL, (uint32_t)(pct * 255 / 100));
+    ledcWrite(PIN_TFT_BL, (uint32_t)(pct * 255 / 100));
 #else
-  ledcWrite(0, (uint32_t)(pct * 255 / 100));
+    ledcWrite(0, (uint32_t)(pct * 255 / 100));
 #endif
+  }
 }
 
 // ============================================================
@@ -593,22 +1020,26 @@ static void uiTask(void* /*param*/) {
 
   tft.init();
   tft.setRotation(1);
-  tft.setColorDepth(16);
   tft.setBrightness(255);
+  if (PIN_TFT_BL != PIN_SD_MISO) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(PIN_TFT_BL, 255);
+    ledcWrite(PIN_TFT_BL, 255);
 #else
-  ledcWrite(0, 255);
+    ledcWrite(0, 255);
 #endif
+  }
   Serial.println(F("[UI] panel init OK (landscape 160x128) @ full brightness"));
 
   sprite.setColorDepth(16);
-  if (!buf0.createSprite(W, H) || !buf1.createSprite(W, H)) {
+  if (!sprite.createSprite(W, H)) {
     Serial.println(F("[FATAL] sprite alloc failed"));
     vTaskDelete(nullptr);
   }
-  buf1.fillSprite(0xFFFF);
   boot_start_ms = millis();
+  if (options_sound_on()) {
+    playHardwareBeep(BUZZER_FREQ_OK, 40); // 40ms synchronous boot chirp, guaranteed stops
+  }
+  Serial.println(F("[UI] boot splash started"));
 
   while (true) {
     uint32_t ms = millis();
@@ -638,6 +1069,22 @@ static void uiTask(void* /*param*/) {
     if (ev) ui_button_event = 0;
     dispatchButtons(ev);
 
+    // --- Auto-switch to Spotify Player when music is playing ---
+    static bool s_spotify_auto_switched = false;
+    if (spotifyIsActive()) {
+      if (view != VIEW_SPOTIFY && view != VIEW_SPOTIFY_LYRICS && view != VIEW_BOOT && view != VIEW_MENU && view != VIEW_LEDLIST && view != VIEW_TIMER) {
+        if (!s_spotify_auto_switched) {
+          view = VIEW_SPOTIFY;
+          s_spotify_auto_switched = true;
+        }
+      }
+    } else if (view == VIEW_SPOTIFY || view == VIEW_SPOTIFY_LYRICS) {
+      if (s_spotify_auto_switched && (millis() - g_spotify.last_update_ms > 12000)) {
+        view = VIEW_HOME; // return to 3D printer dashboard when music stops
+        s_spotify_auto_switched = false;
+      }
+    }
+
     // --- render ---
     switch (view) {
       case VIEW_BOOT:    drawBootFrame(ms - boot_start_ms); break;
@@ -648,16 +1095,32 @@ static void uiTask(void* /*param*/) {
                                   menu_focus, ledListValue, ledListActive); break;
       case VIEW_CLOCK:   drawClockFrame(ms); break;
       case VIEW_TIMER:   drawTimerFrame(ms); break;
+      case VIEW_ABOUT:   drawAboutFrame(ms); break;
       case VIEW_OVERLAY: drawOverlayFrame(d, ms); break;
+      case VIEW_SPOTIFY:        drawSpotifyFrame(ms); break;
+      case VIEW_SPOTIFY_LYRICS: drawSpotifyLyricsFrame(ms); break;
+      case VIEW_CUSTOM_IMAGE:
+        if (custom_image_buf) {
+          sprite.pushImage(0, 0, W, H, custom_image_buf);
+        }
+        break;
     }
 
-    // --- push: one burst when changed, nothing when identical ---
-    LGFX_Sprite* front = (back == &buf0) ? &buf1 : &buf0;
-    if (memcmp(front->getBuffer(), back->getBuffer(), W * H * 2) != 0) {
-      tft.pushImageDMA(0, 0, W, H, (uint16_t*)back->getBuffer());
-      tft.waitDMA();
-      back = front;
+    // --- Live Notification Banner Overlay ---
+    if (millis() < notif_until_ms && notif_title[0]) {
+      sprite.fillRoundRect(4, 4, W - 8, 38, 6, COL_CARD);
+      sprite.drawRoundRect(4, 4, W - 8, 38, 6, COL_CYAN);
+      sprite.fillCircle(14, 15, 3, COL_AMBER);
+      sprite.setFont(&fonts::Font0);
+      sprite.setTextDatum(textdatum_t::middle_left);
+      sprite.setTextColor(COL_CYAN, COL_CARD);
+      sprite.drawString(notif_title, 22, 15);
+      sprite.setTextColor(COL_TXT, COL_CARD);
+      sprite.drawString(notif_msg, 10, 30);
     }
+
+    // Push full frame to panel (LovyanGFX handles CS windowing and DMA cleanly)
+    sprite.pushSprite(0, 0);
 
     vTaskDelayUntil(&last_wake, frame_ticks);
   }

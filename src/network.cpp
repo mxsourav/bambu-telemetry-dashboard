@@ -76,27 +76,60 @@ static void mqttCallback(char* topic, byte* payload, uint32_t length) {
   parseTelemetry((const char*)payload, length);
 }
 
+static bool isPrinterReachable() {
+  WiFiClient probe;
+  probe.setTimeout(1);
+  // Fast 250ms TCP check to port 8883 - zero TLS allocation!
+  bool ok = probe.connect(PRINTER_IP, MQTT_PORT, 250);
+  if (ok) {
+    probe.stop();
+  }
+  return ok;
+}
+
 static void connectMQTT() {
+  // If printer is turned off, skip expensive TLS completely!
+  if (!isPrinterReachable()) {
+    static uint32_t last_log_ms = 0;
+    if (millis() - last_log_ms > 30000) {
+      last_log_ms = millis();
+      Serial.println(F("[MQTT] printer offline (port 8883 unreachable) - skipping TLS"));
+    }
+    TelemetryData d;
+    telemetryRead(d);
+    d.state = PST_DISCONNECTED;
+    telemetryWrite(d);
+    return;
+  }
+
   char topic[80];
   snprintf(topic, sizeof(topic), "%s%s%s",
            MQTT_TOPIC_PREFIX, PRINTER_SN, MQTT_TOPIC_SUFFIX);
 
+  // Stop any previous hanging socket before starting a new connection
+  tlsClient.stop();
+
   // Bambu broker uses a self-signed cert => setInsecure() skips CA
   // validation but keeps the TLS 1.2 tunnel encrypted.
   tlsClient.setInsecure();
-  tlsClient.setTimeout(10);        // seconds (WiFiClientSecure API) - was 12000ms read as 12000s!
+  tlsClient.setTimeout(2);         // 2 seconds timeout so printer-off never hangs Core 0
   mqtt.setServer(PRINTER_IP, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE);   // payloads exceed 2 KB
-  mqtt.setSocketTimeout(10);       // MQTT-level timeout, seconds
+  mqtt.setSocketTimeout(2);        // 2 seconds MQTT socket timeout
 
-  Serial.printf("[MQTT] connecting to %s:%d ...\n", PRINTER_IP, MQTT_PORT);
+  Serial.printf("[MQTT] printer detected, connecting TLS to %s:%d ...\n", PRINTER_IP, MQTT_PORT);
   if (mqtt.connect("bambu-dash", MQTT_USER, PRINTER_LAN_CODE)) {
     network_ever_connected = true;
     Serial.printf("[MQTT] connected, subscribing to %s\n", topic);
     mqtt.subscribe(topic, 1);
   } else {
     Serial.printf("[MQTT] connect failed, rc=%d\n", mqtt.state());
+    tlsClient.stop(); // CRITICAL: Release lwIP socket descriptor & free SSL context!
+    TelemetryData d;
+    telemetryRead(d);
+    d.state = PST_DISCONNECTED;  // Accurate OFFLINE state when printer is off
+    telemetryWrite(d);
   }
 }
 
@@ -108,14 +141,14 @@ static void mqttTask(void* /*param*/) {
   // fast-start: begin immediately, retry aggressively (1.2 s) until the
   // first association, then back off to 5 s cycles for stability.
   WiFi.mode(WIFI_STA);            // STA only - BT off, AP off
-  WiFi.setSleep(true);            // modem sleep: -20..30 mA avg draw
+  WiFi.setSleep(false);           // Keep radio awake: phone and web always connect instantly
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);   // attempt #1 at t=0
   last_wifi_attempt = millis();
 
   while (true) {
     // --- WiFi (re)connection ---
     if (WiFi.status() != WL_CONNECTED) {
-      uint32_t retry_ms = network_ever_connected ? 5000 : 1200;
+      uint32_t retry_ms = 8000; // 8 seconds gives router plenty of time for 4-way handshake & DHCP
       if (millis() - last_wifi_attempt > retry_ms) {
         last_wifi_attempt = millis();
         Serial.printf("[WiFi] retry %s ...\n", WIFI_SSID);
@@ -141,8 +174,13 @@ static void mqttTask(void* /*param*/) {
 
     // --- MQTT (re)connection ---
     if (!mqtt.connected()) {
-      uint32_t retry_ms = network_ever_connected ? 5000 : 1200;
-      if (millis() - last_mqtt_attempt > retry_ms) {
+      TelemetryData d;
+      telemetryRead(d);
+      if (d.state != PST_DISCONNECTED) {
+        d.state = PST_DISCONNECTED;
+        telemetryWrite(d);
+      }
+      if (millis() - last_mqtt_attempt > 6000) {
         last_mqtt_attempt = millis();
         connectMQTT();
       }
@@ -150,8 +188,20 @@ static void mqttTask(void* /*param*/) {
       continue;
     }
 
-    // --- connected: pump the client (blocking read w/ 50 ms yield) ---
+    // --- connected: pump client & check for silent telemetry stalls ---
     mqtt.loop();
+
+    TelemetryData td;
+    telemetryRead(td);
+    if (td.last_update_ms > 0 && (millis() - td.last_update_ms > 20000)) {
+      Serial.println(F("[MQTT] telemetry stalled >20s, resetting connection..."));
+      mqtt.disconnect();
+      tlsClient.stop();
+      td.state = PST_DISCONNECTED;
+      telemetryWrite(td);
+      last_mqtt_attempt = millis();
+    }
+
     vTaskDelay(pdMS_TO_TICKS(50));
   }
 }

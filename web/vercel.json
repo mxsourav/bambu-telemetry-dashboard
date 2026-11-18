@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "outputDirectory": ".",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    }
+  ]
+}
