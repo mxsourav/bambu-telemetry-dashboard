@@ -647,9 +647,8 @@ static void handleSpotifyNow() {
     const char* lyric_cur = doc["lyric_cur"] | nullptr;
     const char* lyric_next = doc["lyric_next"] | nullptr;
     spotifySetTrackInfo(title, artist, prog, dur, playing, img_url, lyric_cur, lyric_next);
-    if (playing) {
-      uiActivateSpotify();
-    }
+    // Note: Do NOT automatically hijack app mode or current view on incoming track updates.
+    // App mode switching is strictly manual (via physical buttons or /api/mode).
   }
   sendCorsHeaders();
   server.sendHeader("Connection", "close");
@@ -679,7 +678,6 @@ static void handleSpotifyCoverLoop() {
   } else if (upload.status == UPLOAD_FILE_END) {
     if (s_cover_upload_len == targetBytes) {
       spotifySetCoverArtValid(true);
-      uiActivateSpotify();
       Serial.println(F("[SPOTIFY] Fullscreen 160x128 cover art received via upload"));
     }
   }
@@ -697,7 +695,6 @@ static void handleSpotifyCoverDone() {
     String body = server.arg("plain");
     if (body.length() >= targetBytes) {
       spotifySetCoverArt((const uint16_t*)body.c_str());
-      uiActivateSpotify();
     }
   }
   server.send(200, "application/json", "{\"status\":\"ok\"}");

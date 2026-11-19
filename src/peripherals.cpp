@@ -77,23 +77,23 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
     return 0;
   }
 
-  // During active SPI display transfers, ignore pin sampling to reject capacitive crosstalk from adjacent GPIO 17 (TFT MOSI)
-  uint8_t raw = 1;
-  if (!g_tft_spi_busy) {
-    raw = digitalRead(b.pin) ? 1 : 0;
-  }
-  b.history = (b.history << 1) | raw;
-
-  // 60ms cooldown between events (matches the 6-sample stable window;
-  // the old 150ms made rapid menu scrolling feel laggy)
-  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 60)) {
+  // During active SPI display transfers, skip sampling to avoid injecting fake released states
+  if (g_tft_spi_busy) {
     return 0;
   }
 
-  // 6 consecutive LOW reads (60 ms) = CONFIRMED PRESSED
-  bool stable_pressed  = ((b.history & 0x3F) == 0x00);
-  // 6 consecutive HIGH reads (60 ms) = CONFIRMED RELEASED
-  bool stable_released = ((b.history & 0x3F) == 0x3F);
+  uint8_t raw = digitalRead(b.pin) ? 1 : 0;
+  b.history = (b.history << 1) | raw;
+
+  // 40ms cooldown between events for snappy response
+  if (b.last_event_ms > 0 && (ms - b.last_event_ms < 40)) {
+    return 0;
+  }
+
+  // 4 consecutive LOW reads (40 ms) = CONFIRMED PRESSED
+  bool stable_pressed  = ((b.history & 0x0F) == 0x00);
+  // 4 consecutive HIGH reads (40 ms) = CONFIRMED RELEASED
+  bool stable_released = ((b.history & 0x0F) == 0x0F);
 
   // Transition: Released -> Pressed
   if (!b.pressed && stable_pressed) {
@@ -103,8 +103,8 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
     return 0;
   }
 
-  // While held: check for long-press threshold (500 ms)
-  if (b.pressed && !b.long_fired && (ms - b.press_start_ms >= 500)) {
+  // While held: check for long-press threshold (450 ms)
+  if (b.pressed && !b.long_fired && (ms - b.press_start_ms >= 450)) {
     b.long_fired = true;
     return buttonEmit(b, ms, (&b == &b_menu) ? 3 : 5); // 3=menu long, 5=select long
   }
@@ -113,8 +113,8 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
   if (b.pressed && stable_released) {
     b.pressed = false;
     uint32_t press_duration = ms - b.press_start_ms;
-    // Require at least 50 ms hold duration to reject fast EMI spikes
-    if (!b.long_fired && press_duration >= 50) {
+    // Require at least 30 ms hold duration to reject fast EMI spikes
+    if (!b.long_fired && press_duration >= 30) {
       return buttonEmit(b, ms, (&b == &b_menu) ? 1 : 2); // 1=menu short, 2=select short
     }
   }

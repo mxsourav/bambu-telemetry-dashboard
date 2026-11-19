@@ -18,6 +18,7 @@ import json
 import urllib.request
 import urllib.parse
 import re
+import msvcrt
 from PIL import Image, ImageOps, ImageFilter
 
 DEVICE_IP = "192.168.0.154"
@@ -28,6 +29,21 @@ FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
 THUMB_RAW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb_raw.dat")
 THUMB_JPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
+LOCK_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".sync.lock")
+LOG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desk_sync.log")
+
+# Ensure single instance
+try:
+    _lock_file = open(LOCK_FILE_PATH, "w")
+    msvcrt.locking(_lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+except (IOError, OSError):
+    sys.exit(0)
+
+# Redirect output to log file if running windowless (e.g. via pythonw.exe)
+if sys.stdout is None or not sys.stdout.isatty():
+    log_fp = open(LOG_FILE_PATH, "a", encoding="utf-8", buffering=1)
+    sys.stdout = log_fp
+    sys.stderr = log_fp
 
 def fetch_itunes_artwork(artist, title):
     """Fallback: Fetches high quality album artwork for artist and title."""

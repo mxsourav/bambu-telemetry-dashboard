@@ -976,7 +976,14 @@ static void dispatchButtons(uint8_t ev) {
       case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 8; break;
       case VIEW_TIMER:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 9; break;
       case VIEW_SPOTIFY:
-      case VIEW_SPOTIFY_LYRICS: view = VIEW_MENU; menu_focus = 0; break;
+      case VIEW_SPOTIFY_LYRICS:
+        if (ev == 3) {
+          beepButton();
+          uiSetAppMode(MODE_PRINTER);
+        } else {
+          view = VIEW_MENU; menu_focus = 0;
+        }
+        break;
       default:           view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME; break;
     }
     reset_arm = 0;

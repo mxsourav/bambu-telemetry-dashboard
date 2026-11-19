@@ -6,8 +6,9 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <JPEGDEC.h>
+#include <FS.h>
 #include <SD.h>
+#include <JPEGDEC.h>
 #include "web_server.h"   // sdEnsureMounted()
 
 SpotifyTrackInfo g_spotify;

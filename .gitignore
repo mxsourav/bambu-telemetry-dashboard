@@ -17,3 +17,7 @@ Thumbs.db
 scratch*
 graphify-out/
 tools/current_thumb.jpg
+
+tools/.sync.lock
+tools/desk_sync.log
+tools/current_thumb_raw.dat
