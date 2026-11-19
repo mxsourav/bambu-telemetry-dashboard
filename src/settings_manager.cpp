@@ -61,6 +61,15 @@ void settingsLoad() {
     Serial.println(F("[SETTINGS] Loaded configuration from NVS Preferences"));
   }
 
+  // 3. Ensure Spotify refresh token is recovered from NVS if missing on SD
+  if (g_settings.spotify_refresh_token[0] == 0) {
+    String srtNvs = prefs.getString("sp_rtoken", "");
+    if (srtNvs.length() > 0) {
+      strncpy(g_settings.spotify_refresh_token, srtNvs.c_str(), sizeof(g_settings.spotify_refresh_token) - 1);
+      Serial.printf("[SETTINGS] Recovered Spotify refresh token from NVS (%d chars)\n", srtNvs.length());
+    }
+  }
+
   // Apply loaded settings to hardware subsystems
   setBuzzerMode(g_settings.buzzer_mode);
   uiSetBacklight(g_settings.brightness);

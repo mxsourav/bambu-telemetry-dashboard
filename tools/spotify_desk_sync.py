@@ -1,13 +1,12 @@
 """
 =============================================================================
-  STΔN studio. Spotify & Media Desk Station Sync
+  STΔN studio. Spotify & Media Desk Station Sync (Native Windows)
 =============================================================================
-Works 100% natively on your Windows PC!
-Runs in the background. Whenever you play a song on Spotify (or any media player)
-on your PC, it:
-1. Automatically opens the FULLSCREEN Spotify Player on the Desk Station!
-2. Sends the ACTUAL music album artwork cover directly to the display!
-3. Updates the live progress bar and track timeline in real time!
+Runs continuously on your Windows laptop.
+Detects ANY music playing on Spotify (or browser / media player) on your PC and:
+1. Updates the live Track Title and Artist on the Desk Monitor in real-time.
+2. Updates the live Progress Bar and Equalizer animation smoothly.
+3. Automatically fetches the official HD album artwork and sends it to the device!
 =============================================================================
 """
 import time
@@ -15,10 +14,17 @@ import requests
 import subprocess
 import os
 import sys
+import json
+import urllib.request
+import urllib.parse
 
 DEVICE_IP = "192.168.0.154"
 SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
-SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
+SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
+FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
+
+PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
+THUMB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
 
 try:
     from PIL import Image
@@ -26,33 +32,46 @@ try:
 except ImportError:
     HAS_PIL = False
 
-PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
-THUMB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
-
-def send_cover_art():
-    if not HAS_PIL or not os.path.exists(THUMB_PATH):
-        return
+def fetch_itunes_artwork(artist, title):
+    """Fetches high quality 300x300 album artwork for artist and title."""
     try:
-        im = Image.open(THUMB_PATH).convert("RGB")
-        im = im.resize((56, 56), Image.Resampling.LANCZOS)
-        # Convert to 56x56 RGB565 little-endian bytes (matches ESP32 memory)
-        pixels = list(im.getdata())
-        raw = bytearray(56 * 56 * 2)
-        idx = 0
-        for r, g, b in pixels:
-            r5 = (r >> 3) & 0x1F
-            g6 = (g >> 2) & 0x3F
-            b5 = (b >> 3) & 0x1F
-            c = (r5 << 11) | (g6 << 5) | b5
-            raw[idx]   = c & 0xFF
-            raw[idx+1] = (c >> 8) & 0xFF
-            idx += 2
-        
-        files = {'file': ('cover.bin', bytes(raw), 'application/octet-stream')}
-        requests.post(SPOTIFY_COVER_URL, files=files, timeout=2)
-        print("  [ART] Sent actual album cover artwork to Desk Monitor (56x56)!")
+        query = urllib.parse.quote(f"{artist} {title}")
+        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("resultCount", 0) > 0:
+                art = data["results"][0].get("artworkUrl100", "")
+                if art:
+                    # Upgrade to 300x300
+                    return art.replace("100x100bb.jpg", "300x300bb.jpg")
+    except Exception:
+        pass
+    return None
+
+def upload_album_art(jpeg_path_or_url):
+    """Uploads a JPEG to the SD card as /art.jpg and triggers dirty render."""
+    try:
+        temp_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_art.jpg")
+        if jpeg_path_or_url.startswith("http://") or jpeg_path_or_url.startswith("https://"):
+            req = urllib.request.Request(jpeg_path_or_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=4) as response, open(temp_file, "wb") as out_file:
+                out_file.write(response.read())
+            upload_source = temp_file
+        else:
+            upload_source = jpeg_path_or_url
+
+        if os.path.exists(upload_source) and os.path.getsize(upload_source) > 500:
+            with open(upload_source, "rb") as f:
+                files = {"file": ("/art.jpg", f, "image/jpeg")}
+                r = requests.post(FS_UPLOAD_URL, files=files, timeout=4)
+                if r.status_code == 200:
+                    requests.get(SPOTIFY_ART_TRIGGER, timeout=3)
+                    print("  [ART] High-Res Album Art uploaded to Desk Monitor!")
+                    return True
     except Exception as e:
         print(f"  [ART ERROR] {e}")
+    return False
 
 def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True):
     try:
@@ -64,11 +83,9 @@ def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True):
             "is_playing": is_playing
         }
         resp = requests.post(SPOTIFY_NOW_URL, json=payload, timeout=2)
-        if resp.status_code == 200:
-            return True
+        return resp.status_code == 200
     except Exception:
-        pass
-    return False
+        return False
 
 def get_media_info():
     if not os.path.exists(PS_SCRIPT):
@@ -76,19 +93,23 @@ def get_media_info():
     try:
         res = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, timeout=3
         )
         out = res.stdout.strip()
         if not out or out == "IDLE":
             return None
         
-        # Format: THUMB::Artist::::Title::::posMs::::durMs
-        # Format: NOTHUMB::Artist::::Title::::posMs::::durMs
+        # Format: THUMB::Artist::::Title::::posMs::::durMs or NOTHUMB::Artist::::Title::::posMs::::durMs
         parts = out.split("::::")
         if len(parts) >= 2:
             tag_artist = parts[0]
-            has_thumb = "THUMB::" in tag_artist
-            artist = tag_artist.replace("THUMB::", "").replace("NOTHUMB::", "").strip()
+            has_thumb = tag_artist.startswith("THUMB::")
+            if tag_artist.startswith("THUMB::"):
+                artist = tag_artist[7:].strip()
+            elif tag_artist.startswith("NOTHUMB::"):
+                artist = tag_artist[9:].strip()
+            else:
+                artist = tag_artist.strip()
             title = parts[1].strip()
             pos_ms = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
             dur_ms = int(parts[3]) if len(parts) >= 4 and parts[3].isdigit() else 0
@@ -105,38 +126,45 @@ def get_media_info():
 
 def main():
     print("=" * 65)
-    print(" STΔN studio. Spotify & Media Desk Station Sync (Fullscreen Player)")
+    print(" STΔN studio. Spotify & Media Desk Station Sync")
     print(f" Target Device: http://{DEVICE_IP}/")
     print(" Listening for music playing on your PC...")
     print(" Press Ctrl+C at any time to stop.")
     print("=" * 65)
 
     last_track_id = ""
-    idle_count = 0
+    last_art_track = ""
 
     while True:
         try:
             info = get_media_info()
             if info:
-                idle_count = 0
                 track_id = f"{info['artist']} - {info['title']}"
                 if track_id != last_track_id:
                     last_track_id = track_id
                     print(f"\n[NOW PLAYING] {info['artist']} - {info['title']}")
-                    if info["has_thumb"]:
-                        send_cover_art()
                     push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], True)
+                    
+                    if track_id != last_art_track:
+                        last_art_track = track_id
+                        # Try local thumbnail first
+                        art_sent = False
+                        if info["has_thumb"] and os.path.exists(THUMB_PATH):
+                            art_sent = upload_album_art(THUMB_PATH)
+                        # Fallback to iTunes official album artwork
+                        if not art_sent:
+                            art_url = fetch_itunes_artwork(info["artist"], info["title"])
+                            if art_url:
+                                upload_album_art(art_url)
                 else:
                     # Update live timeline progress bar
                     push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], True)
             else:
                 if last_track_id:
-                    idle_count += 1
-                    if idle_count >= 3:
-                        print("\n[IDLE] Playback stopped. Returning to 3D Printer dashboard.")
-                        push_spotify_now("", "", 0, 0, False)
-                        last_track_id = ""
-            time.sleep(1.5)
+                    # Media paused or closed
+                    push_spotify_now("", "", 0, 0, False)
+                    last_track_id = ""
+            time.sleep(1.0)
         except KeyboardInterrupt:
             print("\nExiting Desk Sync.")
             sys.exit(0)

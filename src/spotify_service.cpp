@@ -84,7 +84,7 @@ bool spotifyRenderArtToBuffer(uint16_t* dst160) {
   JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
   if (jpeg) {
     if (jpeg->open(f, jpegDrawCb) == 1) {
-      jpeg->setPixelType(RGB565_BIG_ENDIAN); // Big-Endian for ST7735 SPI DMA (high-byte first)
+      jpeg->setPixelType(RGB565_LITTLE_ENDIAN); // Little-Endian matches LovyanGFX sprite buffer byte order
       int w = jpeg->getWidth(), h = jpeg->getHeight();
       int opt = 0, div = 1;            // 0=1/1, 2=1/2, 4=1/4, 8=1/8
       if (w > 160) { opt = JPEG_SCALE_HALF;    div = 2; }
@@ -108,6 +108,10 @@ bool spotifyRenderArtToBuffer(uint16_t* dst160) {
 // Chunked 1.5 KB buffer only - never needs a big contiguous heap block.
 static bool cacheArtFromUrl(const char* url) {
   if (!sdEnsureMounted()) return false;
+  if (strcmp(url, ART_CACHE_PATH) == 0) {
+    s_art_dirty = true;
+    return true;
+  }
   SD.remove(ART_CACHE_PATH);
   File out = SD.open(ART_CACHE_PATH, FILE_WRITE);
   if (!out) return false;
@@ -320,8 +324,11 @@ static bool refreshAccessToken() {
   }
 
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  http.addHeader("Authorization",
+                 "Basic " + b64encode(String(SPOTIFY_CLIENT_ID) + ":" +
+                                      SPOTIFY_CLIENT_SECRET));
   
-  String body = "grant_type=refresh_token&refresh_token=" + String(s_refresh_token) +
+  String body = "grant_type=refresh_token&refresh_token=" + urlEncode(s_refresh_token) +
                 "&client_id=" + String(SPOTIFY_CLIENT_ID);
   if (SPOTIFY_CLIENT_SECRET && SPOTIFY_CLIENT_SECRET[0]) {
     body += "&client_secret=" + String(SPOTIFY_CLIENT_SECRET);
@@ -340,6 +347,8 @@ static bool refreshAccessToken() {
       client.stop();
       return true;
     }
+  } else {
+    Serial.printf("[SPOTIFY] refresh token returned HTTP %d\n", code);
   }
   http.end();
   client.stop();
