@@ -30,8 +30,10 @@ static void ledcSetupCompat(int /*ch*/, uint32_t freq, int bits) {
   ledcAttachChannel(PIN_LED_B, LED_PWM_FREQ, LED_PWM_BITS, LEDC_CH_B);
 }
 static void ledcSetupBacklight(int bits) {
+#if PIN_TFT_BL >= 0
   ledcAttach(PIN_TFT_BL, 5000, bits);                       // backlight
   ledcWrite(PIN_TFT_BL, 0);
+#endif
 }
 #else
 static void ledcSetupCompat(int ch, uint32_t freq, int bits) {
@@ -45,9 +47,11 @@ static void ledcSetupCompat(int ch, uint32_t freq, int bits) {
   ledcAttachPin(PIN_LED_B, LEDC_CH_B);
 }
 static void ledcSetupBacklight(int bits) {
+#if PIN_TFT_BL >= 0
   ledcSetup(0, 5000, bits);            // ch0 = backlight
   ledcAttachPin(PIN_TFT_BL, 0);
   ledcWrite(0, 0);
+#endif
 }
 #endif
 

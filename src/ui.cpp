@@ -135,6 +135,7 @@ static uint32_t boot_start_ms = 0;
 static uint16_t* s_custom_image_buf = nullptr;
 static bool custom_image_active = false;
 static bool custom_image_rendered = false;
+static bool s_had_active_print = false;
 
 // Live Notification Overlay state
 static char notif_title[24] = {0};
@@ -883,6 +884,7 @@ static void dispatchButtons(uint8_t ev) {
   if (view == VIEW_OVERLAY) {
     if (ev == 1 || ev == 2 || ev == 3 || ev == 4 || ev == 5) {
       ui_latched_result = 0;
+      s_had_active_print = false;
       view = VIEW_HOME;
     }
     return;
@@ -891,6 +893,7 @@ static void dispatchButtons(uint8_t ev) {
   // HOME event (10): return to main dashboard
   if (ev == 10) {
     ui_latched_result = 0;
+    s_had_active_print = false;
     view = VIEW_HOME;
     reset_arm = 0;
     return;
@@ -1050,7 +1053,7 @@ uint8_t uiGetBacklight() { return bl_pct; }
 void uiSetBacklight(uint8_t pct) {
   if (pct > 100) pct = 100;
   bl_pct = pct;
-  if (PIN_TFT_BL != PIN_SD_MISO) {
+  if (PIN_TFT_BL >= 0 && PIN_TFT_BL != PIN_SD_MISO) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcWrite(PIN_TFT_BL, (uint32_t)(pct * 255 / 100));
 #else
@@ -1069,7 +1072,7 @@ static void uiTask(void* /*param*/) {
   tft.init();
   tft.setRotation(1);
   tft.setBrightness(255);
-  if (PIN_TFT_BL != PIN_SD_MISO) {
+  if (PIN_TFT_BL >= 0 && PIN_TFT_BL != PIN_SD_MISO) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcWrite(PIN_TFT_BL, 255);
 #else
@@ -1106,11 +1109,26 @@ static void uiTask(void* /*param*/) {
       startBeepPattern(2);          // reuse the double-beep alert
     }
 
+    // Track active print state: only an active print can transition to FINISH/FAILED overlay!
+    if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
+      s_had_active_print = true;
+    } else if (d.state == PST_IDLE && d.percent == 0) {
+      s_had_active_print = false;
+    }
+
     // --- latch: FINISH/FAILED -> full-screen overlay until OK ---
     // (suppressed during image mode: the pushed image owns the screen)
     if (ui_latched_result == 0 && !custom_image_active) {
-      if (d.state == PST_FINISH) { ui_latched_result = 1; view = VIEW_OVERLAY; }
-      else if (d.state == PST_FAILED) { ui_latched_result = 2; view = VIEW_OVERLAY; }
+      if (d.state == PST_FINISH && s_had_active_print && (d.percent >= 90 || d.remain_min <= 2)) {
+        ui_latched_result = 1;
+        view = VIEW_OVERLAY;
+        s_had_active_print = false;
+      }
+      else if (d.state == PST_FAILED && s_had_active_print) {
+        ui_latched_result = 2;
+        view = VIEW_OVERLAY;
+        s_had_active_print = false;
+      }
     }
 
     // --- buttons (single-fire events from peripherals task) ---

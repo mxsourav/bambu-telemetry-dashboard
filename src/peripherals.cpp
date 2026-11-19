@@ -425,21 +425,34 @@ static void peripheralsTask(void* /*param*/) {
     //   0 = AUTO-MUTE: one notification burst (~2 s) then silent
     //   1 = UNTIL-OK : FINISH loops the fanfare and FAILED/HMS loops the
     //                  siren until the user ACKs on the overlay (OK button)
+    static bool had_active_print_sound = false;
+    if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
+      had_active_print_sound = true;
+    } else if (d.state == PST_IDLE && d.percent == 0) {
+      had_active_print_sound = false;
+    }
+
     if (options_sound_on() && d.state != prev_state) {
       if (d.state == PST_FINISH) {
-        if (g_settings.siren_mode == 1) {
-          finish_bark = true;             // loop fanfare until latch cleared
-          finish_bark_last_ms = 0;
-        } else {
-          startBeepPattern(2);            // single fanfare (legacy)
+        if (had_active_print_sound && (d.percent >= 90 || d.remain_min <= 2)) {
+          had_active_print_sound = false;
+          if (g_settings.siren_mode == 1) {
+            finish_bark = true;             // loop fanfare until latch cleared
+            finish_bark_last_ms = 0;
+          } else {
+            startBeepPattern(2);            // single fanfare (legacy)
+          }
         }
       }
       else if (d.state == PST_RUNNING && prev_state != PST_RUNNING)
         startBeepPattern(1);              // single ack
       else if (d.state == PST_FAILED) {
-        siren_burst_until = (g_settings.siren_mode == 1) ? 0 : ms + 2200;
-        siren_active = true;
-        siren_start_ms = ms;
+        if (had_active_print_sound) {
+          had_active_print_sound = false;
+          siren_burst_until = (g_settings.siren_mode == 1) ? 0 : ms + 2200;
+          siren_active = true;
+          siren_start_ms = ms;
+        }
       }
       prev_state = d.state;
     }

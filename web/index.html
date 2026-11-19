@@ -99,10 +99,10 @@ body{
 .dpad-card{
   position:relative;
   width:100%;
-  max-width:440px;
-  background:#0c0c0e;
+  max-width:431px;
+  background:#0c0d10;
   border-radius:18px;
-  padding:16px 14px 20px 14px;
+  padding:14px 14px 20px 14px;
   box-shadow:0 10px 30px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.05);
   border:1px solid #181920;
   border-bottom:2px solid #eab308;
@@ -110,32 +110,32 @@ body{
 }
 .dpad-track-v{
   position:absolute;
-  top:38px;
+  top:28px;
   bottom:38px;
   left:50%;
   width:6px;
   transform:translateX(-50%);
-  background:#17181e;
+  background:#1a1c24;
   border-radius:3px;
   z-index:1;
 }
 .dpad-track-h{
   position:absolute;
-  left:18%;
-  right:18%;
+  left:28px;
+  right:28px;
   top:50%;
   height:6px;
   transform:translateY(-50%);
-  background:#17181e;
+  background:#1a1c24;
   border-radius:3px;
   z-index:1;
 }
 .dpad-grid{
   position:relative;
   display:grid;
-  grid-template-columns:1fr 1.15fr 1fr;
-  grid-template-rows:50px 50px 50px;
-  gap:12px 14px;
+  grid-template-columns:1fr 1fr 1fr;
+  grid-template-rows:42px 42px 42px;
+  gap:22px 14px;
   align-items:center;
   justify-items:center;
   z-index:2;
@@ -146,10 +146,10 @@ body{
   width:100%;
   height:100%;
   background:linear-gradient(180deg, #1b1c23 0%, #121318 100%);
-  border:1px solid rgba(255,255,255,0.05);
-  border-top:1px solid rgba(255,255,255,0.12);
-  border-radius:12px;
-  box-shadow:0 5px 12px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.06);
+  border-top:1px solid rgba(255,255,255,0.13);
+  border-radius:10px;
+  box-shadow:0 4px 10px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.08);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -162,8 +162,8 @@ body{
   background:linear-gradient(180deg, #22232c 0%, #15161d 100%);
 }
 .dpad-key:active{
-  transform:scale(0.95);
-  box-shadow:0 2px 6px rgba(0,0,0,0.8),inset 0 2px 4px rgba(0,0,0,0.6);
+  transform:scale(0.96);
+  box-shadow:0 2px 4px rgba(0,0,0,0.8),inset 0 2px 4px rgba(0,0,0,0.6);
   background:#0f1014;
 }
 .dpad-key-up{grid-column:2;grid-row:1;}
@@ -171,7 +171,7 @@ body{
 .dpad-key-ok{grid-column:2;grid-row:2;}
 .dpad-key-right{grid-column:3;grid-row:2;}
 .dpad-key-down{grid-column:2;grid-row:3;}
-.dpad-key-back{grid-column:3;grid-row:3;justify-self:start;width:78px;}
+.dpad-key-back{grid-column:3;grid-row:3;justify-self:start;width:80px;}
 
 .nav-chevron{
   width:18px;
@@ -734,7 +734,13 @@ async function testAndSaveDeviceIp(){
 
   const testUrl = (window.location.hostname === val) ? '/api/status' : 'http://' + val + '/api/status';
   const c = new AbortController();
-  const to = setTimeout(() => c.abort(), 7000);
+  const to = setTimeout(() => c.abort(), 4000);
+
+  // Update direct link targets
+  const db = document.getElementById('ipModalDirectBtn');
+  const dl = document.getElementById('ipModalDirectLink');
+  if(dl) dl.href = 'http://' + val + '/';
+  document.querySelectorAll('.bannerDirectIp').forEach(el => el.innerText = val);
 
   try {
     const res = await fetch(testUrl, { signal: c.signal });
@@ -748,6 +754,7 @@ async function testAndSaveDeviceIp(){
     updateIpUrls();
     if(st) { st.style.color = "var(--green)"; st.innerText = "✓ Connected! (RSSI: " + (d.wifi_rssi||"-") + " dBm, Heap: " + Math.round((d.heap_free||0)/1024) + " KB)"; }
     if(btn) { btn.disabled = false; btn.innerText = "✓ Connected"; }
+    if(db) db.style.display = 'none';
     pollStatus();
     loadFs('/');
     setTimeout(closeIpModal, 600);
@@ -756,10 +763,9 @@ async function testAndSaveDeviceIp(){
     document.getElementById('cDot').className = 'dot offline';
     let errMsg = "Could not reach device at " + val + ". Make sure you are on the same Wi-Fi network.";
     if(window.location.protocol === 'https:') {
-      errMsg = "Browser blocked HTTP call from HTTPS. Open http://" + val + "/ directly in your browser address bar.";
-      const db = document.getElementById('ipModalDirectBtn');
-      if(db) db.style.display = 'block';
+      errMsg = "Browser blocked HTTP call from HTTPS. Click the direct link below:";
     }
+    if(db) db.style.display = 'block';
     if(st) { st.style.color = "#EF4444"; st.innerText = "❌ " + errMsg; }
     if(btn) { btn.disabled = false; btn.innerText = "Retry Connection"; }
   }

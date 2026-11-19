@@ -81,7 +81,12 @@ static void parseTelemetry(const char* payload, uint32_t len) {
 
   JsonObject print_ = doc["print"];
   if (!print_.isNull()) {
-    d.state       = mapGcodeState(print_["gcode_state"] | (const char*)nullptr);
+    if (!print_["gcode_state"].isNull()) {
+      const char* gs = print_["gcode_state"];
+      if (gs && strlen(gs) > 0) {
+        d.state = mapGcodeState(gs);
+      }
+    }
     d.percent     = print_["mc_percent"] | d.percent;
     d.nozzle_temp = print_["nozzle_temper"] | d.nozzle_temp;
     d.nozzle_target = print_["nozzle_target"] | d.nozzle_target;
