@@ -27,6 +27,9 @@ void spotifySetCoverArt(const uint16_t* pixels160x128);
 bool spotifyHasCoverArt();
 const uint16_t* spotifyGetCoverArt();
 uint8_t* spotifyGetCoverArtBuffer();
+void spotifySetCoverArtSize(size_t len);
+size_t spotifyGetCoverArtSize();
+const uint8_t* spotifyGetCoverArtData(size_t& out_len);
 void spotifySetCoverArtValid(bool valid);
 void spotifyClearCoverArt();
 
@@ -40,6 +43,7 @@ bool spotifyTestCoverArt(const char* url);
 
 // ---- cover art render pipeline (SD-cached, zero big heap blocks) ----
 bool spotifyArtDirty();                  // new art staged, needs UI render
+void spotifySetArtDirty();
 void spotifyClearArtDirty();
 // Decode /art.jpg into a 160-stride RGB565 framebuffer (UI task context)
 bool spotifyRenderArtToBuffer(uint16_t* dst160);

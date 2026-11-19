@@ -24,6 +24,7 @@ from PIL import Image, ImageOps, ImageFilter
 DEVICE_IP = "192.168.0.154"
 SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
 SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
+SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
 FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
 
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
@@ -98,12 +99,28 @@ def upload_album_art(source_path_or_url):
 
         if os.path.exists(jpeg_to_upload) and os.path.getsize(jpeg_to_upload) > 500:
             with open(jpeg_to_upload, "rb") as f:
-                files = {"file": ("/art.jpg", f, "image/jpeg")}
+                jpeg_bytes = f.read()
+
+            # 1. Primary: Upload to /api/spotify/cover (RAM cover buffer, zero SD dependency)
+            try:
+                files = {"file": ("cover.jpg", jpeg_bytes, "image/jpeg")}
+                r = requests.post(SPOTIFY_COVER_URL, files=files, timeout=4)
+                if r.status_code == 200:
+                    print("  [ART] Ultra-HD Album Art uploaded to Desk Monitor (RAM)!")
+                    return True
+            except Exception:
+                pass
+
+            # 2. Secondary fallback: Upload to /api/fs/upload?path=/art.jpg
+            try:
+                files = {"file": ("/art.jpg", jpeg_bytes, "image/jpeg")}
                 r = requests.post(FS_UPLOAD_URL, files=files, timeout=4)
                 if r.status_code == 200:
                     requests.get(SPOTIFY_ART_TRIGGER, timeout=3)
-                    print("  [ART] Ultra-HD Album Art uploaded to Desk Monitor!")
+                    print("  [ART] Ultra-HD Album Art uploaded to Desk Monitor (FS)!")
                     return True
+            except Exception as e:
+                print(f"  [FS ART ERROR] {e}")
     except Exception as e:
         print(f"  [ART ERROR] {e}")
     return False
@@ -214,7 +231,12 @@ def main():
 
                         # Fallback to local thumbnail if online fetch failed
                         if not art_sent and os.path.exists(THUMB_RAW_PATH):
-                            upload_album_art(THUMB_RAW_PATH)
+                            art_sent = upload_album_art(THUMB_RAW_PATH)
+                        
+                        if art_sent:
+                            last_art_track = track_id
+                        else:
+                            last_art_track = ""  # Allow retry on next loop if upload had a temporary glitch
                 else:
                     # Update live timeline progress bar
                     push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], info["is_playing"])

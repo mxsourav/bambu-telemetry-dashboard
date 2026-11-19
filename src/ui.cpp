@@ -754,7 +754,23 @@ static void drawSpotifyFrame(uint32_t ms) {
     s_last_art_check_ms = ms;
     spotifyClearArtDirty();
     s_art_in_frame = false;
-    if (sdEnsureMounted() && SD.exists("/art.jpg")) {
+
+    // 1. Primary: RAM Cover buffer (instant, zero SPI SD bus contention or ticking)
+    if (spotifyHasCoverArt()) {
+      size_t art_len = 0;
+      const uint8_t* art_data = spotifyGetCoverArtData(art_len);
+      if (art_data && art_len > 0) {
+        if (art_len >= 4 && art_data[0] == 0xFF && art_data[1] == 0xD8) {
+          s_art_in_frame = sprite.drawJpg(art_data, art_len, 0, 0, W, H);
+        } else if (art_len >= W * H * 2) {
+          sprite.pushImage(0, 0, W, H, (const uint16_t*)art_data);
+          s_art_in_frame = true;
+        }
+      }
+    }
+
+    // 2. Secondary fallback: SD card /art.jpg (if mounted)
+    if (!s_art_in_frame && sdEnsureMounted() && SD.exists("/art.jpg")) {
       File f = SD.open("/art.jpg", FILE_READ);
       if (f) {
         s_art_in_frame = sprite.drawJpg(&f, 0, 0, W, H);
@@ -855,24 +871,32 @@ static void drawSpotifyFrame(uint32_t ms) {
   sprite.drawString(titleBuf, cardX + 8, cardY + 2);
 
   // 6. Artist & Time (Row 2)
-  char artistBuf[24];
-  const char* rawArtist = g_spotify.artist[0] ? g_spotify.artist : "Spotify";
-  strncpy(artistBuf, rawArtist, sizeof(artistBuf) - 1);
-  artistBuf[sizeof(artistBuf) - 1] = 0;
-  if (strlen(artistBuf) > 12) {
-    artistBuf[10] = '.'; artistBuf[11] = '.'; artistBuf[12] = 0;
-  }
-  sprite.setFont(&fonts::Font0);
-  sprite.setTextColor(COL_CYAN);
-  sprite.drawString(artistBuf, cardX + 8, cardY + 17);
-
-  // Time text: Elapsed / Total
   uint32_t prog = g_spotify.progress_ms;
   uint32_t dur = g_spotify.duration_ms > 0 ? g_spotify.duration_ms : 1;
   char timeBuf[18];
   snprintf(timeBuf, sizeof(timeBuf), "%d:%02d / %d:%02d",
            (prog / 1000) / 60, (prog / 1000) % 60,
            (dur / 1000) / 60, (dur / 1000) % 60);
+
+  sprite.setFont(&fonts::Font0);
+  int timeWidth = sprite.textWidth(timeBuf);
+  int maxArtistW = (cardW - 18) - timeWidth;
+  if (maxArtistW < 24) maxArtistW = 24;
+
+  char artistBuf[32];
+  const char* rawArtist = g_spotify.artist[0] ? g_spotify.artist : "Spotify";
+  strncpy(artistBuf, rawArtist, sizeof(artistBuf) - 1);
+  artistBuf[sizeof(artistBuf) - 1] = 0;
+  while (strlen(artistBuf) > 2 && sprite.textWidth(artistBuf) > maxArtistW) {
+    int l = strlen(artistBuf);
+    artistBuf[l - 1] = 0;
+    if (l >= 4) { artistBuf[l - 3] = '.'; artistBuf[l - 2] = '.'; }
+  }
+
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextColor(COL_CYAN);
+  sprite.drawString(artistBuf, cardX + 8, cardY + 17);
+
   sprite.setTextDatum(textdatum_t::top_right);
   sprite.setTextColor(0xAD55);
   sprite.drawString(timeBuf, cardX + cardW - 8, cardY + 17);

@@ -376,34 +376,58 @@ static void handleFsDelete() {
 }
 
 static bool upload_success = false;
+static size_t s_cover_upload_len = 0;
 
 static void handleFsUploadLoop() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     upload_success = false;
-    if (!sdEnsureMounted()) {
-      Serial.println(F("[FS] Upload failed: SD card not mounted"));
-      return;
-    }
     uploadTargetPath = server.hasArg("path") ? server.arg("path") : ("/" + upload.filename);
     if (!uploadTargetPath.startsWith("/")) uploadTargetPath = "/" + uploadTargetPath;
-    if (SD.exists(uploadTargetPath)) SD.remove(uploadTargetPath);
-    uploadFile = SD.open(uploadTargetPath, FILE_WRITE);
-    if (!uploadFile) {
-      Serial.printf("[FS] Failed to open %s for write\n", uploadTargetPath.c_str());
-      return;
+
+    if (sdEnsureMounted()) {
+      if (SD.exists(uploadTargetPath)) SD.remove(uploadTargetPath);
+      uploadFile = SD.open(uploadTargetPath, FILE_WRITE);
+      if (uploadFile) {
+        upload_success = true;
+        Serial.printf("[FS] Upload start: %s\n", uploadTargetPath.c_str());
+      }
     }
-    upload_success = true;
-    Serial.printf("[FS] Upload start: %s\n", uploadTargetPath.c_str());
+
+    // Allow /art.jpg upload to stream into RAM cover buffer even if SD card is unmounted
+    if (uploadTargetPath == "/art.jpg") {
+      s_cover_upload_len = 0;
+      spotifySetCoverArtValid(false);
+      upload_success = true;
+    }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (uploadFile) {
       size_t written = uploadFile.write(upload.buf, upload.currentSize);
       if (written != upload.currentSize) upload_success = false;
     }
+    if (uploadTargetPath == "/art.jpg") {
+      uint8_t* dst = spotifyGetCoverArtBuffer();
+      const size_t targetBytes = 160 * 128 * 2;
+      if (dst && s_cover_upload_len < targetBytes) {
+        size_t copyLen = upload.currentSize;
+        if (s_cover_upload_len + copyLen > targetBytes) {
+          copyLen = targetBytes - s_cover_upload_len;
+        }
+        memcpy(dst + s_cover_upload_len, upload.buf, copyLen);
+        s_cover_upload_len += copyLen;
+      }
+    }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) {
       uploadFile.close();
       Serial.printf("[FS] Upload done: %u bytes\n", upload.totalSize);
+    }
+    if (uploadTargetPath == "/art.jpg" && s_cover_upload_len > 0) {
+      spotifySetCoverArtSize(s_cover_upload_len);
+      spotifySetCoverArtValid(true);
+      spotifySetArtDirty();
+      upload_success = true;
+      Serial.printf("[FS] /art.jpg saved into RAM buffer: %u bytes (dirty set)\n", (unsigned int)s_cover_upload_len);
     }
   }
 }
@@ -655,7 +679,7 @@ static void handleSpotifyNow() {
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
-static size_t  s_cover_upload_len = 0;
+
 
 static void handleSpotifyCoverLoop() {
   HTTPUpload& upload = server.upload();
@@ -676,9 +700,20 @@ static void handleSpotifyCoverLoop() {
       s_cover_upload_len += copyLen;
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (s_cover_upload_len == targetBytes) {
+    if (s_cover_upload_len > 0) {
+      spotifySetCoverArtSize(s_cover_upload_len);
       spotifySetCoverArtValid(true);
-      Serial.println(F("[SPOTIFY] Fullscreen 160x128 cover art received via upload"));
+      spotifySetArtDirty();
+      Serial.printf("[SPOTIFY] Cover art received: %u bytes (dirty set)\n", (unsigned int)s_cover_upload_len);
+
+      if (sdEnsureMounted()) {
+        File f = SD.open("/art.jpg", FILE_WRITE);
+        if (f) {
+          f.write(dst, s_cover_upload_len);
+          f.close();
+          Serial.println(F("[SPOTIFY] Cached cover art to SD /art.jpg"));
+        }
+      }
     }
   }
 }
@@ -687,14 +722,21 @@ static void handleSpotifyCoverDone() {
   sendCorsHeaders();
   server.sendHeader("Connection", "close");
   const size_t targetBytes = 160 * 128 * 2;
-  if (s_cover_upload_len == targetBytes) {
+  if (s_cover_upload_len > 0) {
     server.send(200, "application/json", "{\"status\":\"ok\"}");
     return;
   }
   if (server.hasArg("plain")) {
     String body = server.arg("plain");
-    if (body.length() >= targetBytes) {
-      spotifySetCoverArt((const uint16_t*)body.c_str());
+    if (body.length() > 0) {
+      uint8_t* dst = spotifyGetCoverArtBuffer();
+      if (dst) {
+        size_t cpy = body.length() > targetBytes ? targetBytes : body.length();
+        memcpy(dst, body.c_str(), cpy);
+        spotifySetCoverArtSize(cpy);
+        spotifySetCoverArtValid(true);
+        spotifySetArtDirty();
+      }
     }
   }
   server.send(200, "application/json", "{\"status\":\"ok\"}");

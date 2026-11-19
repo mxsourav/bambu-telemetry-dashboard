@@ -71,6 +71,7 @@ static int jpegDrawCb(JPEGDRAW* p) {
 }
 
 bool spotifyArtDirty() { return s_art_dirty; }
+void spotifySetArtDirty() { s_art_dirty = true; }
 void spotifyClearArtDirty() { s_art_dirty = false; }
 
 // Decode /art.jpg (SD) into a caller-supplied 160-stride framebuffer.
@@ -169,10 +170,14 @@ static bool cacheArtFromUrl(const char* url) {
   return ok;
 }
 
+static size_t s_cover_art_size = 0;
+
 void spotifySetCoverArt(const uint16_t* pixels160x128) {
   if (pixels160x128) {
     memcpy(uiGetCustomImageBuffer(), pixels160x128, 160 * 128 * 2);
+    s_cover_art_size = 160 * 128 * 2;
     s_has_cover_art = true;
+    s_art_dirty = true;
   }
 }
 
@@ -183,12 +188,27 @@ uint8_t* spotifyGetCoverArtBuffer() {
   return (uint8_t*)uiGetCustomImageBuffer();
 }
 
+void spotifySetCoverArtSize(size_t len) {
+  s_cover_art_size = len;
+}
+
+size_t spotifyGetCoverArtSize() {
+  return s_cover_art_size;
+}
+
+const uint8_t* spotifyGetCoverArtData(size_t& out_len) {
+  out_len = s_cover_art_size;
+  return (const uint8_t*)uiGetCustomImageBuffer();
+}
+
 void spotifySetCoverArtValid(bool valid) {
   s_has_cover_art = valid;
+  if (!valid) s_cover_art_size = 0;
 }
 
 void spotifyClearCoverArt() {
   s_has_cover_art = false;
+  s_cover_art_size = 0;
 }
 
 void spotifyServiceInit() {
