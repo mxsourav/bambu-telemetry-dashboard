@@ -737,8 +737,15 @@ static void drawTimerFrame(uint32_t ms) {
 }
 
 static bool s_art_in_frame = false;   // sprite buffer currently holds art
+static uint16_t s_art_card_bg[152 * 34]; // raw background pixels preserved under liquid glass card
 
 static void drawSpotifyFrame(uint32_t ms) {
+  const int cardX = 4;
+  const int cardY = 90;
+  const int cardW = 152;
+  const int cardH = 34;
+  const int cardR = 9;
+
   // 1. Cover Artwork (Full 160x128 screen)
   if (spotifyArtDirty() || !s_art_in_frame) {
     spotifyClearArtDirty();
@@ -750,47 +757,90 @@ static void drawSpotifyFrame(uint32_t ms) {
         f.close();
       }
     }
+    // If artwork successfully loaded, save the clean background slice under the card
+    if (s_art_in_frame) {
+      uint16_t* fb = (uint16_t*)sprite.getBuffer();
+      if (fb) {
+        for (int y = 0; y < cardH; y++) {
+          memcpy(&s_art_card_bg[y * cardW], &fb[(cardY + y) * W + cardX], cardW * sizeof(uint16_t));
+        }
+      }
+    }
   }
+
+  uint16_t* fb = (uint16_t*)sprite.getBuffer();
+
   if (!s_art_in_frame) {
     sprite.fillSprite(COL_BLACK);
     // Stylized vinyl record in upper center
-    int cx = 80, cy = 34;
-    sprite.fillCircle(cx, cy, 30, 0x1082);
-    sprite.drawCircle(cx, cy, 24, 0x2129);
-    sprite.drawCircle(cx, cy, 16, 0x2965);
-    sprite.drawCircle(cx, cy, 10, 0x318A);
-    sprite.fillCircle(cx, cy, 6, COL_SPOTIFY_GREEN);
-    sprite.fillCircle(cx, cy, 2, COL_BLACK);
+    int cx = 80, cy = 44;
+    sprite.fillCircle(cx, cy, 34, 0x1082);
+    sprite.drawCircle(cx, cy, 28, 0x2129);
+    sprite.drawCircle(cx, cy, 20, 0x2965);
+    sprite.drawCircle(cx, cy, 12, 0x318A);
+    sprite.fillCircle(cx, cy, 8, COL_SPOTIFY_GREEN);
+    sprite.fillCircle(cx, cy, 3, COL_BLACK);
+    // Solid card if no art
+    sprite.fillRoundRect(cardX, cardY, cardW, cardH, cardR, 0x0841);
+  } else if (fb) {
+    // 2. Translucent Liquid Glass Effect:
+    // Restore clean background under card, then blend with glass tint
+    for (int y = 0; y < cardH; y++) {
+      int fb_row = (cardY + y) * W + cardX;
+      int bg_row = y * cardW;
+      for (int x = 0; x < cardW; x++) {
+        // Mask out 4 rounded corners of radius cardR (9px)
+        int dx = 0, dy = 0;
+        if (x < cardR && y < cardR) {
+          dx = cardR - x; dy = cardR - y;
+        } else if (x >= cardW - cardR && y < cardR) {
+          dx = x - (cardW - 1 - cardR); dy = cardR - y;
+        } else if (x < cardR && y >= cardH - cardR) {
+          dx = cardR - x; dy = y - (cardH - 1 - cardR);
+        } else if (x >= cardW - cardR && y >= cardH - cardR) {
+          dx = x - (cardW - 1 - cardR); dy = y - (cardH - 1 - cardR);
+        }
+        if (dx * dx + dy * dy > cardR * cardR) continue;
+
+        uint16_t raw = s_art_card_bg[bg_row + x];
+        // Convert swap565_t (big-endian) to native 16-bit
+        uint16_t c = (raw << 8) | (raw >> 8);
+        uint16_t r = (c >> 11) & 0x1F;
+        uint16_t g = (c >> 5)  & 0x3F;
+        uint16_t b =  c        & 0x1F;
+
+        // Translucent liquid glass: 30% background + elegant dark slate tint
+        r = (r * 3) / 10 + 1;
+        g = (g * 3) / 10 + 2;
+        b = (b * 3) / 10 + 3;
+
+        uint16_t tinted = (r << 11) | (g << 5) | b;
+        // Store back in sprite buffer as swap565_t
+        fb[fb_row + x] = (tinted << 8) | (tinted >> 8);
+      }
+    }
   }
 
-  // 2. High-contrast Glassmorphic Scrim Card across bottom (y=66..124)
-  const int cardX = 4;
-  const int cardY = 66;
-  const int cardW = 152;
-  const int cardH = 58;
+  // 3. Subtle Liquid Glass Border (no harsh white specular reflection)
+  sprite.drawRoundRect(cardX, cardY, cardW, cardH, cardR, 0x2988); // subtle cyan-gray glass edge
 
-  // Solid dark obsidian backing for 100% legibility over any bright/colorful artwork
-  sprite.fillRoundRect(cardX, cardY, cardW, cardH, 7, 0x0841);
-  sprite.drawRoundRect(cardX, cardY, cardW, cardH, 7, 0x2145);
-
-  // Subtle top highlight border for glass effect
-  sprite.drawFastHLine(cardX + 8, cardY, cardW - 16, 0x39E7);
-
-  // Animated Equalizer bars (or Paused indicator) in card top-right
+  // 4. Equalizer bars in card top-right
+  int eqX = cardX + cardW - 18;
+  int eqY = cardY + 10;
   if (g_spotify.is_playing) {
     for (int b = 0; b < 3; b++) {
-      int h = 3 + (int)(abs(sin((ms / 130.0) + b * 1.3)) * 8);
-      sprite.fillRect(cardX + cardW - 20 + b * 5, cardY + 18 - h, 3, h, COL_SPOTIFY_GREEN);
+      int h = 2 + (int)(abs(sin((ms / 130.0) + b * 1.3)) * 6);
+      sprite.fillRect(eqX + b * 4, eqY - h, 2, h, COL_SPOTIFY_GREEN);
     }
   } else {
-    sprite.fillRect(cardX + cardW - 16, cardY + 9, 2, 7, COL_MUTED);
-    sprite.fillRect(cardX + cardW - 12, cardY + 9, 2, 7, COL_MUTED);
+    sprite.fillRect(eqX + 2, eqY - 6, 2, 6, COL_MUTED);
+    sprite.fillRect(eqX + 6, eqY - 6, 2, 6, COL_MUTED);
   }
 
-  // 3. Track Title & Artist
+  // 5. Track Title
   sprite.setTextDatum(textdatum_t::top_left);
   sprite.setFont(&fonts::Font2);
-  sprite.setTextColor(COL_TXT, 0x0841);
+  sprite.setTextColor(COL_TXT);
   char titleBuf[24];
   const char* rawTitle = g_spotify.title[0] ? g_spotify.title : "No Track";
   strncpy(titleBuf, rawTitle, sizeof(titleBuf) - 1);
@@ -798,47 +848,43 @@ static void drawSpotifyFrame(uint32_t ms) {
   if (strlen(titleBuf) > 13) {
     titleBuf[11] = '.'; titleBuf[12] = '.'; titleBuf[13] = 0;
   }
-  sprite.drawString(titleBuf, cardX + 8, cardY + 6);
+  sprite.drawString(titleBuf, cardX + 8, cardY + 2);
 
-  // Artist
-  char artistBuf[28];
+  // 6. Artist & Time (Row 2)
+  char artistBuf[24];
   const char* rawArtist = g_spotify.artist[0] ? g_spotify.artist : "Spotify";
   strncpy(artistBuf, rawArtist, sizeof(artistBuf) - 1);
   artistBuf[sizeof(artistBuf) - 1] = 0;
-  if (strlen(artistBuf) > 17) {
-    artistBuf[15] = '.'; artistBuf[16] = '.'; artistBuf[17] = 0;
+  if (strlen(artistBuf) > 12) {
+    artistBuf[10] = '.'; artistBuf[11] = '.'; artistBuf[12] = 0;
   }
   sprite.setFont(&fonts::Font0);
-  sprite.setTextColor(COL_CYAN, 0x0841);
-  sprite.drawString(artistBuf, cardX + 8, cardY + 23);
+  sprite.setTextColor(COL_CYAN);
+  sprite.drawString(artistBuf, cardX + 8, cardY + 17);
 
-  // 4. Sleek Progress Bar with Track Glow
+  // Time text: Elapsed / Total
   uint32_t prog = g_spotify.progress_ms;
   uint32_t dur = g_spotify.duration_ms > 0 ? g_spotify.duration_ms : 1;
+  char timeBuf[18];
+  snprintf(timeBuf, sizeof(timeBuf), "%d:%02d / %d:%02d",
+           (prog / 1000) / 60, (prog / 1000) % 60,
+           (dur / 1000) / 60, (dur / 1000) % 60);
+  sprite.setTextDatum(textdatum_t::top_right);
+  sprite.setTextColor(0xAD55);
+  sprite.drawString(timeBuf, cardX + cardW - 8, cardY + 17);
+
+  // 7. Sleek Progress Bar
   float pct = (float)prog / (float)dur;
   if (pct > 1.0f) pct = 1.0f;
   if (pct < 0.0f) pct = 0.0f;
 
-  int bx = cardX + 8, by = cardY + 36, bw = cardW - 16, bh = 3;
+  int bx = cardX + 8, by = cardY + 27, bw = cardW - 16, bh = 2;
   sprite.fillRoundRect(bx, by, bw, bh, 1, 0x2129); // track background
   int fillW = (int)(bw * pct);
   if (fillW > 0) {
     sprite.fillRoundRect(bx, by, fillW, bh, 1, COL_SPOTIFY_GREEN);
   }
-  sprite.fillCircle(bx + fillW, by + bh / 2, 3, COL_TXT); // glowing white knob
-
-  // 5. Time text: Elapsed / Total
-  char curTime[12], totalTime[12];
-  snprintf(curTime, sizeof(curTime), "%d:%02d", (prog / 1000) / 60, (prog / 1000) % 60);
-  snprintf(totalTime, sizeof(totalTime), "%d:%02d", (dur / 1000) / 60, (dur / 1000) % 60);
-
-  sprite.setFont(&fonts::Font0);
-  sprite.setTextDatum(textdatum_t::top_left);
-  sprite.setTextColor(0xAD55, 0x0841);
-  sprite.drawString(curTime, bx, cardY + 44);
-
-  sprite.setTextDatum(textdatum_t::top_right);
-  sprite.drawString(totalTime, bx + bw, cardY + 44);
+  sprite.fillCircle(bx + fillW, by + 1, 2, COL_TXT); // glowing white knob
 }
 
 static void drawSpotifyLyricsFrame(uint32_t ms) {

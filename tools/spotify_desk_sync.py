@@ -17,7 +17,8 @@ import sys
 import json
 import urllib.request
 import urllib.parse
-from PIL import Image, ImageOps
+import re
+from PIL import Image, ImageOps, ImageFilter
 
 DEVICE_IP = "192.168.0.154"
 SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
@@ -31,8 +32,9 @@ THUMB_JPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "curr
 def fetch_itunes_artwork(artist, title):
     """Fallback: Fetches high quality album artwork for artist and title."""
     try:
-        clean_artist = artist.split(",")[0].split("&")[0].strip()
-        query = urllib.parse.quote(f"{clean_artist} {title}")
+        clean_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title).replace('|', ' ').strip()
+        clean_artist = artist.split(',')[0].split('&')[0].replace('Music', '').strip()
+        query = urllib.parse.quote(f"{clean_artist} {clean_title}".strip())
         url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -40,7 +42,23 @@ def fetch_itunes_artwork(artist, title):
             if data.get("resultCount", 0) > 0:
                 art = data["results"][0].get("artworkUrl100", "")
                 if art:
-                    return art.replace("100x100bb.jpg", "300x300bb.jpg")
+                    return art.replace("100x100bb.jpg", "600x600bb.jpg")
+    except Exception:
+        pass
+    return None
+
+def fetch_youtube_hd_thumbnail(query):
+    """Fetches high-res (480x360 or 1280x720) YouTube thumbnail for music videos."""
+    try:
+        clean = re.sub(r'[\(\[\{].*?[\)\]\}]', '', query).replace('|', ' ').strip()
+        url = 'https://www.youtube.com/results?search_query=' + urllib.parse.quote(clean)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+        m = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+        if m:
+            vid = m.group(1)
+            return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
     except Exception:
         pass
     return None
@@ -55,13 +73,17 @@ def upload_album_art(source_path_or_url):
                 img_data = response.read()
             from io import BytesIO
             im = Image.open(BytesIO(img_data)).convert("RGB")
+            # If YouTube 480x360 hqdefault, crop the 45px black letterbox bars
+            if im.size == (480, 360):
+                im = im.crop((0, 45, 480, 315))
             im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
-            im.save(jpeg_to_upload, "JPEG", quality=90)
+            im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=120, threshold=2))
+            im.save(jpeg_to_upload, "JPEG", quality=95)
         elif source_path_or_url == THUMB_RAW_PATH or os.path.exists(source_path_or_url):
-            # Convert raw thumbnail (often PNG) to JPEG and fit 160x128
             im = Image.open(source_path_or_url).convert("RGB")
             im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
-            im.save(jpeg_to_upload, "JPEG", quality=90)
+            im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=120, threshold=2))
+            im.save(jpeg_to_upload, "JPEG", quality=95)
         else:
             return False
 
@@ -71,7 +93,7 @@ def upload_album_art(source_path_or_url):
                 r = requests.post(FS_UPLOAD_URL, files=files, timeout=4)
                 if r.status_code == 200:
                     requests.get(SPOTIFY_ART_TRIGGER, timeout=3)
-                    print("  [ART] High-Res Album Art uploaded to Desk Monitor!")
+                    print("  [ART] Ultra-HD Album Art uploaded to Desk Monitor!")
                     return True
     except Exception as e:
         print(f"  [ART ERROR] {e}")
@@ -158,12 +180,32 @@ def main():
                     if track_id != last_art_track:
                         last_art_track = track_id
                         art_sent = False
+                        
+                        # Check if local thumbnail is low-res (e.g. YouTube in browser gives only 150x83)
+                        is_low_res = False
                         if info["has_thumb"] and os.path.exists(THUMB_RAW_PATH):
+                            try:
+                                with Image.open(THUMB_RAW_PATH) as test_im:
+                                    if test_im.size[0] < 250:
+                                        is_low_res = True
+                            except Exception:
+                                is_low_res = True
+
+                        # If we have a local high-res thumb (Spotify desktop gives 300x300), use it
+                        if not is_low_res and info["has_thumb"] and os.path.exists(THUMB_RAW_PATH):
                             art_sent = upload_album_art(THUMB_RAW_PATH)
+
+                        # If low-res or no thumb, fetch HD artwork from iTunes or YouTube
                         if not art_sent:
                             art_url = fetch_itunes_artwork(info["artist"], info["title"])
+                            if not art_url:
+                                art_url = fetch_youtube_hd_thumbnail(f"{info['title']} {info['artist']}")
                             if art_url:
-                                upload_album_art(art_url)
+                                art_sent = upload_album_art(art_url)
+
+                        # Fallback to local thumbnail if online fetch failed
+                        if not art_sent and os.path.exists(THUMB_RAW_PATH):
+                            upload_album_art(THUMB_RAW_PATH)
                 else:
                     # Update live timeline progress bar
                     push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], info["is_playing"])
