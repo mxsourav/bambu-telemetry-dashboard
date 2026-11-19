@@ -19,7 +19,35 @@ bool network_ever_connected = false;   // set true after first MQTT connect
 // the HTTP upload. WiFi stays connected. Any button press on the device
 // resumes MQTT (immediate reconnect).
 static volatile bool s_mqtt_paused = false;
+static volatile bool s_network_enabled = true; // default true on boot (Printer Mode)
 static uint32_t s_mqtt_last_attempt = 0;   // shared with mqttTask
+
+void networkSetEnabled(bool enabled) {
+  s_network_enabled = enabled;
+  if (!enabled) {
+    if (mqtt.connected()) {
+      mqtt.disconnect();
+    }
+    tlsClient.stop();
+    TelemetryData d;
+    telemetryRead(d);
+    d.state = PST_DISCONNECTED;
+    telemetryWrite(d);
+    Serial.println(F("[MQTT] networkSetEnabled(false): TLS stopped, heap freed"));
+  } else {
+    s_mqtt_paused = false;
+    s_mqtt_last_attempt = 0; // reconnect on the very next loop
+    TelemetryData d;
+    telemetryRead(d);
+    d.last_update_ms = millis(); // give printer fresh window on mode switch
+    telemetryWrite(d);
+    Serial.println(F("[MQTT] networkSetEnabled(true): starting reconnect"));
+  }
+}
+
+bool networkIsEnabled() {
+  return s_network_enabled;
+}
 
 void mqttPause() {
   if (s_mqtt_paused) return;
@@ -172,6 +200,10 @@ static void connectMQTT() {
     const char* pushall_cmd = "{\"pushing\":{\"sequence_id\":\"1\",\"command\":\"pushall\"}}";
     mqtt.publish(req_topic, pushall_cmd);
     Serial.println(F("[MQTT] sent pushall command to printer"));
+    TelemetryData d;
+    telemetryRead(d);
+    d.last_update_ms = millis(); // give printer fresh window to respond
+    telemetryWrite(d);
   } else {
     Serial.printf("[MQTT] connect failed, rc=%d\n", mqtt.state());
     tlsClient.stop(); // CRITICAL: Release lwIP socket descriptor & free SSL context!
@@ -224,10 +256,24 @@ static void mqttTask(void* /*param*/) {
       Serial.println(F("[NTP] configured (IST)"));
     }
 
+    // --- Check if MQTT is enabled (Printer Mode vs Spotify Mode) ---
+    if (!s_network_enabled) {
+      if (mqtt.connected()) {
+        mqtt.disconnect();
+        tlsClient.stop();
+        TelemetryData d;
+        telemetryRead(d);
+        d.state = PST_DISCONNECTED;
+        telemetryWrite(d);
+      }
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
+
     // --- MQTT (re)connection ---
     if (s_mqtt_paused) {
       // image mode: WiFi stays up, MQTT stays down, no retry churn
-      vTaskDelay(pdMS_TO_TICKS(200));
+      vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
     if (!mqtt.connected()) {
@@ -237,12 +283,12 @@ static void mqttTask(void* /*param*/) {
         d.state = PST_DISCONNECTED;
         telemetryWrite(d);
       }
-      uint32_t retry_interval = network_ever_connected ? 4000 : 5000;
+      uint32_t retry_interval = network_ever_connected ? 3000 : 4000;
       if (millis() - s_mqtt_last_attempt > retry_interval) {
         s_mqtt_last_attempt = millis();
         connectMQTT();
       }
-      vTaskDelay(pdMS_TO_TICKS(100));
+      vTaskDelay(pdMS_TO_TICKS(50));
       continue;
     }
 
@@ -253,24 +299,25 @@ static void mqttTask(void* /*param*/) {
     TelemetryData td;
     telemetryRead(td);
 
-    // If no telemetry update received for >12s, refresh by sending pushall
-    if (millis() - td.last_update_ms > 12000 && (millis() - last_pushall_ms > 10000)) {
+    // If no telemetry update received for >8s, refresh by sending pushall
+    if (millis() - td.last_update_ms > 8000 && (millis() - last_pushall_ms > 8000)) {
       last_pushall_ms = millis();
       char req_topic[80];
       snprintf(req_topic, sizeof(req_topic), "device/%s/request", PRINTER_SN);
       mqtt.publish(req_topic, "{\"pushing\":{\"sequence_id\":\"1\",\"command\":\"pushall\"}}");
     }
 
-    if (td.last_update_ms > 0 && (millis() - td.last_update_ms > 40000)) {
-      Serial.println(F("[MQTT] telemetry stalled >40s, resetting connection..."));
+    if (td.last_update_ms > 0 && (millis() - td.last_update_ms > 30000)) {
+      Serial.println(F("[MQTT] telemetry stalled >30s, resetting connection..."));
       mqtt.disconnect();
       tlsClient.stop();
+      td.last_update_ms = millis(); // reset stall timer so we do not loop every 10ms!
       td.state = PST_DISCONNECTED;
       telemetryWrite(td);
       s_mqtt_last_attempt = millis();
     }
 
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 

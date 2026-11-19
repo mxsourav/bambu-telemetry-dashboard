@@ -114,6 +114,7 @@ static void handleStatus() {
   doc["clock_12h"]    = uiGetClock12h();
   doc["led_inverted"] = ledGetInverted();
   doc["custom_image"] = uiIsCustomImageActive();
+  doc["app_mode"]     = (uiGetAppMode() == MODE_SPOTIFY) ? "spotify" : "printer";
 
   String out;
   serializeJson(doc, out);
@@ -813,6 +814,34 @@ static void handleSpotifyTestArt() {
   server.send(200, "application/json", ok ? "{\"decoded\":true}" : "{\"decoded\":false}");
 }
 
+static void handleMode() {
+  sendCorsHeaders();
+  if (server.method() == HTTP_POST) {
+    if (server.hasArg("plain")) {
+      JsonDocument doc;
+      deserializeJson(doc, server.arg("plain"));
+      const char* m = doc["mode"] | "";
+      if (!strcmp(m, "spotify")) {
+        uiSetAppMode(MODE_SPOTIFY);
+      } else if (!strcmp(m, "printer")) {
+        uiSetAppMode(MODE_PRINTER);
+      }
+    } else if (server.hasArg("mode")) {
+      String m = server.arg("mode");
+      if (m == "spotify") {
+        uiSetAppMode(MODE_SPOTIFY);
+      } else if (m == "printer") {
+        uiSetAppMode(MODE_PRINTER);
+      }
+    }
+  }
+  JsonDocument resp;
+  resp["mode"] = (uiGetAppMode() == MODE_SPOTIFY) ? "spotify" : "printer";
+  String out;
+  serializeJson(resp, out);
+  server.send(200, "application/json", out);
+}
+
 // ---------------- Server Task & Lifecycle -----------------------------
 void webServerLoop() {
   server.handleClient();
@@ -827,6 +856,8 @@ static void webTask(void* /*param*/) {
   WiFi.setSleep(false);
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/status", HTTP_GET, handleStatus);
+  server.on("/api/mode", HTTP_GET, handleMode);
+  server.on("/api/mode", HTTP_POST, handleMode);
   server.on("/api/control/screen", HTTP_GET, handleScreen);
   server.on("/api/control/screen_rle", HTTP_GET, handleScreenRle);
   server.on("/api/control/button", HTTP_POST, handleButton);

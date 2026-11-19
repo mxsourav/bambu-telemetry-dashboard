@@ -36,6 +36,15 @@ void uiShowCustomImage(const uint16_t* pixels);
 void uiClearCustomImage();
 bool uiIsCustomImageActive();
 
+// App Modes: 3D Printer MQTT Mode (default) vs Spotify Player Mode
+enum AppMode : uint8_t {
+  MODE_PRINTER = 0,
+  MODE_SPOTIFY = 1
+};
+
+void uiSetAppMode(AppMode mode);
+AppMode uiGetAppMode();
+
 // Spotify display activation
 void uiActivateSpotify();
 

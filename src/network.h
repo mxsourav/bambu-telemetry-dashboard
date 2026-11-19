@@ -12,3 +12,7 @@ void networkTaskStart();   // spawns mqttTask on Core 0
 void mqttPause();
 void mqttResume();
 bool mqttIsPaused();
+
+// App Mode MQTT enable / disable (Printer Mode vs Spotify Mode)
+void networkSetEnabled(bool enabled);
+bool networkIsEnabled();

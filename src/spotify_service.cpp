@@ -346,7 +346,22 @@ static bool refreshAccessToken() {
   return false;
 }
 
+static bool s_spotify_enabled = false; // default disabled on boot (Printer Mode is default)
+
+void spotifySetEnabled(bool enabled) {
+  s_spotify_enabled = enabled;
+  if (enabled) {
+    s_last_poll_ms = 0; // trigger immediate poll on enable
+  }
+  Serial.printf("[SPOTIFY] spotifySetEnabled(%s)\n", enabled ? "true" : "false");
+}
+
+bool spotifyIsEnabled() {
+  return s_spotify_enabled;
+}
+
 void spotifyPollLoop() {
+  if (!s_spotify_enabled) return;
   if (!s_refresh_token[0] || WiFi.status() != WL_CONNECTED) return;
   uint32_t now = millis();
   // Adaptive cadence (handover Task 2): 3s while playing (responsive

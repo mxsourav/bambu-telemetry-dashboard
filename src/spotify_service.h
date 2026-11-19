@@ -21,6 +21,8 @@ bool spotifyIsActive();
 void spotifySetRefreshToken(const char* token);
 const char* spotifyGetRefreshToken();
 void spotifyPollLoop();
+void spotifySetEnabled(bool enabled);
+bool spotifyIsEnabled();
 void spotifySetCoverArt(const uint16_t* pixels160x128);
 bool spotifyHasCoverArt();
 const uint16_t* spotifyGetCoverArt();

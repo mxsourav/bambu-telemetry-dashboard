@@ -434,7 +434,7 @@ static void peripheralsTask(void* /*param*/) {
 
     if (options_sound_on() && d.state != prev_state) {
       if (d.state == PST_FINISH) {
-        if (had_active_print_sound && (d.percent >= 90 || d.remain_min <= 2)) {
+        if (had_active_print_sound && (d.percent >= 98 || (d.percent >= 95 && d.remain_min == 0))) {
           had_active_print_sound = false;
           if (g_settings.siren_mode == 1) {
             finish_bark = true;             // loop fanfare until latch cleared

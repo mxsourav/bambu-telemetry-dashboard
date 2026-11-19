@@ -194,10 +194,31 @@ void uiClearCustomImage() {
   if (view == VIEW_CUSTOM_IMAGE) view = VIEW_HOME;
 }
 
+static AppMode s_app_mode = MODE_PRINTER;
+
+AppMode uiGetAppMode() {
+  return s_app_mode;
+}
+
+void uiSetAppMode(AppMode mode) {
+  s_app_mode = mode;
+  if (mode == MODE_SPOTIFY) {
+    Serial.println(F("[MODE] Active Mode -> SPOTIFY (Stopping MQTT TLS, starting Spotify)"));
+    networkSetEnabled(false);
+    spotifySetEnabled(true);
+    view = VIEW_SPOTIFY;
+  } else {
+    Serial.println(F("[MODE] Active Mode -> 3D PRINTER (Stopping Spotify, starting MQTT TLS)"));
+    spotifySetEnabled(false);
+    networkSetEnabled(true);
+    view = VIEW_HOME;
+  }
+}
+
 void uiActivateSpotify() {
   custom_image_active = false;
   custom_image_rendered = false;
-  view = VIEW_SPOTIFY;
+  uiSetAppMode(MODE_SPOTIFY);
 }
 
 // menu state
@@ -215,7 +236,7 @@ static bool     timer_fired = false;
 #define LEDLIST_ROWS   9
 
 static const char* MENU_LABELS[MENU_ROWS] = {
-  "Spotify", "LED Control", "Sound", "Siren", "Brightness", "Clock",
+  "Spotify Mode", "LED Control", "Sound", "Siren", "Brightness", "Clock",
   "Theme", "Clock Fmt", "About", "Timer", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
@@ -315,10 +336,7 @@ static const char* menuValue(int i) {
   static char buf[16];
   switch (i) {
     case 0: {
-      if (spotifyIsActive()) {
-        return g_spotify.is_playing ? "Playing" : "Paused";
-      }
-      return "Idle";
+      return (s_app_mode == MODE_SPOTIFY) ? "Active" : "Switch ->";
     }
     case 2: {
       uint8_t m = getBuzzerMode();
@@ -890,11 +908,11 @@ static void dispatchButtons(uint8_t ev) {
     return;
   }
 
-  // HOME event (10): return to main dashboard
+  // HOME event (10): return to main dashboard or spotify player
   if (ev == 10) {
     ui_latched_result = 0;
     s_had_active_print = false;
-    view = VIEW_HOME;
+    view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
     reset_arm = 0;
     return;
   }
@@ -902,14 +920,14 @@ static void dispatchButtons(uint8_t ev) {
   // menu double-press (ev == 4), long-press (ev == 3), or LEFT (ev == 8) = back one level
   if (ev == 4 || ev == 3 || ev == 8) {
     switch (view) {
-      case VIEW_MENU:    view = VIEW_HOME; break;
+      case VIEW_MENU:    view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME; break;
       case VIEW_LEDLIST: view = VIEW_MENU; menu_focus = 1; break;
-      case VIEW_CLOCK:   view = VIEW_MENU; menu_focus = 4; break;
-      case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 7; break;
-      case VIEW_TIMER:   view = VIEW_MENU; menu_focus = 8; break;
+      case VIEW_CLOCK:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 5; break;
+      case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 8; break;
+      case VIEW_TIMER:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 9; break;
       case VIEW_SPOTIFY:
-      case VIEW_SPOTIFY_LYRICS: view = VIEW_HOME; break;
-      default:           view = VIEW_HOME; break;
+      case VIEW_SPOTIFY_LYRICS: view = VIEW_MENU; menu_focus = 0; break;
+      default:           view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME; break;
     }
     reset_arm = 0;
     return;
@@ -932,7 +950,14 @@ static void dispatchButtons(uint8_t ev) {
       } else if (ev == 2 || ev == 9) { // OK / RIGHT
         startBeepPattern(1); // confirmation beep
         switch (menu_focus) {
-          case 0: view = VIEW_SPOTIFY; break;
+          case 0: {
+            if (s_app_mode == MODE_PRINTER) {
+              uiSetAppMode(MODE_SPOTIFY);
+            } else {
+              uiSetAppMode(MODE_PRINTER);
+            }
+            break;
+          }
           case 1: view = VIEW_LEDLIST; menu_focus = 0; break;
           case 2: applySoundToggle(); break;
           case 3: {  // siren policy: Auto-Mute <-> Until OK
@@ -959,7 +984,11 @@ static void dispatchButtons(uint8_t ev) {
           }
           case 8: view = VIEW_ABOUT; break;
           case 9: view = VIEW_TIMER; timer_sel = 0; break;
-          case 10: view = VIEW_HOME; menu_focus = 0; break;
+          case 10: {
+            view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
+            menu_focus = 0;
+            break;
+          }
         }
       }
       break;
@@ -984,10 +1013,14 @@ static void dispatchButtons(uint8_t ev) {
       if (ev == 2 || ev == 9) { // SELECT or RIGHT: Toggle 12h / 24h format!
         beepButton();
         uiSetClock12h(!uiGetClock12h());
-      } else if (ev != 0) { // Any Menu press, hold, back or home exits clock back to menu
+      } else if (ev != 0) { // Any Menu press, hold, back or home exits clock
         beepButton();
-        view = VIEW_MENU;
-        menu_focus = 4;
+        if (s_app_mode == MODE_SPOTIFY) {
+          view = VIEW_SPOTIFY;
+        } else {
+          view = VIEW_MENU;
+          menu_focus = 5;
+        }
       }
       break;
 
@@ -995,7 +1028,7 @@ static void dispatchButtons(uint8_t ev) {
       if (ev != 0) {
         beepButton();
         view = VIEW_MENU;
-        menu_focus = 7;
+        menu_focus = 8;
       }
       break;
 
@@ -1010,28 +1043,36 @@ static void dispatchButtons(uint8_t ev) {
         else if (ev == 2 || ev == 9) { // OK / RIGHT
           timer_end_ms = millis() + TIMER_OPTS[timer_sel] * 60000UL;
           timer_fired = false;
-          view = VIEW_HOME;
+          view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
         }
       }
       break;
 
     case VIEW_SPOTIFY:
-      if (ev == 2 || ev == 9) { // SELECT: Toggle to Lyrics!
+      if (ev == 2 || ev == 9) { // SELECT or RIGHT: Toggle to Lyrics!
         beepButton();
         view = VIEW_SPOTIFY_LYRICS;
-      } else if (ev != 0) {
+      } else if (ev == 1) { // MENU: Open Settings / Menu!
         beepButton();
-        view = VIEW_HOME;
+        view = VIEW_MENU;
+        menu_focus = 0;
+      } else if (ev == 3 || ev == 10) { // Long Menu or HOME: Return to 3D Printer Mode!
+        beepButton();
+        uiSetAppMode(MODE_PRINTER);
       }
       break;
 
     case VIEW_SPOTIFY_LYRICS:
-      if (ev == 2 || ev == 9) { // SELECT: Toggle back to Cover!
+      if (ev == 2 || ev == 9) { // SELECT or RIGHT: Toggle back to Cover!
         beepButton();
         view = VIEW_SPOTIFY;
-      } else if (ev != 0) {
+      } else if (ev == 1) { // MENU: Open Settings / Menu!
         beepButton();
-        view = VIEW_HOME;
+        view = VIEW_MENU;
+        menu_focus = 0;
+      } else if (ev == 3 || ev == 10) { // Long Menu or HOME: Return to 3D Printer Mode!
+        beepButton();
+        uiSetAppMode(MODE_PRINTER);
       }
       break;
   }
@@ -1119,7 +1160,7 @@ static void uiTask(void* /*param*/) {
     // --- latch: FINISH/FAILED -> full-screen overlay until OK ---
     // (suppressed during image mode: the pushed image owns the screen)
     if (ui_latched_result == 0 && !custom_image_active) {
-      if (d.state == PST_FINISH && s_had_active_print && (d.percent >= 90 || d.remain_min <= 2)) {
+      if (d.state == PST_FINISH && s_had_active_print && (d.percent >= 98 || (d.percent >= 95 && d.remain_min == 0))) {
         ui_latched_result = 1;
         view = VIEW_OVERLAY;
         s_had_active_print = false;
@@ -1135,22 +1176,6 @@ static void uiTask(void* /*param*/) {
     uint8_t ev = ui_button_event;
     if (ev) ui_button_event = 0;
     dispatchButtons(ev);
-
-    // --- Auto-switch to Spotify Player when music is playing ---
-    static bool s_spotify_auto_switched = false;
-    if (spotifyIsActive()) {
-      if (view != VIEW_SPOTIFY && view != VIEW_SPOTIFY_LYRICS && view != VIEW_BOOT && view != VIEW_MENU && view != VIEW_LEDLIST && view != VIEW_TIMER && view != VIEW_CUSTOM_IMAGE) {
-        if (!s_spotify_auto_switched) {
-          view = VIEW_SPOTIFY;
-          s_spotify_auto_switched = true;
-        }
-      }
-    } else if (view == VIEW_SPOTIFY || view == VIEW_SPOTIFY_LYRICS) {
-      if (s_spotify_auto_switched && (millis() - g_spotify.last_update_ms > 12000)) {
-        view = VIEW_HOME; // return to 3D printer dashboard when music stops
-        s_spotify_auto_switched = false;
-      }
-    }
 
     // --- smooth progress interpolation between network polls (handover
     //     Task 5): advance the bar every frame on Core 1 so it animates at
@@ -1173,8 +1198,10 @@ static void uiTask(void* /*param*/) {
     switch (view) {
       case VIEW_BOOT:    drawBootFrame(ms - boot_start_ms); break;
       case VIEW_HOME:    drawHomeFrame(d, ms); break;
-      case VIEW_MENU:    drawList("SETTINGS", MENU_LABELS, MENU_ROWS,
-                                  menu_focus, menuValue, menuActive); break;
+      case VIEW_MENU:
+        MENU_LABELS[0] = (s_app_mode == MODE_SPOTIFY) ? "Printer Mode" : "Spotify Mode";
+        drawList("SETTINGS", MENU_LABELS, MENU_ROWS,
+                 menu_focus, menuValue, menuActive); break;
       case VIEW_LEDLIST: drawList("LED CONTROL", LEDLIST_LABELS, LEDLIST_ROWS,
                                   menu_focus, ledListValue, ledListActive); break;
       case VIEW_CLOCK:   drawClockFrame(ms); break;
