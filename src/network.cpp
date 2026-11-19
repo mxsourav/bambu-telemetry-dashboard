@@ -176,11 +176,12 @@ static void connectMQTT() {
   // Bambu broker uses a self-signed cert => setInsecure() skips CA
   // validation but keeps the TLS 1.2 tunnel encrypted.
   tlsClient.setInsecure();
-  tlsClient.setHandshakeTimeout(10); // 10 seconds handshake timeout
+  tlsClient.setTimeout(3);           // 3 seconds socket timeout
+  tlsClient.setHandshakeTimeout(4);  // 4 seconds TLS handshake timeout
   mqtt.setServer(PRINTER_IP, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE); // payloads exceed 2 KB
-  mqtt.setSocketTimeout(10);                // 10 seconds socket timeout
+  mqtt.setSocketTimeout(3);                 // 3 seconds MQTT socket timeout
 
   Serial.printf("[MQTT] connecting TLS to %s:%d ... (free=%u, 8bit_free=%u, max_block=%u)\n",
                 PRINTER_IP, MQTT_PORT, (unsigned)ESP.getFreeHeap(),
@@ -283,10 +284,10 @@ static void mqttTask(void* /*param*/) {
         d.state = PST_DISCONNECTED;
         telemetryWrite(d);
       }
-      uint32_t retry_interval = network_ever_connected ? 3000 : 4000;
+      uint32_t retry_interval = network_ever_connected ? 5000 : 8000;
       if (millis() - s_mqtt_last_attempt > retry_interval) {
-        s_mqtt_last_attempt = millis();
         connectMQTT();
+        s_mqtt_last_attempt = millis(); // record AFTER connect completes so we don't immediately retry!
       }
       vTaskDelay(pdMS_TO_TICKS(50));
       continue;

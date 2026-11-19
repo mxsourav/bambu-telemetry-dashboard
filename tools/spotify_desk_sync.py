@@ -17,6 +17,7 @@ import sys
 import json
 import urllib.request
 import urllib.parse
+from PIL import Image, ImageOps
 
 DEVICE_IP = "192.168.0.154"
 SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
@@ -24,18 +25,14 @@ SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
 FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
 
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
-THUMB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
-
-try:
-    from PIL import Image
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
+THUMB_RAW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb_raw.dat")
+THUMB_JPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
 
 def fetch_itunes_artwork(artist, title):
-    """Fetches high quality 300x300 album artwork for artist and title."""
+    """Fallback: Fetches high quality album artwork for artist and title."""
     try:
-        query = urllib.parse.quote(f"{artist} {title}")
+        clean_artist = artist.split(",")[0].split("&")[0].strip()
+        query = urllib.parse.quote(f"{clean_artist} {title}")
         url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -43,26 +40,33 @@ def fetch_itunes_artwork(artist, title):
             if data.get("resultCount", 0) > 0:
                 art = data["results"][0].get("artworkUrl100", "")
                 if art:
-                    # Upgrade to 300x300
                     return art.replace("100x100bb.jpg", "300x300bb.jpg")
     except Exception:
         pass
     return None
 
-def upload_album_art(jpeg_path_or_url):
+def upload_album_art(source_path_or_url):
     """Uploads a JPEG to the SD card as /art.jpg and triggers dirty render."""
     try:
-        temp_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_art.jpg")
-        if jpeg_path_or_url.startswith("http://") or jpeg_path_or_url.startswith("https://"):
-            req = urllib.request.Request(jpeg_path_or_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=4) as response, open(temp_file, "wb") as out_file:
-                out_file.write(response.read())
-            upload_source = temp_file
+        jpeg_to_upload = THUMB_JPEG_PATH
+        if source_path_or_url.startswith("http://") or source_path_or_url.startswith("https://"):
+            req = urllib.request.Request(source_path_or_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=4) as response:
+                img_data = response.read()
+            from io import BytesIO
+            im = Image.open(BytesIO(img_data)).convert("RGB")
+            im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
+            im.save(jpeg_to_upload, "JPEG", quality=90)
+        elif source_path_or_url == THUMB_RAW_PATH or os.path.exists(source_path_or_url):
+            # Convert raw thumbnail (often PNG) to JPEG and fit 160x128
+            im = Image.open(source_path_or_url).convert("RGB")
+            im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
+            im.save(jpeg_to_upload, "JPEG", quality=90)
         else:
-            upload_source = jpeg_path_or_url
+            return False
 
-        if os.path.exists(upload_source) and os.path.getsize(upload_source) > 500:
-            with open(upload_source, "rb") as f:
+        if os.path.exists(jpeg_to_upload) and os.path.getsize(jpeg_to_upload) > 500:
+            with open(jpeg_to_upload, "rb") as f:
                 files = {"file": ("/art.jpg", f, "image/jpeg")}
                 r = requests.post(FS_UPLOAD_URL, files=files, timeout=4)
                 if r.status_code == 200:
@@ -78,8 +82,8 @@ def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True):
         payload = {
             "title": title,
             "artist": artist,
-            "progress_ms": pos_ms,
-            "duration_ms": dur_ms if dur_ms > 0 else 180000,
+            "progress_ms": int(pos_ms),
+            "duration_ms": int(dur_ms) if dur_ms > 0 else 180000,
             "is_playing": is_playing
         }
         resp = requests.post(SPOTIFY_NOW_URL, json=payload, timeout=2)
@@ -99,25 +103,31 @@ def get_media_info():
         if not out or out == "IDLE":
             return None
         
-        # Format: THUMB::Artist::::Title::::posMs::::durMs or NOTHUMB::Artist::::Title::::posMs::::durMs
+        # Format: THUMB::PLAY::Artist::::Title::::posMs::::durMs
         parts = out.split("::::")
         if len(parts) >= 2:
-            tag_artist = parts[0]
-            has_thumb = tag_artist.startswith("THUMB::")
-            if tag_artist.startswith("THUMB::"):
-                artist = tag_artist[7:].strip()
-            elif tag_artist.startswith("NOTHUMB::"):
-                artist = tag_artist[9:].strip()
-            else:
-                artist = tag_artist.strip()
+            prefix_parts = parts[0].split("::")
+            has_thumb = prefix_parts[0] == "THUMB"
+            is_playing = prefix_parts[1] == "PLAY" if len(prefix_parts) >= 2 else True
+            artist = prefix_parts[2].strip() if len(prefix_parts) >= 3 else prefix_parts[-1].strip()
             title = parts[1].strip()
-            pos_ms = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
-            dur_ms = int(parts[3]) if len(parts) >= 4 and parts[3].isdigit() else 0
+            
+            try:
+                pos_ms = int(float(parts[2])) if len(parts) >= 3 else 0
+            except Exception:
+                pos_ms = 0
+                
+            try:
+                dur_ms = int(float(parts[3])) if len(parts) >= 4 else 0
+            except Exception:
+                dur_ms = 0
+
             return {
                 "artist": artist if artist else "Spotify",
                 "title": title if title else "Playing",
                 "pos_ms": pos_ms,
                 "dur_ms": dur_ms,
+                "is_playing": is_playing,
                 "has_thumb": has_thumb
             }
     except Exception:
@@ -143,22 +153,20 @@ def main():
                 if track_id != last_track_id:
                     last_track_id = track_id
                     print(f"\n[NOW PLAYING] {info['artist']} - {info['title']}")
-                    push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], True)
+                    push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], info["is_playing"])
                     
                     if track_id != last_art_track:
                         last_art_track = track_id
-                        # Try local thumbnail first
                         art_sent = False
-                        if info["has_thumb"] and os.path.exists(THUMB_PATH):
-                            art_sent = upload_album_art(THUMB_PATH)
-                        # Fallback to iTunes official album artwork
+                        if info["has_thumb"] and os.path.exists(THUMB_RAW_PATH):
+                            art_sent = upload_album_art(THUMB_RAW_PATH)
                         if not art_sent:
                             art_url = fetch_itunes_artwork(info["artist"], info["title"])
                             if art_url:
                                 upload_album_art(art_url)
                 else:
                     # Update live timeline progress bar
-                    push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], True)
+                    push_spotify_now(info["title"], info["artist"], info["pos_ms"], info["dur_ms"], info["is_playing"])
             else:
                 if last_track_id:
                     # Media paused or closed

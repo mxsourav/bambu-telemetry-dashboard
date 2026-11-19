@@ -13,12 +13,27 @@ $session = $mgr.GetCurrentSession()
 if ($session) {
     $propAsync = $session.TryGetMediaPropertiesAsync()
     $props = Await $propAsync ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+    
     $posMs = 0
     $durMs = 0
+    $playbackInfo = $session.GetPlaybackInfo()
+    $isPlaying = $true
+    if ($playbackInfo) {
+        $isPlaying = ($playbackInfo.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing)
+    }
+
     $timeline = $session.GetTimelineProperties()
     if ($timeline) {
-        $posMs = [int]$timeline.Position.TotalMilliseconds
-        $durMs = [int]$timeline.EndTime.TotalMilliseconds
+        $durMs = [int][Math]::Round($timeline.EndTime.TotalMilliseconds)
+        $basePos = $timeline.Position.TotalMilliseconds
+        if ($isPlaying -and $timeline.LastUpdatedTime) {
+            $elapsed = ([DateTimeOffset]::Now - $timeline.LastUpdatedTime).TotalMilliseconds
+            $posMs = [int][Math]::Round($basePos + $elapsed)
+        } else {
+            $posMs = [int][Math]::Round($basePos)
+        }
+        if ($durMs -gt 0 -and $posMs -gt $durMs) { $posMs = $durMs }
+        if ($posMs -lt 0) { $posMs = 0 }
     }
     
     $thumbSaved = $false
@@ -26,22 +41,26 @@ if ($session) {
         try {
             $streamOp = $props.Thumbnail.OpenReadAsync()
             $stream = Await $streamOp ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-            $netStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
-            $outPath = Join-Path $PSScriptRoot 'current_thumb.jpg'
-            $fs = [System.IO.File]::Create($outPath)
-            $netStream.CopyTo($fs)
-            $fs.Close()
-            $thumbSaved = $true
+            $method = [System.IO.WindowsRuntimeStreamExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsStreamForRead' -and $_.GetParameters().Count -eq 1 } | Select-Object -First 1
+            $netStream = $method.Invoke($null, @($stream))
+            if ($netStream) {
+                $outPath = Join-Path $PSScriptRoot 'current_thumb_raw.dat'
+                $fs = [System.IO.File]::Create($outPath)
+                $netStream.CopyTo($fs)
+                $fs.Close()
+                $netStream.Close()
+                $thumbSaved = $true
+            }
         } catch {
         }
     }
-    if ($thumbSaved) {
-        Write-Output "THUMB::$($props.Artist)::::$($props.Title)::::$posMs::::$durMs"
-    } elseif ($props -and $props.Title) {
-        Write-Output "NOTHUMB::$($props.Artist)::::$($props.Title)::::$posMs::::$durMs"
-    } else {
-        Write-Output "IDLE"
-    }
+
+    $artist = if ($props -and $props.Artist) { $props.Artist } else { "Spotify" }
+    $title = if ($props -and $props.Title) { $props.Title } else { "Unknown" }
+    $playTag = if ($isPlaying) { "PLAY" } else { "PAUSE" }
+    $thumbTag = if ($thumbSaved) { "THUMB" } else { "NOTHUMB" }
+
+    Write-Output "${thumbTag}::${playTag}::${artist}::::${title}::::${posMs}::::${durMs}"
 } else {
     Write-Output "IDLE"
 }

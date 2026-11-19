@@ -235,14 +235,18 @@ static void handleScreen() {
   server.send(200, "image/bmp", "");
   server.sendContent((const char*)&hdr, sizeof(hdr));
 
-  const char* p = (const char*)fb;
-  size_t total = 160 * 128 * 2;
+  const uint16_t* p = fb;
+  size_t totalPixels = 160 * 128;
   size_t offset = 0;
-  const size_t chunkSize = 1024;
-  while (offset < total) {
-    size_t toSend = ((total - offset) < chunkSize) ? (total - offset) : chunkSize;
-    server.sendContent(p + offset, toSend);
-    offset += toSend;
+  uint16_t chunk[512]; // 1024 bytes
+  while (offset < totalPixels) {
+    size_t n = (totalPixels - offset < 512) ? (totalPixels - offset) : 512;
+    for (size_t i = 0; i < n; i++) {
+      uint16_t w = p[offset + i];
+      chunk[i] = (w << 8) | (w >> 8); // Convert big-endian swap565 to standard little-endian BMP
+    }
+    server.sendContent((const char*)chunk, n * 2);
+    offset += n;
     vTaskDelay(pdMS_TO_TICKS(1));
   }
 }

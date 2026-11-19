@@ -30,6 +30,8 @@
 #include "status_logo.h"
 
 #include <LovyanGFX.hpp>
+#include <SD.h>
+#include "web_server.h"
 #include <time.h>
 
 volatile uint8_t ui_button_event = 0;
@@ -738,14 +740,16 @@ static bool s_art_in_frame = false;   // sprite buffer currently holds art
 
 static void drawSpotifyFrame(uint32_t ms) {
   // 1. Cover Artwork (Full 160x128 screen)
-  // Art is decoded once from the SD cache straight into the sprite buffer
-  // (zero big heap blocks - a RAM cover buffer was impossible on this
-  // firmware: largest contiguous block < 20 KB under runtime churn). The
-  // sprite content persists between frames, so the art needs no source
-  // after the one-time decode; only the scrim area redraws per frame.
   if (spotifyArtDirty() || !s_art_in_frame) {
     spotifyClearArtDirty();
-    s_art_in_frame = spotifyRenderArtToBuffer((uint16_t*)sprite.getBuffer());
+    s_art_in_frame = false;
+    if (sdEnsureMounted() && SD.exists("/art.jpg")) {
+      File f = SD.open("/art.jpg", FILE_READ);
+      if (f) {
+        s_art_in_frame = sprite.drawJpg(&f, 0, 0, W, H);
+        f.close();
+      }
+    }
   }
   if (!s_art_in_frame) {
     sprite.fillSprite(COL_BLACK);
@@ -1182,13 +1186,20 @@ static void uiTask(void* /*param*/) {
     //     UI framerate instead of jumping once per 3-5s poll ---
     static uint32_t s_prog_frame_ms = 0;
     if (view == VIEW_SPOTIFY || view == VIEW_SPOTIFY_LYRICS) {
-      uint32_t delta = ms - s_prog_frame_ms;
-      if (g_spotify.is_playing &&
-          g_spotify.progress_ms + delta < g_spotify.duration_ms) {
-        g_spotify.progress_ms += delta;
+      if (s_prog_frame_ms == 0 || (ms - s_prog_frame_ms) > 200) {
+        s_prog_frame_ms = ms;
       }
+      uint32_t delta = ms - s_prog_frame_ms;
+      s_prog_frame_ms = ms;
+      if (g_spotify.is_playing && delta > 0 && delta <= 100) {
+        g_spotify.progress_ms += delta;
+        if (g_spotify.duration_ms > 0 && g_spotify.progress_ms > g_spotify.duration_ms) {
+          g_spotify.progress_ms = g_spotify.duration_ms;
+        }
+      }
+    } else {
+      s_prog_frame_ms = ms;
     }
-    s_prog_frame_ms = ms;
 
     // art lives in the sprite buffers only while the cover view is up;
     // any other view (incl. lyrics) overwrites both buffers
@@ -1230,7 +1241,14 @@ static void uiTask(void* /*param*/) {
     }
 
     // --- Live Notification Banner Overlay ---
-    if (millis() < notif_until_ms && notif_title[0]) {
+    static bool s_had_notif = false;
+    bool has_notif = (millis() < notif_until_ms && notif_title[0]);
+    if (s_had_notif && !has_notif) {
+      s_art_in_frame = false; // Redraw artwork once notification banner expires
+    }
+    s_had_notif = has_notif;
+
+    if (has_notif) {
       sprite.fillRoundRect(4, 4, W - 8, 38, 6, COL_CARD);
       sprite.drawRoundRect(4, 4, W - 8, 38, 6, COL_CYAN);
       sprite.fillCircle(14, 15, 3, COL_AMBER);
