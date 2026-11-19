@@ -666,7 +666,12 @@ static void handleSpotifyNow() {
     const char* artist = doc["artist"] | "";
     uint32_t prog = doc["progress_ms"] | 0;
     uint32_t dur = doc["duration_ms"] | 1;
-    bool playing = doc["is_playing"] | true;
+    bool playing = true;
+    if (doc["is_playing"].is<bool>()) {
+      playing = doc["is_playing"].as<bool>();
+    } else if (doc["playing"].is<bool>()) {
+      playing = doc["playing"].as<bool>();
+    }
     const char* img_url = doc["image_url"] | nullptr;
     const char* lyric_cur = doc["lyric_cur"] | nullptr;
     const char* lyric_next = doc["lyric_next"] | nullptr;

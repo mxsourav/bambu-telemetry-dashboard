@@ -1272,7 +1272,8 @@ static void uiTask(void* /*param*/) {
       }
       uint32_t delta = ms - s_prog_frame_ms;
       s_prog_frame_ms = ms;
-      if (g_spotify.is_playing && delta > 0 && delta <= 100) {
+      bool fresh = (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms < 3500));
+      if (g_spotify.is_playing && fresh && delta > 0 && delta <= 100) {
         g_spotify.progress_ms += delta;
         if (g_spotify.duration_ms > 0 && g_spotify.progress_ms > g_spotify.duration_ms) {
           g_spotify.progress_ms = g_spotify.duration_ms;
