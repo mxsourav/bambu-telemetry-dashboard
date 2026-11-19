@@ -32,13 +32,6 @@ THUMB_JPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "curr
 LOCK_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".sync.lock")
 LOG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desk_sync.log")
 
-# Ensure single instance
-try:
-    _lock_file = open(LOCK_FILE_PATH, "w")
-    msvcrt.locking(_lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-except (IOError, OSError):
-    sys.exit(0)
-
 # Redirect output to log file if running windowless (e.g. via pythonw.exe)
 if sys.stdout is None or not sys.stdout.isatty():
     log_fp = open(LOG_FILE_PATH, "a", encoding="utf-8", buffering=1)

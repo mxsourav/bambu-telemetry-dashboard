@@ -747,7 +747,11 @@ static void drawSpotifyFrame(uint32_t ms) {
   const int cardR = 9;
 
   // 1. Cover Artwork (Full 160x128 screen)
-  if (spotifyArtDirty() || !s_art_in_frame) {
+  // Only attempt SD read when new art is signaled (dirty) or throttled to 5s if missing,
+  // to prevent rapid SPI pin toggling / piezo ticking every frame.
+  static uint32_t s_last_art_check_ms = 0;
+  if (spotifyArtDirty() || (!s_art_in_frame && (ms - s_last_art_check_ms >= 5000))) {
+    s_last_art_check_ms = ms;
     spotifyClearArtDirty();
     s_art_in_frame = false;
     if (sdEnsureMounted() && SD.exists("/art.jpg")) {
