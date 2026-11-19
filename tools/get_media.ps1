@@ -16,17 +16,32 @@ $lastThumbHash = ""
 
 do {
     $session = $mgr.GetCurrentSession()
+    $playbackInfo = if ($session) { $session.GetPlaybackInfo() } else { $null }
+    $isPlaying = if ($playbackInfo) { $playbackInfo.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing } else { $false }
+
+    # If current session is not playing, scan all sessions for one that is actively Playing (e.g. Phone Link or background player)
+    if (-not $isPlaying) {
+        $allSessions = $mgr.GetSessions()
+        if ($allSessions) {
+            foreach ($s in $allSessions) {
+                $pb = $s.GetPlaybackInfo()
+                if ($pb -and ($pb.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing)) {
+                    $session = $s
+                    $playbackInfo = $pb
+                    $isPlaying = $true
+                    break
+                }
+            }
+        }
+    }
+
+    $props = $null
+    $posMs = 0
+    $durMs = 0
+
     if ($session) {
         $propAsync = $session.TryGetMediaPropertiesAsync()
         $props = Await $propAsync ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
-        
-        $posMs = 0
-        $durMs = 0
-        $playbackInfo = $session.GetPlaybackInfo()
-        $isPlaying = $true
-        if ($playbackInfo) {
-            $isPlaying = ($playbackInfo.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing)
-        }
 
         $timeline = $session.GetTimelineProperties()
         if ($timeline) {

@@ -156,13 +156,17 @@ def async_fetch_hd_art(artist, title, current_track_id, track_lock):
         pass
 
 def spawn_ps_stream():
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NO_WINDOW
     return subprocess.Popen(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "-Stream"],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
         text=True,
-        bufsize=1
+        bufsize=1,
+        creationflags=creationflags
     )
 
 def main():

@@ -1,7 +1,11 @@
 @echo off
-set PYTHON_EXE=C:\Users\rodd\AppData\Local\Programs\Python\Python314\pythonw.exe
-if not exist "%PYTHON_EXE%" set PYTHON_EXE=pythonw.exe
-
-start "" "%PYTHON_EXE%" "%~dp0spotify_desk_sync.py"
-echo [OK] Desk Station Spotify & Media Sync is running silently in the background!
+tasklist /fi "imagename eq pythonw.exe" 2>nul | find /i "pythonw.exe" >nul
+if "%errorlevel%"=="0" (
+    echo [INFO] Desk Station Sync is ALREADY running in the background!
+) else (
+    echo [STARTING] Launching Desk Station Media Sync in background...
+    wscript.exe "%~dp0start_sync_silent.vbs"
+    timeout /t 1 >nul
+    echo [OK] Desk Station Media Sync is now running!
+)
 pause
