@@ -84,6 +84,7 @@ bool spotifyRenderArtToBuffer(uint16_t* dst160) {
   JPEGDEC* jpeg = new (std::nothrow) JPEGDEC();
   if (jpeg) {
     if (jpeg->open(f, jpegDrawCb) == 1) {
+      jpeg->setPixelType(RGB565_BIG_ENDIAN); // Big-Endian for ST7735 SPI DMA (high-byte first)
       int w = jpeg->getWidth(), h = jpeg->getHeight();
       int opt = 0, div = 1;            // 0=1/1, 2=1/2, 4=1/4, 8=1/8
       if (w > 160) { opt = JPEG_SCALE_HALF;    div = 2; }
