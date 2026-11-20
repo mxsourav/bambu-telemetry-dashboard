@@ -29,8 +29,10 @@ void     uiSetBacklight(uint8_t pct);   // 40..100
 const uint16_t* uiGetFramebuffer();
 void uiGetFrameSize(int& w, int& h);
 
-// Custom image display (160x128 RGB565)
+// Custom image display (160x128 RGB565 and Direct-to-RAM JPEG)
 uint16_t* uiGetCustomImageBuffer();
+uint8_t*  uiGetCustomJpegBuffer(size_t max_len = 0);
+void      uiSetCustomJpeg(const uint8_t* data, size_t len);
 void uiActivateCustomImage();
 void uiShowCustomImage(const uint16_t* pixels);
 void uiClearCustomImage();

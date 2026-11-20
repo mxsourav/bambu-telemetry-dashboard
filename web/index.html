@@ -1243,20 +1243,29 @@ function previewImg(input){
   reader.onload = e=>{
     const img = new Image();
     img.onload = ()=>{
-      cropCtx.fillStyle = "#000";
-      cropCtx.fillRect(0,0,160,128);
-      // Aspect crop
+      // Smart Aspect Ratio: Atmospheric ambient blur backdrop + uncropped centered image
+      cropCtx.save();
+      cropCtx.filter = 'blur(10px) brightness(0.75)';
+      cropCtx.drawImage(img, 0, 0, 160, 128);
+      cropCtx.restore();
+
       const sAspect = img.width / img.height;
-      const dAspect = 160 / 128;
-      let sx=0, sy=0, sw=img.width, sh=img.height;
-      if(sAspect > dAspect){
-        sw = img.height * dAspect;
-        sx = (img.width - sw) / 2;
+      let dw, dh, dx, dy;
+      if (sAspect > 160/128) {
+        // Wide (e.g. 16:9): Full width 160, proportional height
+        dw = 160;
+        dh = Math.round(160 / sAspect);
+        dx = 0;
+        dy = Math.round((128 - dh) / 2);
       } else {
-        sh = img.width / dAspect;
-        sy = (img.height - sh) / 2;
+        // Square or Tall: Full height 128, proportional width
+        dh = 128;
+        dw = Math.round(128 * sAspect);
+        dx = Math.round((160 - dw) / 2);
+        dy = 0;
       }
-      cropCtx.drawImage(img, sx, sy, sw, sh, 0, 0, 160, 128);
+      cropCtx.drawImage(img, dx, dy, dw, dh);
+
       const imgData = cropCtx.getImageData(0,0,160,128).data;
       customRgb565 = new Uint8Array(160 * 128 * 2);
       for(let i=0; i<160*128; i++){

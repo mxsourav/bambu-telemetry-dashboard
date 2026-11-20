@@ -61,16 +61,17 @@ do {
         $title = if ($props -and $props.Title) { $props.Title } else { "Unknown" }
         $thumbKey = "${artist}-${title}"
         $thumbSaved = $false
+        $rawThumbFile = Join-Path $PSScriptRoot 'current_thumb_raw.dat'
 
         if ($props -and $props.Thumbnail -and ($thumbKey -ne $lastThumbHash)) {
             try {
+                if (Test-Path $rawThumbFile) { Remove-Item $rawThumbFile -Force -ErrorAction SilentlyContinue }
                 $streamOp = $props.Thumbnail.OpenReadAsync()
                 $stream = Await $streamOp ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
                 $method = [System.IO.WindowsRuntimeStreamExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsStreamForRead' -and $_.GetParameters().Count -eq 1 } | Select-Object -First 1
                 $netStream = $method.Invoke($null, @($stream))
                 if ($netStream) {
-                    $outPath = Join-Path $PSScriptRoot 'current_thumb_raw.dat'
-                    $fs = [System.IO.File]::Create($outPath)
+                    $fs = [System.IO.File]::Create($rawThumbFile)
                     $netStream.CopyTo($fs)
                     $fs.Close()
                     $netStream.Close()
@@ -80,7 +81,11 @@ do {
             } catch {
             }
         } elseif ($thumbKey -eq $lastThumbHash) {
-            $thumbSaved = [System.IO.File]::Exists((Join-Path $PSScriptRoot 'current_thumb_raw.dat'))
+            $thumbSaved = [System.IO.File]::Exists($rawThumbFile)
+        } else {
+            # Stale thumbnail from previous track -> wipe it immediately
+            if (Test-Path $rawThumbFile) { Remove-Item $rawThumbFile -Force -ErrorAction SilentlyContinue }
+            $lastThumbHash = $thumbKey
         }
 
         $playTag = if ($isPlaying) { "PLAY" } else { "PAUSE" }

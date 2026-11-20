@@ -135,6 +135,9 @@ enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
 static UiView view = VIEW_BOOT;
 static uint32_t boot_start_ms = 0;
 static uint16_t* s_custom_image_buf = nullptr;
+static uint8_t*  s_custom_jpeg_buf = nullptr;
+static size_t    s_custom_jpeg_len = 0;
+static bool      s_custom_jpeg_dirty = false;
 static bool custom_image_active = false;
 static bool custom_image_rendered = false;
 static bool s_had_active_print = false;
@@ -170,6 +173,29 @@ uint16_t* uiGetCustomImageBuffer() {
   return s_custom_image_buf;
 }
 
+uint8_t* uiGetCustomJpegBuffer(size_t max_len) {
+  if (!s_custom_jpeg_buf) {
+    s_custom_jpeg_buf = (uint8_t*)malloc(32768);
+    if (s_custom_jpeg_buf) {
+      memset(s_custom_jpeg_buf, 0, 32768);
+    }
+  }
+  return s_custom_jpeg_buf;
+}
+
+void uiSetCustomJpeg(const uint8_t* data, size_t len) {
+  if (!data || len == 0 || len > 32768) return;
+  uint8_t* buf = uiGetCustomJpegBuffer(len);
+  if (buf) {
+    if (buf != data) memcpy(buf, data, len);
+    s_custom_jpeg_len = len;
+    s_custom_jpeg_dirty = true;
+    custom_image_active = true;
+    custom_image_rendered = false;
+    view = VIEW_CUSTOM_IMAGE;
+  }
+}
+
 void uiActivateCustomImage() {
   custom_image_active = true;
   custom_image_rendered = false;
@@ -189,6 +215,12 @@ void uiShowCustomImage(const uint16_t* pixels) {
 void uiClearCustomImage() {
   custom_image_active = false;
   custom_image_rendered = false;
+  s_custom_jpeg_dirty = false;
+  s_custom_jpeg_len = 0;
+  if (s_custom_jpeg_buf) {
+    free(s_custom_jpeg_buf);
+    s_custom_jpeg_buf = nullptr;
+  }
   if (s_custom_image_buf) {
     free(s_custom_image_buf);
     s_custom_image_buf = nullptr;
@@ -1307,8 +1339,15 @@ static void uiTask(void* /*param*/) {
         if (custom_image_active) {
           static bool had_notif = false;
           bool has_notif = (millis() < notif_until_ms && notif_title[0]);
-          if (!custom_image_rendered || has_notif || had_notif) {
-            if (s_custom_image_buf) {
+          if (!custom_image_rendered || has_notif || had_notif || s_custom_jpeg_dirty) {
+            if (s_custom_jpeg_dirty && s_custom_jpeg_buf && s_custom_jpeg_len > 0) {
+              s_custom_jpeg_dirty = false;
+              sprite.drawJpg(s_custom_jpeg_buf, s_custom_jpeg_len, 0, 0, W, H);
+              uint16_t* img = uiGetCustomImageBuffer();
+              if (img) {
+                memcpy(img, sprite.getBuffer(), W * H * 2);
+              }
+            } else if (s_custom_image_buf) {
               sprite.pushImage(0, 0, W, H, s_custom_image_buf);
             }
             custom_image_rendered = true;

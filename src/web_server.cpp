@@ -394,10 +394,10 @@ static void handleFsUploadLoop() {
       }
     }
 
-    // Allow /art.jpg upload to stream into RAM cover buffer even if SD card is unmounted
-    if (uploadTargetPath == "/art.jpg") {
+    // Allow /art.jpg or /custom.jpg upload to stream into RAM buffer even if SD card is unmounted
+    if (uploadTargetPath == "/art.jpg" || uploadTargetPath == "/custom.jpg") {
       s_cover_upload_len = 0;
-      spotifySetCoverArtValid(false);
+      if (uploadTargetPath == "/art.jpg") spotifySetCoverArtValid(false);
       upload_success = true;
     }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -416,6 +416,16 @@ static void handleFsUploadLoop() {
         memcpy(dst + s_cover_upload_len, upload.buf, copyLen);
         s_cover_upload_len += copyLen;
       }
+    } else if (uploadTargetPath == "/custom.jpg") {
+      uint8_t* buf = uiGetCustomJpegBuffer(32768);
+      if (buf && s_cover_upload_len < 32768) {
+        size_t copyLen = upload.currentSize;
+        if (s_cover_upload_len + copyLen > 32768) {
+          copyLen = 32768 - s_cover_upload_len;
+        }
+        memcpy(buf + s_cover_upload_len, upload.buf, copyLen);
+        s_cover_upload_len += copyLen;
+      }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (uploadFile) {
@@ -428,6 +438,10 @@ static void handleFsUploadLoop() {
       spotifySetArtDirty();
       upload_success = true;
       Serial.printf("[FS] /art.jpg saved into RAM buffer: %u bytes (dirty set)\n", (unsigned int)s_cover_upload_len);
+    } else if (uploadTargetPath == "/custom.jpg" && s_cover_upload_len > 0) {
+      uiSetCustomJpeg(uiGetCustomJpegBuffer(0), s_cover_upload_len);
+      upload_success = true;
+      Serial.printf("[FS] /custom.jpg saved into RAM: %u bytes (custom image active)\n", (unsigned int)s_cover_upload_len);
     }
   }
 }
@@ -485,42 +499,55 @@ static void handleLedSet() {
 
 static bool   display_upload_success = false;
 static size_t display_upload_bytes   = 0;
+static bool   display_upload_is_jpeg = false;
 
 static void handleDisplayImageLoop() {
   HTTPUpload& upload = server.upload();
-  uint16_t* img = uiGetCustomImageBuffer();
-  if (!img) return;
-
-  const size_t targetBytes = 160 * 128 * 2;
   if (upload.status == UPLOAD_FILE_START) {
     display_upload_success = false;
     display_upload_bytes = 0;
-    // Full-screen image mode: cut MQTT TLS (stops telemetry overwrites +
-    // frees ~45 KB heap for the upload). WiFi stays up; any button press
-    // on the device resumes MQTT.
+    display_upload_is_jpeg = false;
     mqttPause();
-    Serial.println(F("[DISP] Image upload start"));
+    Serial.println(F("[DISP] Image upload start (Direct-to-RAM)"));
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (display_upload_bytes < targetBytes) {
-      size_t copyLen = upload.currentSize;
-      if (display_upload_bytes + copyLen > targetBytes) {
-        copyLen = targetBytes - display_upload_bytes;
+    if (display_upload_bytes == 0 && upload.currentSize >= 2) {
+      if (upload.buf[0] == 0xFF && upload.buf[1] == 0xD8) {
+        display_upload_is_jpeg = true;
       }
-      memcpy(((uint8_t*)img) + display_upload_bytes, upload.buf, copyLen);
-      display_upload_bytes += copyLen;
+    }
+    if (display_upload_is_jpeg) {
+      uint8_t* buf = uiGetCustomJpegBuffer(32768);
+      if (buf && display_upload_bytes < 32768) {
+        size_t copyLen = upload.currentSize;
+        if (display_upload_bytes + copyLen > 32768) {
+          copyLen = 32768 - display_upload_bytes;
+        }
+        memcpy(buf + display_upload_bytes, upload.buf, copyLen);
+        display_upload_bytes += copyLen;
+      }
+    } else {
+      uint16_t* img = uiGetCustomImageBuffer();
+      const size_t targetBytes = 160 * 128 * 2;
+      if (img && display_upload_bytes < targetBytes) {
+        size_t copyLen = upload.currentSize;
+        if (display_upload_bytes + copyLen > targetBytes) {
+          copyLen = targetBytes - display_upload_bytes;
+        }
+        memcpy(((uint8_t*)img) + display_upload_bytes, upload.buf, copyLen);
+        display_upload_bytes += copyLen;
+      }
     }
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (display_upload_bytes >= targetBytes) {
+    if (display_upload_is_jpeg && display_upload_bytes > 0) {
+      display_upload_success = true;
+      uiSetCustomJpeg(uiGetCustomJpegBuffer(0), display_upload_bytes);
+      Serial.printf("[DISP] Custom JPEG received into RAM: %u bytes\n", (unsigned)display_upload_bytes);
+    } else if (display_upload_bytes >= (160 * 128 * 2 - 512)) {
       display_upload_success = true;
       uiActivateCustomImage();
-      Serial.printf("[DISP] Image upload done: %u bytes\n", (unsigned)display_upload_bytes);
-    } else if (display_upload_bytes >= (targetBytes - 512)) {
-      memset(((uint8_t*)img) + display_upload_bytes, 0, targetBytes - display_upload_bytes);
-      display_upload_success = true;
-      uiActivateCustomImage();
-      Serial.printf("[DISP] Image upload padded: %u / %u bytes\n", (unsigned)display_upload_bytes, (unsigned)targetBytes);
+      Serial.printf("[DISP] Custom RGB565 received into RAM: %u bytes\n", (unsigned)display_upload_bytes);
     } else {
-      Serial.printf("[DISP] Image upload incomplete: %u / %u bytes\n", (unsigned)display_upload_bytes, (unsigned)targetBytes);
+      Serial.printf("[DISP] Image upload incomplete: %u bytes\n", (unsigned)display_upload_bytes);
     }
   }
 }
@@ -529,14 +556,21 @@ static void handleDisplayImageDone() {
   sendCorsHeaders();
   server.sendHeader("Connection", "close");
   if (!display_upload_success && server.hasArg("plain")) {
-    uint16_t* img = uiGetCustomImageBuffer();
-    if (img) {
-      String body = server.arg("plain");
-      const size_t targetBytes = 160 * 128 * 2;
-      size_t copyLen = body.length() > targetBytes ? targetBytes : body.length();
-      memcpy((uint8_t*)img, (const uint8_t*)body.c_str(), copyLen);
-      uiActivateCustomImage();
+    String body = server.arg("plain");
+    const uint8_t* p = (const uint8_t*)body.c_str();
+    size_t len = body.length();
+    if (len >= 2 && p[0] == 0xFF && p[1] == 0xD8) {
+      uiSetCustomJpeg(p, len);
       display_upload_success = true;
+    } else {
+      uint16_t* img = uiGetCustomImageBuffer();
+      if (img) {
+        const size_t targetBytes = 160 * 128 * 2;
+        size_t copyLen = len > targetBytes ? targetBytes : len;
+        memcpy((uint8_t*)img, p, copyLen);
+        uiActivateCustomImage();
+        display_upload_success = true;
+      }
     }
   }
 

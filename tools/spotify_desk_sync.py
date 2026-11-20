@@ -79,6 +79,48 @@ def fetch_youtube_hd_thumbnail(query):
         pass
     return None
 
+def process_smart_art(img):
+    """Smart aspect-ratio fitting for 160x128 screen.
+    Prevents cropping off heads/text on 16:9 YouTube video thumbnails or square album covers,
+    blending uncropped art with an atmospheric blurred background.
+    """
+    w, h = img.size
+    aspect = w / float(h)
+    target_w, target_h = 160, 128
+
+    # Atmospheric blurred background filling entire 160x128
+    bg = ImageOps.fit(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
+    bg = bg.filter(ImageFilter.GaussianBlur(14))
+
+    if aspect > 1.35:
+        # 16:9 or wide video thumbnail:
+        # Scale width to 160, height to ~90. Place at top (y=0) so 100% of video art
+        # is uncropped above the bottom player card (card is at y=90..124)!
+        fg_w = target_w
+        fg_h = int(round(target_w / aspect))
+        if fg_h > target_h: fg_h = target_h
+        fg = img.resize((fg_w, fg_h), Image.Resampling.LANCZOS)
+        bg.paste(fg, (0, 0))
+    elif aspect < 0.9:
+        # Portrait
+        fg_h = target_h
+        fg_w = int(round(target_h * aspect))
+        fg = img.resize((fg_w, fg_h), Image.Resampling.LANCZOS)
+        x_off = (target_w - fg_w) // 2
+        bg.paste(fg, (x_off, 0))
+    else:
+        # Square / near-square album cover (Spotify / iTunes ~ 1:1):
+        # Scale height to 128, width to ~128. Centered horizontally (x=16..144).
+        # Zero top/bottom cropping!
+        fg_h = target_h
+        fg_w = int(round(target_h * aspect))
+        if fg_w > target_w: fg_w = target_w
+        fg = img.resize((fg_w, fg_h), Image.Resampling.LANCZOS)
+        x_off = (target_w - fg_w) // 2
+        bg.paste(fg, (x_off, 0))
+
+    return bg.filter(ImageFilter.UnsharpMask(radius=1.0, percent=100, threshold=2))
+
 def upload_album_art(source_path_or_url):
     try:
         jpeg_to_upload = THUMB_JPEG_PATH
@@ -90,13 +132,11 @@ def upload_album_art(source_path_or_url):
             im = Image.open(BytesIO(img_data)).convert("RGB")
             if im.size == (480, 360):
                 im = im.crop((0, 45, 480, 315))
-            im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
-            im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=120, threshold=2))
+            im = process_smart_art(im)
             im.save(jpeg_to_upload, "JPEG", quality=95)
         elif source_path_or_url == THUMB_RAW_PATH or os.path.exists(source_path_or_url):
             im = Image.open(source_path_or_url).convert("RGB")
-            im = ImageOps.fit(im, (160, 128), method=Image.Resampling.LANCZOS)
-            im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=120, threshold=2))
+            im = process_smart_art(im)
             im.save(jpeg_to_upload, "JPEG", quality=95)
         else:
             return False
@@ -230,17 +270,25 @@ def main():
 
                     if track_id != last_art_track:
                         last_art_track = track_id
-                        # 1. Immediate local thumbnail upload (takes 30-50ms)
-                        if os.path.exists(THUMB_RAW_PATH):
+                        # 1. ONLY upload local thumbnail if this song actually HAS a fresh thumbnail!
+                        if has_thumb and os.path.exists(THUMB_RAW_PATH):
                             upload_album_art(THUMB_RAW_PATH)
-
-                        # 2. Async HD search & upgrade in background thread (zero latency on timeline loop!)
-                        t = threading.Thread(
-                            target=async_fetch_hd_art,
-                            args=(artist, title, track_id, track_lock),
-                            daemon=True
-                        )
-                        t.start()
+                            # Background HD upgrade in case local thumbnail is low-res
+                            t = threading.Thread(
+                                target=async_fetch_hd_art,
+                                args=(artist, title, track_id, track_lock),
+                                daemon=True
+                            )
+                            t.start()
+                        else:
+                            # 2. No local thumbnail (e.g. YouTube in Brave): fetch online HD art directly!
+                            # NEVER upload stale leftover thumb from previous track!
+                            t = threading.Thread(
+                                target=async_fetch_hd_art,
+                                args=(artist, title, track_id, track_lock),
+                                daemon=True
+                            )
+                            t.start()
                 else:
                     # Update live progress bar and play/pause state
                     push_spotify_now(title, artist, pos_ms, dur_ms, is_playing)
