@@ -21,5 +21,6 @@ uint8_t getBuzzerMode();                     // 0=Passive PWM, 1=Active DC, 2=Mu
 void setBuzzerMode(uint8_t mode);
 void startBeepPattern(uint8_t pattern);   // 1=chime notification 2=fanfare notification 3=click
 void beepButton();                        // gentle low-volume button click beep
+void beepPet();                           // playful 2-tone pet chirp
 void playHardwareBeep(uint32_t freq, uint32_t duration_ms); // direct synchronous test pulse
 void triggerSirenTest(uint32_t duration_ms = 3000); // test emergency rhythmic siren

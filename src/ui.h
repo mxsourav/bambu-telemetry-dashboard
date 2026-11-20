@@ -50,6 +50,10 @@ AppMode uiGetAppMode();
 // Spotify display activation
 void uiActivateSpotify();
 
+// Desk Pet Mode (100 FPS procedural companion)
+void uiActivateDeskPet();
+bool uiIsPetMode();
+
 // Theme and Clock Format
 bool uiGetThemeLight();
 void uiSetThemeLight(bool light);

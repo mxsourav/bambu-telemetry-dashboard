@@ -28,6 +28,7 @@
 #include "network.h"
 #include "boot_splash.h"
 #include "status_logo.h"
+#include "desk_pet.h"
 
 #include <LovyanGFX.hpp>
 #include <SD.h>
@@ -131,8 +132,17 @@ static ConnState connStateOf(const TelemetryData& d) {
 // ---------------- View state ------------------------------------------
 enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
                         VIEW_CLOCK, VIEW_TIMER, VIEW_OVERLAY, VIEW_CUSTOM_IMAGE, VIEW_ABOUT,
-                        VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS };
+                        VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS, VIEW_DESK_PET };
 static UiView view = VIEW_BOOT;
+
+bool uiIsPetMode() {
+  return (view == VIEW_DESK_PET);
+}
+
+void uiActivateDeskPet() {
+  view = VIEW_DESK_PET;
+  deskPetSetMood(PET_MOOD_NEUTRAL);
+}
 static uint32_t boot_start_ms = 0;
 static uint16_t* s_custom_image_buf = nullptr;
 static uint8_t*  s_custom_jpeg_buf = nullptr;
@@ -266,11 +276,11 @@ static bool     timer_fired = false;
 
 // ---------------- Button dispatch helpers -----------------------------
 // list row counts
-#define MENU_ROWS      11
+#define MENU_ROWS      12
 #define LEDLIST_ROWS   9
 
 static const char* MENU_LABELS[MENU_ROWS] = {
-  "Spotify Mode", "LED Control", "Sound", "Siren", "Brightness", "Clock",
+  "Spotify Mode", "Desk Pet", "LED Control", "Sound", "Siren", "Brightness", "Clock",
   "Theme", "Clock Fmt", "About", "Timer", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
@@ -372,17 +382,18 @@ static const char* menuValue(int i) {
     case 0: {
       return (s_app_mode == MODE_SPOTIFY) ? "Active" : "Switch ->";
     }
-    case 2: {
+    case 1: return "100 FPS";
+    case 3: {
       uint8_t m = getBuzzerMode();
       return (m == 0) ? "Passive" : (m == 1) ? "Active" : "Off";
     }
-    case 3:  // siren policy
+    case 4:  // siren policy
       return g_settings.siren_mode ? "Till OK" : "Auto";
-    case 4: {
+    case 5: {
       snprintf(buf, sizeof(buf), "%d%%", uiGetBacklight());
       return buf;
     }
-    case 5: {  // clock preview
+    case 6: {  // clock preview
       struct tm t;
       if (getLocalTime(&t, 0)) {
         if (uiGetClock12h()) {
@@ -396,10 +407,10 @@ static const char* menuValue(int i) {
       }
       return "--:--";
     }
-    case 6: return uiGetThemeLight() ? "Light" : "Dark";
-    case 7: return uiGetClock12h() ? "12H" : "24H";
-    case 8: return ">";
-    case 9: {  // timer status
+    case 7: return uiGetThemeLight() ? "Light" : "Dark";
+    case 8: return uiGetClock12h() ? "12H" : "24H";
+    case 9: return ">";
+    case 10: {  // timer status
       if (!timerRunning()) return "Off";
       int left = (timer_end_ms - millis()) / 1000;
       snprintf(buf, sizeof(buf), "%dm%02ds", left / 60, left % 60);
@@ -411,11 +422,11 @@ static const char* menuValue(int i) {
 
 static bool menuActive(int i) {
   switch (i) {
-    case 2: return options_sound_on();
-    case 3: return g_settings.siren_mode != 0;   // highlighted = till-OK
-    case 6: return uiGetThemeLight();
-    case 7: return uiGetClock12h();
-    case 9: return timerRunning();
+    case 3: return options_sound_on();
+    case 4: return g_settings.siren_mode != 0;   // highlighted = till-OK
+    case 7: return uiGetThemeLight();
+    case 8: return uiGetClock12h();
+    case 10: return timerRunning();
     default: return false;
   }
 }
@@ -1066,10 +1077,11 @@ static void dispatchButtons(uint8_t ev) {
   if (ev == 4 || ev == 3 || ev == 8) {
     switch (view) {
       case VIEW_MENU:    view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME; break;
-      case VIEW_LEDLIST: view = VIEW_MENU; menu_focus = 1; break;
-      case VIEW_CLOCK:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 5; break;
-      case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 8; break;
-      case VIEW_TIMER:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 9; break;
+      case VIEW_LEDLIST: view = VIEW_MENU; menu_focus = 2; break;
+      case VIEW_CLOCK:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 6; break;
+      case VIEW_ABOUT:   view = VIEW_MENU; menu_focus = 9; break;
+      case VIEW_TIMER:   view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_MENU; menu_focus = 10; break;
+      case VIEW_DESK_PET: view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME; break;
       case VIEW_SPOTIFY:
       case VIEW_SPOTIFY_LYRICS:
         if (ev == 3) {
@@ -1110,14 +1122,15 @@ static void dispatchButtons(uint8_t ev) {
             }
             break;
           }
-          case 1: view = VIEW_LEDLIST; menu_focus = 0; break;
-          case 2: applySoundToggle(); break;
-          case 3: {  // siren policy: Auto-Mute <-> Until OK
+          case 1: uiActivateDeskPet(); break;
+          case 2: view = VIEW_LEDLIST; menu_focus = 0; break;
+          case 3: applySoundToggle(); break;
+          case 4: {  // siren policy: Auto-Mute <-> Until OK
             g_settings.siren_mode = g_settings.siren_mode ? 0 : 1;
             settingsSave();
             break;
           }
-          case 4: {  // brightness cycle
+          case 5: {  // brightness cycle
             uint8_t b = uiGetBacklight();
             b = (b >= 100) ? 40 : b + 30;
             uiSetBacklight(b);
@@ -1125,18 +1138,18 @@ static void dispatchButtons(uint8_t ev) {
             settingsSave();
             break;
           }
-          case 5: view = VIEW_CLOCK; break;
-          case 6: { // Theme Dark/Light
+          case 6: view = VIEW_CLOCK; break;
+          case 7: { // Theme Dark/Light
             uiSetThemeLight(!uiGetThemeLight());
             break;
           }
-          case 7: { // Clock Fmt 12H/24H
+          case 8: { // Clock Fmt 12H/24H
             uiSetClock12h(!uiGetClock12h());
             break;
           }
-          case 8: view = VIEW_ABOUT; break;
-          case 9: view = VIEW_TIMER; timer_sel = 0; break;
-          case 10: {
+          case 9: view = VIEW_ABOUT; break;
+          case 10: view = VIEW_TIMER; timer_sel = 0; break;
+          case 11: {
             view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
             menu_focus = 0;
             break;
@@ -1152,7 +1165,7 @@ static void dispatchButtons(uint8_t ev) {
         menu_focus = (menu_focus + 1) % LEDLIST_ROWS;
       } else if (ev == 2 || ev == 5 || ev == 9) { // OK / RIGHT
         startBeepPattern(1); // confirmation beep
-        if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 0; }
+        if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 2; }
         else {
           ledSetOverride(menu_focus);   // 0..7 map directly
           g_settings.led_override = menu_focus;
@@ -1171,7 +1184,7 @@ static void dispatchButtons(uint8_t ev) {
           view = VIEW_SPOTIFY;
         } else {
           view = VIEW_MENU;
-          menu_focus = 5;
+          menu_focus = 6;
         }
       }
       break;
@@ -1180,7 +1193,7 @@ static void dispatchButtons(uint8_t ev) {
       if (ev != 0) {
         beepButton();
         view = VIEW_MENU;
-        menu_focus = 8;
+        menu_focus = 9;
       }
       break;
 
@@ -1197,6 +1210,20 @@ static void dispatchButtons(uint8_t ev) {
           timer_fired = false;
           view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
         }
+      }
+      break;
+
+    case VIEW_DESK_PET:
+      if (ev == 2 || ev == 5 || ev == 9) { // SELECT or LONG-SELECT: Playful cute chirp + squints/bounces!
+        beepPet();
+        deskPetReactClick();
+      } else if (ev == 1) { // MENU: Open Settings
+        beepButton();
+        view = VIEW_MENU;
+        menu_focus = 0;
+      } else if (ev != 0) { // Any other button: Wake up to dashboard/spotify
+        beepButton();
+        view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
       }
       break;
 
@@ -1260,7 +1287,6 @@ void uiSetBacklight(uint8_t pct) {
 // ============================================================
 static void uiTask(void* /*param*/) {
   TickType_t last_wake = xTaskGetTickCount();
-  const TickType_t frame_ticks = pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
 
   tft.init();
   tft.setRotation(1);
@@ -1279,6 +1305,7 @@ static void uiTask(void* /*param*/) {
     Serial.println(F("[FATAL] sprite alloc failed"));
     vTaskDelete(nullptr);
   }
+  deskPetInit();
   boot_start_ms = millis();
   if (options_sound_on()) {
     playHardwareBeep(BUZZER_FREQ_OK, 40); // 40ms synchronous boot chirp, guaranteed stops
@@ -1329,6 +1356,47 @@ static void uiTask(void* /*param*/) {
     if (ev) ui_button_event = 0;
     dispatchButtons(ev);
 
+    // --- Desk Pet Auto-Idle / Wakeup Management ---
+    static uint32_t s_last_user_activity_ms = 0;
+    if (s_last_user_activity_ms == 0) s_last_user_activity_ms = ms;
+    if (ev != 0) {
+      s_last_user_activity_ms = ms;
+    }
+
+    bool printer_idle = (d.state != PST_RUNNING && d.state != PST_PAUSED && ui_latched_result == 0);
+    bool spotify_idle = (!g_spotify.is_playing || (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms > 8000)));
+
+    if (view == VIEW_DESK_PET) {
+      // Wake up on incoming music playback
+      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500)) {
+        Serial.println(F("[UI] Music playing -> wake from Desk Pet to SPOTIFY"));
+        view = VIEW_SPOTIFY;
+        s_last_user_activity_ms = ms;
+      }
+      // Wake up on active 3D printing
+      else if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
+        Serial.println(F("[UI] Print active -> wake from Desk Pet to HOME"));
+        view = VIEW_HOME;
+        s_last_user_activity_ms = ms;
+      }
+    } else if (view == VIEW_HOME || view == VIEW_SPOTIFY || view == VIEW_MENU) {
+      // 8s idle silence timeout: transition to Desk Pet (15s if in settings menu)
+      uint32_t timeout_ms = (view == VIEW_MENU) ? 15000 : 8000;
+      if (printer_idle && spotify_idle && (ms - s_last_user_activity_ms >= timeout_ms)) {
+        view = VIEW_DESK_PET;
+        deskPetSetMood(PET_MOOD_NEUTRAL);
+        Serial.println(F("[UI] Idle timeout -> entered Desk Pet (100 FPS)"));
+      }
+    }
+
+    // Dynamic frame pacing: 100 FPS for Desk Pet (10ms); 30 FPS for dashboards (33ms)
+    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
+    static UiView s_prev_view = VIEW_BOOT;
+    if (view != s_prev_view) {
+      s_prev_view = view;
+      last_wake = xTaskGetTickCount();
+    }
+
     // --- smooth progress interpolation between network polls (handover
     //     Task 5): advance the bar every frame on Core 1 so it animates at
     //     UI framerate instead of jumping once per 3-5s poll ---
@@ -1370,6 +1438,7 @@ static void uiTask(void* /*param*/) {
       case VIEW_OVERLAY: drawOverlayFrame(d, ms); break;
       case VIEW_SPOTIFY:        drawSpotifyFrame(ms); break;
       case VIEW_SPOTIFY_LYRICS: drawSpotifyLyricsFrame(ms); break;
+      case VIEW_DESK_PET:       deskPetDrawFrame(sprite, ms); break;
       case VIEW_CUSTOM_IMAGE:
         if (custom_image_active) {
           static bool had_notif = false;
@@ -1417,7 +1486,7 @@ static void uiTask(void* /*param*/) {
     sprite.pushSprite(0, 0);
     g_tft_spi_busy = false;
 
-    vTaskDelayUntil(&last_wake, frame_ticks);
+    vTaskDelayUntil(&last_wake, current_frame_ticks);
   }
 }
 

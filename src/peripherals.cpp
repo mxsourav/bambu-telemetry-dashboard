@@ -191,6 +191,14 @@ void beepButton() {
   toneStart(BUZZER_FREQ_CLICK, 25); // ~2.4% duty = very soft & quiet click
 }
 
+// Playful, cheerful 2-tone pet chirp (2200 Hz -> 2850 Hz)
+void beepPet() {
+  if (s_buzzer_mode == 2 || !options_sound_on()) return;
+  beep_seq = 4;
+  beep_step_ms = millis();
+  toneStart(2200, 320); // First high squeak
+}
+
 static void updateBeepPattern() {
   if (!beep_seq) return;
   uint32_t t = millis() - beep_step_ms;
@@ -228,6 +236,19 @@ static void updateBeepPattern() {
     case 3: // Button Click: ultra-short & quiet
       // 8 ms for active buzzer, 15 ms for passive buzzer
       if (t >= (uint32_t)((s_buzzer_mode == 1) ? 8 : 15)) {
+        toneStop();
+        beep_seq = 0;
+      }
+      break;
+
+    case 4: // Pet Chirp: cheerful, cute high-pitched two-tone squeak
+      if (t < 35) {
+        // Step 1: 2200 Hz
+      } else if (t < 48) {
+        toneStop(); // 13ms gap
+      } else if (t < 95) {
+        toneStart(2850, 320); // Step 2: 2850 Hz chirp
+      } else {
         toneStop();
         beep_seq = 0;
       }

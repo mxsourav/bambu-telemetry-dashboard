@@ -2,6 +2,7 @@
 #include "config.h"
 #include "secrets.h"
 #include "telemetry.h"
+#include "ui.h"
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -257,6 +258,9 @@ static void mqttTask(void* /*param*/) {
       Serial.println(F("[NTP] configured (IST)"));
     }
 
+    // --- Network Throttling during Pet Mode (100 FPS Display Priority) ---
+    bool pet_mode = uiIsPetMode();
+
     // --- Check if MQTT is enabled (Printer Mode vs Spotify Mode) ---
     if (!s_network_enabled) {
       if (mqtt.connected()) {
@@ -285,11 +289,12 @@ static void mqttTask(void* /*param*/) {
         telemetryWrite(d);
       }
       uint32_t retry_interval = network_ever_connected ? 5000 : 8000;
+      if (pet_mode) retry_interval = 15000; // Gentle retry in Pet Mode to preserve 100 FPS bandwidth
       if (millis() - s_mqtt_last_attempt > retry_interval) {
         connectMQTT();
         s_mqtt_last_attempt = millis(); // record AFTER connect completes so we don't immediately retry!
       }
-      vTaskDelay(pdMS_TO_TICKS(50));
+      vTaskDelay(pdMS_TO_TICKS(pet_mode ? 500 : 50));
       continue;
     }
 
@@ -318,7 +323,13 @@ static void mqttTask(void* /*param*/) {
       s_mqtt_last_attempt = millis();
     }
 
-    vTaskDelay(pdMS_TO_TICKS(10));
+    if (pet_mode) {
+      // Pet Mode: sleep 1000ms (1 Hz keepalive check) to keep Core 0 CPU idle (<0.2%)
+      // and give Core 1 full 100 FPS graphics bandwidth while still receiving MQTT events
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
   }
 }
 

@@ -983,10 +983,13 @@ static void webTask(void* /*param*/) {
 
   while (true) {
     server.handleClient();
-    spotifyPollLoop();  // handover Task 3: autonomous Spotify detection -
-                        // non-blocking check, self-throttled (3s playing /
-                        // 5s idle) inside spotify_service.cpp
-    vTaskDelay(pdMS_TO_TICKS(2)); // snappy 2ms yield gives sub-5ms response
+    if (uiIsPetMode()) {
+      // Pet Mode: check incoming HTTP 125x/sec while yielding 99% Core 0 CPU
+      vTaskDelay(pdMS_TO_TICKS(8));
+    } else {
+      spotifyPollLoop();  // autonomous Spotify detection when active
+      vTaskDelay(pdMS_TO_TICKS(2)); // snappy 2ms yield gives sub-5ms response
+    }
   }
 }
 

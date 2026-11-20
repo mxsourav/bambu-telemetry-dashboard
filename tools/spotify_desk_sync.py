@@ -27,6 +27,7 @@ SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
 SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
 SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
 FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
+LED_SET_URL = f"http://{DEVICE_IP}/api/led/set"
 
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
 THUMB_RAW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb_raw.dat")
@@ -125,25 +126,60 @@ def process_smart_art(img):
 
     return bg.filter(ImageFilter.UnsharpMask(radius=1.0, percent=100, threshold=2))
 
+def extract_vibrant_rgb(im):
+    try:
+        small = im.copy().resize((48, 48), Image.Resampling.BOX).convert("RGB")
+        quantized = small.quantize(colors=16)
+        palette = quantized.getpalette()[:48]
+        best_color = (200, 200, 200)
+        best_score = -1.0
+        for i in range(16):
+            r, g, b = palette[i*3], palette[i*3+1], palette[i*3+2]
+            max_c = max(r, g, b)
+            min_c = min(r, g, b)
+            if max_c < 35 or max_c > 250:
+                continue
+            sat = (max_c - min_c) / float(max_c) if max_c > 0 else 0
+            val = max_c / 255.0
+            score = sat * 1.6 + val * 0.4
+            if score > best_score:
+                best_score = score
+                best_color = (r, g, b)
+        return best_color
+    except Exception:
+        return (180, 180, 180)
+
+def push_ambient_led(r, g, b):
+    try:
+        http_session.post(LED_SET_URL, json={"r": int(r), "g": int(g), "b": int(b)}, timeout=1.5)
+    except Exception:
+        pass
+
 def upload_album_art(source_path_or_url):
     try:
         jpeg_to_upload = THUMB_JPEG_PATH
+        raw_art = None
         if source_path_or_url.startswith("http://") or source_path_or_url.startswith("https://"):
             req = urllib.request.Request(source_path_or_url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=4) as response:
                 img_data = response.read()
             from io import BytesIO
-            im = Image.open(BytesIO(img_data)).convert("RGB")
-            if im.size == (480, 360):
-                im = im.crop((0, 45, 480, 315))
-            im = process_smart_art(im)
+            raw_art = Image.open(BytesIO(img_data)).convert("RGB")
+            if raw_art.size == (480, 360):
+                raw_art = raw_art.crop((0, 45, 480, 315))
+            im = process_smart_art(raw_art)
             im.save(jpeg_to_upload, "JPEG", quality=95)
         elif source_path_or_url == THUMB_RAW_PATH or os.path.exists(source_path_or_url):
-            im = Image.open(source_path_or_url).convert("RGB")
-            im = process_smart_art(im)
+            raw_art = Image.open(source_path_or_url).convert("RGB")
+            im = process_smart_art(raw_art)
             im.save(jpeg_to_upload, "JPEG", quality=95)
         else:
             return False
+
+        # Ambient RGB desk lighting: extract dominant vibrant color and push to LED strip
+        if raw_art:
+            ambient_rgb = extract_vibrant_rgb(raw_art)
+            threading.Thread(target=push_ambient_led, args=ambient_rgb, daemon=True).start()
 
         if os.path.exists(jpeg_to_upload) and os.path.getsize(jpeg_to_upload) > 500:
             with open(jpeg_to_upload, "rb") as f:
