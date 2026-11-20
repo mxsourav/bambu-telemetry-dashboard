@@ -1235,7 +1235,7 @@ function uploadSdFile(){
 // --- Image Pusher ---
 const cropCanvas = document.getElementById('cropCanvas');
 const cropCtx = cropCanvas.getContext('2d');
-let customRgb565 = null;
+let customImageBlob = null;
 
 function previewImg(input){
   if(!input.files || input.files.length===0) return;
@@ -1243,11 +1243,9 @@ function previewImg(input){
   reader.onload = e=>{
     const img = new Image();
     img.onload = ()=>{
-      // Smart Aspect Ratio: Atmospheric ambient blur backdrop + uncropped centered image
-      cropCtx.save();
-      cropCtx.filter = 'blur(10px) brightness(0.75)';
-      cropCtx.drawImage(img, 0, 0, 160, 128);
-      cropCtx.restore();
+      cropCtx.filter = 'none';
+      cropCtx.fillStyle = '#000';
+      cropCtx.fillRect(0, 0, 160, 128);
 
       const sAspect = img.width / img.height;
       let dw, dh, dx, dy;
@@ -1264,18 +1262,19 @@ function previewImg(input){
         dx = Math.round((160 - dw) / 2);
         dy = 0;
       }
+
+      // 1. Atmospheric ambient blur backdrop
+      cropCtx.filter = 'blur(10px) brightness(0.7)';
+      cropCtx.drawImage(img, 0, 0, 160, 128);
+
+      // 2. Clear filter to ensure the foreground image is 100% sharp and crisp
+      cropCtx.filter = 'none';
       cropCtx.drawImage(img, dx, dy, dw, dh);
 
-      const imgData = cropCtx.getImageData(0,0,160,128).data;
-      customRgb565 = new Uint8Array(160 * 128 * 2);
-      for(let i=0; i<160*128; i++){
-        const r = imgData[i*4] >> 3;
-        const g = imgData[i*4+1] >> 2;
-        const b = imgData[i*4+2] >> 3;
-        const c = (r << 11) | (g << 5) | b;
-        customRgb565[i*2]   = (c >> 8) & 0xFF; // MSB first (Big-Endian for ST7735 SPI display)
-        customRgb565[i*2+1] = c & 0xFF;        // LSB second
-      }
+      // Convert to high-quality JPEG for Direct-to-RAM upload
+      cropEl.toBlob(blob => {
+        customImageBlob = blob;
+      }, 'image/jpeg', 0.95);
     };
     img.src = e.target.result;
   };
@@ -1283,7 +1282,7 @@ function previewImg(input){
 }
 
 async function pushCustomImg(){
-  if(!customRgb565) return alert("Select an image first!");
+  if(!customImageBlob) return alert("Select an image first!");
   const statusEl = document.getElementById('imgPushStatus');
   const btn = document.getElementById('btnPushImg');
   if(btn) btn.disabled = true;
@@ -1301,9 +1300,8 @@ async function pushCustomImg(){
     statusEl.innerText = "⏳ Pushing image to display...";
   }
 
-  const blob = new Blob([customRgb565], {type: 'application/octet-stream'});
   const fd = new FormData();
-  fd.append('file', blob, 'screen.bin');
+  fd.append('file', customImageBlob, 'custom.jpg');
 
   const doAttempt = async () => {
     const c = new AbortController();

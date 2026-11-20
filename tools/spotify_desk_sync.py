@@ -66,12 +66,16 @@ def fetch_itunes_artwork(artist, title):
 
 def fetch_youtube_hd_thumbnail(query):
     try:
-        clean = re.sub(r'[\(\[\{].*?[\)\]\}]', '', query).replace('|', ' ').strip()
+        clean = re.sub(r'[\(\[\{].*?[\)\]\}]', '', query).replace('|', ' ')
+        clean = re.sub(r'[^\w\s-]', ' ', clean)
+        clean = ' '.join(clean.split())
         url = 'https://www.youtube.com/results?search_query=' + urllib.parse.quote(clean)
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
         with urllib.request.urlopen(req, timeout=3) as resp:
             html = resp.read().decode('utf-8', errors='ignore')
-        m = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+        m = re.search(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+        if not m:
+            m = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
         if m:
             vid = m.group(1)
             return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
@@ -190,8 +194,18 @@ def async_fetch_hd_art(artist, title, current_track_id, track_lock):
         if art_url:
             # Check if track is still the current one before uploading
             if track_lock["id"] == current_track_id:
-                upload_album_art(art_url)
-                print(f"  [HD ART] Upgraded to Ultra-HD art for: {title}")
+                ok = upload_album_art(art_url)
+                if not ok:
+                    # Retry up to 3 times if device was temporarily offline or rebooting
+                    for _ in range(3):
+                        time.sleep(1.2)
+                        if track_lock["id"] != current_track_id:
+                            break
+                        if upload_album_art(art_url):
+                            ok = True
+                            break
+                if ok:
+                    print(f"  [HD ART] Upgraded to Ultra-HD art for: {title}")
     except Exception:
         pass
 

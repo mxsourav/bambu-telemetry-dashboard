@@ -1375,15 +1375,11 @@ static void uiTask(void* /*param*/) {
           static bool had_notif = false;
           bool has_notif = (millis() < notif_until_ms && notif_title[0]);
           if (!custom_image_rendered || has_notif || had_notif || s_custom_jpeg_dirty) {
-            if (s_custom_jpeg_dirty && s_custom_jpeg_buf && s_custom_jpeg_len > 0) {
+            if (s_custom_jpeg_buf && s_custom_jpeg_len > 0) {
               s_custom_jpeg_dirty = false;
               sprite.drawJpg(s_custom_jpeg_buf, s_custom_jpeg_len, 0, 0, W, H);
-              uint16_t* img = uiGetCustomImageBuffer();
-              if (img) {
-                memcpy(img, sprite.getBuffer(), W * H * 2);
-              }
             } else if (s_custom_image_buf) {
-              sprite.pushImage(0, 0, W, H, s_custom_image_buf);
+              sprite.pushImage(0, 0, W, H, (const lgfx::swap565_t*)s_custom_image_buf);
             }
             custom_image_rendered = true;
             had_notif = has_notif;
