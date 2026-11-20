@@ -889,18 +889,53 @@ static void drawSpotifyFrame(uint32_t ms) {
     sprite.fillRect(eqX + 6, eqY - 6, 2, 6, COL_MUTED);
   }
 
-  // 5. Track Title
+  // 5. Track Title (with smooth Marquee scrolling if too long)
   sprite.setTextDatum(textdatum_t::top_left);
   sprite.setFont(&fonts::Font2);
   sprite.setTextColor(COL_TXT);
-  char titleBuf[24];
+
   const char* rawTitle = g_spotify.title[0] ? g_spotify.title : "No Track";
-  strncpy(titleBuf, rawTitle, sizeof(titleBuf) - 1);
-  titleBuf[sizeof(titleBuf) - 1] = 0;
-  if (strlen(titleBuf) > 13) {
-    titleBuf[11] = '.'; titleBuf[12] = '.'; titleBuf[13] = 0;
+  int textW = sprite.textWidth(rawTitle);
+
+  const int titleX = cardX + 8;
+  const int titleY = cardY + 2;
+  const int titleMaxW = (cardX + cardW - 20) - titleX; // ~124px (leaves space for equalizer bars)
+  const int titleH = 14;
+
+  if (textW <= titleMaxW) {
+    // Fits completely: draw statically
+    sprite.drawString(rawTitle, titleX, titleY);
+  } else {
+    // Does not fit: animate smoothly right-to-left (Marquee)
+    static char s_last_marquee_title[96] = {0};
+    static uint32_t s_marquee_start_ms = 0;
+
+    if (strcmp(s_last_marquee_title, rawTitle) != 0) {
+      strncpy(s_last_marquee_title, rawTitle, sizeof(s_last_marquee_title) - 1);
+      s_last_marquee_title[sizeof(s_last_marquee_title) - 1] = 0;
+      s_marquee_start_ms = ms;
+    }
+
+    const int gap = 28;
+    const int scrollDist = textW + gap;
+    const int speedPxPerSec = 26; // smooth, readable marquee speed (~1px per frame at 30 FPS)
+    const uint32_t pauseAtStartMs = 1500; // pause 1.5s so user can read beginning
+    const uint32_t scrollTimeMs = (scrollDist * 1000) / speedPxPerSec;
+    const uint32_t totalPeriodMs = pauseAtStartMs + scrollTimeMs;
+
+    uint32_t elapsed = (ms - s_marquee_start_ms) % totalPeriodMs;
+    int offset = 0;
+    if (elapsed > pauseAtStartMs) {
+      offset = ((elapsed - pauseAtStartMs) * speedPxPerSec) / 1000;
+    }
+
+    sprite.setClipRect(titleX, titleY, titleMaxW, titleH);
+    sprite.drawString(rawTitle, titleX - offset, titleY);
+    if (offset > (textW - titleMaxW)) {
+      sprite.drawString(rawTitle, titleX - offset + scrollDist, titleY);
+    }
+    sprite.clearClipRect();
   }
-  sprite.drawString(titleBuf, cardX + 8, cardY + 2);
 
   // 6. Artist & Time (Row 2)
   uint32_t prog = g_spotify.progress_ms;

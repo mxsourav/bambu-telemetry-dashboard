@@ -3,8 +3,8 @@
 
 struct SpotifyTrackInfo {
   bool     is_playing       = false;
-  char     title[64]        = {0};
-  char     artist[48]       = {0};
+  char     title[96]        = {0};
+  char     artist[64]       = {0};
   uint32_t progress_ms      = 0;
   uint32_t duration_ms      = 0;
   char     image_url[128]   = {0};
