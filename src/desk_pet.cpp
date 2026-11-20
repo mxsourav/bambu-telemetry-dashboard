@@ -1,5 +1,6 @@
 #include "desk_pet.h"
 #include "config.h"
+#include "pc_stats.h"
 #include <math.h>
 
 // =====================================================================
@@ -360,5 +361,32 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
       drawCapsuleEyeAA(sprite, right_center_x, center_y, ew, eh);
       break;
     }
+  }
+
+  // 5. Compact PC Hardware & Weather Pill (if PC stats stream is active)
+  if (pcStatsIsActive()) {
+    const int pill_x = 12;
+    const int pill_y = 106;
+    const int pill_w = 136;
+    const int pill_h = 17;
+    const int pill_r = 8;
+
+    // Subtle off-white / light-gray capsule on paper white
+    sprite.fillRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xF7BE);
+    sprite.drawRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xD69A);
+
+    char pill_str[36];
+    if (g_pc_stats.weather_temp_c > -50.0f && g_pc_stats.weather_temp_c < 60.0f) {
+      snprintf(pill_str, sizeof(pill_str), "CPU %.0f%%  GPU %.0fC  %.0fC",
+               g_pc_stats.cpu_percent, g_pc_stats.gpu_temp_c, g_pc_stats.weather_temp_c);
+    } else {
+      snprintf(pill_str, sizeof(pill_str), "CPU %.0f%%  GPU %.0f%%  RAM %.0f%%",
+               g_pc_stats.cpu_percent, g_pc_stats.gpu_percent, g_pc_stats.ram_percent);
+    }
+
+    sprite.setFont(&fonts::Font0);
+    sprite.setTextDatum(textdatum_t::middle_center);
+    sprite.setTextColor(0x0000, 0xF7BE);
+    sprite.drawString(pill_str, 80, pill_y + pill_h / 2);
   }
 }

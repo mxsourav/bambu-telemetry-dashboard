@@ -10,6 +10,7 @@
 #include "settings_manager.h"
 #include "spotify_service.h"
 #include "network.h"
+#include "pc_stats.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -167,7 +168,9 @@ static void handleScreenRle() {
 
   sendCorsHeaders();
   server.sendHeader("Connection", "close");
-  server.send_P(200, "application/octet-stream", (PGM_P)s_rle_buf, rle_len);
+  server.setContentLength(rle_len);
+  server.send(200, "application/octet-stream", "");
+  server.sendContent((const char*)s_rle_buf, rle_len);
 }
 
 static void handleBuzzerTest() {
@@ -692,6 +695,31 @@ static void handleSettingsSet() {
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
+static void handlePcStats() {
+  if (server.hasArg("plain")) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, server.arg("plain"));
+    if (!err) {
+      g_pc_stats.cpu_percent    = !doc["cpu"].isNull() ? doc["cpu"].as<float>() : (!doc["cpu_percent"].isNull() ? doc["cpu_percent"].as<float>() : 0.0f);
+      g_pc_stats.ram_percent    = !doc["ram"].isNull() ? doc["ram"].as<float>() : (!doc["ram_percent"].isNull() ? doc["ram_percent"].as<float>() : 0.0f);
+      g_pc_stats.ram_used_gb    = !doc["ram_used"].isNull() ? doc["ram_used"].as<float>() : (!doc["ram_used_gb"].isNull() ? doc["ram_used_gb"].as<float>() : 0.0f);
+      g_pc_stats.ram_total_gb   = !doc["ram_total"].isNull() ? doc["ram_total"].as<float>() : (!doc["ram_total_gb"].isNull() ? doc["ram_total_gb"].as<float>() : 0.0f);
+      g_pc_stats.gpu_percent    = !doc["gpu"].isNull() ? doc["gpu"].as<float>() : (!doc["gpu_percent"].isNull() ? doc["gpu_percent"].as<float>() : 0.0f);
+      g_pc_stats.gpu_temp_c     = !doc["gpu_temp"].isNull() ? doc["gpu_temp"].as<float>() : (!doc["gpu_temp_c"].isNull() ? doc["gpu_temp_c"].as<float>() : 0.0f);
+      g_pc_stats.net_down_kbs   = !doc["net_down"].isNull() ? doc["net_down"].as<float>() : (!doc["net_down_kbs"].isNull() ? doc["net_down_kbs"].as<float>() : 0.0f);
+      g_pc_stats.net_up_kbs     = !doc["net_up"].isNull() ? doc["net_up"].as<float>() : (!doc["net_up_kbs"].isNull() ? doc["net_up_kbs"].as<float>() : 0.0f);
+      g_pc_stats.weather_temp_c = !doc["temp"].isNull() ? doc["temp"].as<float>() : (!doc["weather_temp_c"].isNull() ? doc["weather_temp_c"].as<float>() : 0.0f);
+      const char* w = !doc["weather"].isNull() ? doc["weather"].as<const char*>() : (!doc["weather_desc"].isNull() ? doc["weather_desc"].as<const char*>() : "");
+      const char* c = doc["city"] | "";
+      strncpy(g_pc_stats.weather_desc, w, sizeof(g_pc_stats.weather_desc) - 1);
+      strncpy(g_pc_stats.city, c, sizeof(g_pc_stats.city) - 1);
+      g_pc_stats.last_update_ms = millis();
+    }
+  }
+  sendCorsHeaders();
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
 static void handleSpotifyNow() {
   if (server.hasArg("plain")) {
     JsonDocument doc;
@@ -957,6 +985,26 @@ static void webTask(void* /*param*/) {
   server.on("/api/system/update", HTTP_POST, handleOtaDone, handleOtaLoop);
   server.on("/api/system/reboot", HTTP_POST, handleReboot);
   server.on("/api/notify", HTTP_POST, handleNotify);
+  server.on("/api/pc/stats", HTTP_POST, handlePcStats);
+  server.on("/api/pc/stats", HTTP_GET, []() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    doc["cpu"] = g_pc_stats.cpu_percent;
+    doc["ram"] = g_pc_stats.ram_percent;
+    doc["ram_used"] = g_pc_stats.ram_used_gb;
+    doc["ram_total"] = g_pc_stats.ram_total_gb;
+    doc["gpu"] = g_pc_stats.gpu_percent;
+    doc["gpu_temp"] = g_pc_stats.gpu_temp_c;
+    doc["net_down"] = g_pc_stats.net_down_kbs;
+    doc["net_up"] = g_pc_stats.net_up_kbs;
+    doc["temp"] = g_pc_stats.weather_temp_c;
+    doc["weather"] = g_pc_stats.weather_desc;
+    doc["city"] = g_pc_stats.city;
+    doc["active"] = pcStatsIsActive();
+    String out;
+    serializeJson(doc, out);
+    server.send(200, "application/json", out);
+  });
   server.on("/api/settings", HTTP_GET, handleSettingsGet);
   server.on("/api/settings", HTTP_POST, handleSettingsSet);
   server.on("/api/spotify/now", HTTP_POST, handleSpotifyNow);

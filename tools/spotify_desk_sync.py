@@ -20,6 +20,7 @@ import urllib.request
 import urllib.parse
 import re
 import threading
+import psutil
 from PIL import Image, ImageOps, ImageFilter
 
 DEVICE_IP = "192.168.0.154"
@@ -28,6 +29,7 @@ SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
 SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
 FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
 LED_SET_URL = f"http://{DEVICE_IP}/api/led/set"
+PC_STATS_URL = f"http://{DEVICE_IP}/api/pc/stats"
 
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
 THUMB_RAW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb_raw.dat")
@@ -245,6 +247,102 @@ def async_fetch_hd_art(artist, title, current_track_id, track_lock):
     except Exception:
         pass
 
+def get_weather():
+    try:
+        req = urllib.request.Request("http://ip-api.com/json", headers={"User-Agent": "DeskSync/1.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            loc = json.loads(r.read().decode())
+            lat = loc.get("lat", 28.6139)
+            lon = loc.get("lon", 77.2090)
+            city = loc.get("city", "Delhi")
+
+        weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        req_w = urllib.request.Request(weather_url, headers={"User-Agent": "DeskSync/1.0"})
+        with urllib.request.urlopen(req_w, timeout=3) as r:
+            data = json.loads(r.read().decode())
+            cw = data.get("current_weather", {})
+            temp = float(cw.get("temperature", 0.0))
+            wcode = int(cw.get("weathercode", 0))
+
+            desc = "CLEAR"
+            if wcode in (1, 2, 3):
+                desc = "CLOUDY"
+            elif wcode in (45, 48):
+                desc = "FOG"
+            elif wcode in (51, 53, 55, 61, 63, 65, 80, 81, 82):
+                desc = "RAIN"
+            elif wcode in (71, 73, 75, 77, 85, 86):
+                desc = "SNOW"
+            elif wcode >= 95:
+                desc = "STORM"
+
+            return {"city": city, "temp": temp, "weather": desc}
+    except Exception:
+        return {"city": "PC", "temp": 0.0, "weather": "ONLINE"}
+
+def get_gpu_stats():
+    try:
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=1, creationflags=creationflags
+        )
+        if res.returncode == 0:
+            parts = res.stdout.strip().split(",")
+            return float(parts[0].strip()), float(parts[1].strip())
+    except Exception:
+        pass
+    return 0.0, 0.0
+
+def pc_telemetry_loop():
+    """Background hardware vitals & weather stream to Desk Station (every 2s)."""
+    weather_info = {"city": "PC", "temp": 0.0, "weather": "ONLINE"}
+    last_weather_fetch = 0
+    try:
+        net_init = psutil.net_io_counters()
+        last_net_bytes = (net_init.bytes_recv, net_init.bytes_sent)
+    except Exception:
+        last_net_bytes = (0, 0)
+    last_net_time = time.time()
+
+    while True:
+        try:
+            now = time.time()
+            if now - last_weather_fetch > 900 or last_weather_fetch == 0:
+                weather_info = get_weather()
+                last_weather_fetch = now
+
+            cpu = psutil.cpu_percent(interval=None)
+            mem = psutil.virtual_memory()
+            gpu_pct, gpu_temp = get_gpu_stats()
+
+            net = psutil.net_io_counters()
+            dt = max(now - last_net_time, 0.1)
+            down_kbs = round((net.bytes_recv - last_net_bytes[0]) / (1024 * dt), 1)
+            up_kbs = round((net.bytes_sent - last_net_bytes[1]) / (1024 * dt), 1)
+            last_net_bytes = (net.bytes_recv, net.bytes_sent)
+            last_net_time = now
+
+            payload = {
+                "cpu": cpu,
+                "ram": mem.percent,
+                "ram_used": round(mem.used / (1024**3), 1),
+                "ram_total": round(mem.total / (1024**3), 1),
+                "gpu": gpu_pct,
+                "gpu_temp": gpu_temp,
+                "net_down": down_kbs,
+                "net_up": up_kbs,
+                "temp": weather_info["temp"],
+                "weather": weather_info["weather"],
+                "city": weather_info["city"]
+            }
+            http_session.post(PC_STATS_URL, json=payload, timeout=1.5)
+        except Exception:
+            pass
+        time.sleep(2.0)
+
 def spawn_ps_stream():
     creationflags = 0
     if sys.platform == "win32":
@@ -263,8 +361,12 @@ def main():
     print("=" * 65)
     print(" STΔN studio. Spotify & Media Desk Station Sync (Low-Latency Native)")
     print(f" Target Device: http://{DEVICE_IP}/")
+    print(" PC Hardware Telemetry & Weather Sync: Active (2s interval)")
     print(" Listening for music playing on your PC...")
     print("=" * 65)
+
+    # Launch background PC Telemetry & Weather thread
+    threading.Thread(target=pc_telemetry_loop, daemon=True).start()
 
     last_track_id = ""
     last_art_track = ""
