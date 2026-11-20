@@ -36,6 +36,7 @@ extern volatile bool g_tft_spi_busy;
 
 struct BtnState {
   uint8_t  pin;
+  uint8_t  active_level;    // 0 = active LOW (pressed when 0), 1 = active HIGH (pressed when 1)
   uint16_t history;         // 16-bit sample shift register (160ms history)
   bool     pressed;         // debounced state: true = pressed, false = released
   uint32_t press_start_ms;  // millis() when press confirmed
@@ -46,8 +47,8 @@ struct BtnState {
   uint32_t lockout_ms;      // lockout timestamp if electrical chatter detected
 };
 
-static BtnState b_menu   {PIN_BTN_MENU,   0xFFFF, false, 0, false, 0, 0, 0, 0};
-static BtnState b_select {PIN_BTN_SELECT, 0xFFFF, false, 0, false, 0, 0, 0, 0};
+static BtnState b_menu   {PIN_BTN_MENU,   0, 0, false, 0, false, 0, 0, 0, 0};
+static BtnState b_select {PIN_BTN_SELECT, 1, 0, false, 0, false, 0, 0, 0, 0};
 
 static uint8_t buttonEmit(BtnState& b, uint32_t ms, uint8_t ev) {
   if (ms - b.glitch_win_ms > 2000) {
@@ -72,7 +73,7 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
 
   // If locked out due to chatter/EMI, suppress events and reset history
   if (b.lockout_ms > ms) {
-    b.history = 0xFFFF;
+    b.history = 0;
     b.pressed = false;
     return 0;
   }
@@ -82,7 +83,8 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
     return 0;
   }
 
-  uint8_t raw = digitalRead(b.pin) ? 1 : 0;
+  // 1 = currently pressed, 0 = currently released
+  uint8_t raw = (digitalRead(b.pin) == b.active_level) ? 1 : 0;
   b.history = (b.history << 1) | raw;
 
   // 40ms cooldown between events for snappy response
@@ -90,10 +92,10 @@ static uint8_t buttonUpdate(BtnState& b, uint32_t ms) {
     return 0;
   }
 
-  // 4 consecutive LOW reads (40 ms) = CONFIRMED PRESSED
-  bool stable_pressed  = ((b.history & 0x0F) == 0x00);
-  // 4 consecutive HIGH reads (40 ms) = CONFIRMED RELEASED
-  bool stable_released = ((b.history & 0x0F) == 0x0F);
+  // 4 consecutive PRESSED reads (40 ms) = CONFIRMED PRESSED
+  bool stable_pressed  = ((b.history & 0x0F) == 0x0F);
+  // 4 consecutive RELEASED reads (40 ms) = CONFIRMED RELEASED
+  bool stable_released = ((b.history & 0x0F) == 0x00);
 
   // Transition: Released -> Pressed
   if (!b.pressed && stable_pressed) {
@@ -409,6 +411,17 @@ static void peripheralsTask(void* /*param*/) {
   while (true) {
     uint32_t ms = millis();
     telemetryRead(d);
+
+    // Auto-calibrate resting polarity at 1200ms: resting voltage is unpressed
+    static bool calibrated = false;
+    if (!calibrated && ms >= 1200) {
+      b_menu.active_level   = (digitalRead(b_menu.pin) == HIGH) ? 0 : 1;
+      b_select.active_level = (digitalRead(b_select.pin) == HIGH) ? 0 : 1;
+      calibrated = true;
+      Serial.printf("[BTN] Polarity calibrated: Menu=%s Select=%s\n",
+                    b_menu.active_level ? "Active-HIGH" : "Active-LOW",
+                    b_select.active_level ? "Active-HIGH" : "Active-LOW");
+    }
 
     // --- buttons: state-machine driven, one event per press ---
     uint8_t ev = buttonUpdate(b_menu, ms);

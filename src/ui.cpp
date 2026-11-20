@@ -1087,8 +1087,8 @@ static void dispatchButtons(uint8_t ev) {
 
   switch (view) {
     case VIEW_HOME:
-      // Menu (1), Select (2), UP (6), DOWN (7), RIGHT (9) opens Settings from Home
-      if (ev == 1 || ev == 2 || ev == 6 || ev == 7 || ev == 9) {
+      // Menu (1), Select (2, 5), UP (6), DOWN (7), RIGHT (9) opens Settings from Home
+      if (ev == 1 || ev == 2 || ev == 5 || ev == 6 || ev == 7 || ev == 9) {
         view = VIEW_MENU;
         menu_focus = 0;
       }
@@ -1099,7 +1099,7 @@ static void dispatchButtons(uint8_t ev) {
         menu_focus = (menu_focus - 1 + MENU_ROWS) % MENU_ROWS;
       } else if (ev == 1 || ev == 7) { // DOWN
         menu_focus = (menu_focus + 1) % MENU_ROWS;
-      } else if (ev == 2 || ev == 9) { // OK / RIGHT
+      } else if (ev == 2 || ev == 5 || ev == 9) { // OK / RIGHT / LONG-SELECT
         startBeepPattern(1); // confirmation beep
         switch (menu_focus) {
           case 0: {
@@ -1150,7 +1150,7 @@ static void dispatchButtons(uint8_t ev) {
         menu_focus = (menu_focus - 1 + LEDLIST_ROWS) % LEDLIST_ROWS;
       } else if (ev == 1 || ev == 7) { // DOWN
         menu_focus = (menu_focus + 1) % LEDLIST_ROWS;
-      } else if (ev == 2 || ev == 9) { // OK / RIGHT
+      } else if (ev == 2 || ev == 5 || ev == 9) { // OK / RIGHT
         startBeepPattern(1); // confirmation beep
         if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 0; }
         else {
