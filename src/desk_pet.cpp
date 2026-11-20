@@ -415,9 +415,9 @@ static void drawTear(LGFX_Sprite& sprite, float ox, float top_y,
 }
 
 void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
-  // Paper background, subtly lerped toward the tint color at high
-  // intensity (rage / fever atmosphere). Stays ~white otherwise.
-  uint8_t bg_amt = (uint8_t)(((uint16_t)s_tint_amt * 36) / 255); // max ~14%
+  // Paper background lerped toward the mood tint (rage red, sick green,
+  // cold blue...). The emotion color lives HERE - no cheek dots.
+  uint8_t bg_amt = (uint8_t)(((uint16_t)s_tint_amt * 64) / 255); // max ~25%
   uint16_t bg = blend565(0xFFFF, pack565(s_tint_r, s_tint_g, s_tint_b), bg_amt);
   sprite.fillSprite(bg);
 
@@ -554,14 +554,8 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   const int right_center_x = 107 + (int)(s_curr_look_x + sway_x + shiver_x);
   const int center_y       = 64 + (int)(s_curr_look_y + bounce_y + vibe_y);
 
-  uint16_t blush_col = pack565(s_tint_r, s_tint_g, s_tint_b);
-  uint8_t  blush_a   = (uint8_t)((s_tint_amt * 145) / 255);  // max ~57%
-
-  // Cheek blush (under the outer eye corners) whenever tinted
-  if (blush_a > 0) {
-    drawSoftDiscAA(sprite, (float)(left_center_x - 15), 88.0f, 7.5f, blush_col, blush_a);
-    drawSoftDiscAA(sprite, (float)(right_center_x + 15), 88.0f, 7.5f, blush_col, blush_a);
-  }
+  uint16_t blush_col = pack565(s_tint_r, s_tint_g, s_tint_b);   // (atmosphere only)
+  (void)blush_col;
 
   // Mood Rendering
   switch (s_mood) {

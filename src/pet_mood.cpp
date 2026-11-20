@@ -47,7 +47,7 @@ static int      s_auto_sick_done_day = -1; // auto-sick fires once per day
 static uint32_t s_last_sound_ms = 0;
 
 // ---------------------------------------------------------------------
-// Mood -> cheek tint (RGB) + blush amount + vibe bounce parameters
+// Mood -> background atmosphere tint (RGB) + vibe bounce parameters
 // ---------------------------------------------------------------------
 static uint8_t vibeStyleFromGenre();   // fwd: defined below (helpers)
 

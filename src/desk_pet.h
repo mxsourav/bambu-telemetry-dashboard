@@ -43,8 +43,8 @@ void deskPetSetMood(PetMood mood, uint32_t duration_ms = 0);
 PetMood deskPetGetMood();
 
 // ---- v2 mood-engine hooks ----
-// Cheek blush: RGB tint + 0..255 amount (0 = invisible). Also drives a
-// faint background tint at high intensity (fever / rage).
+// Mood atmosphere tint: RGB color + 0..255 amount; lerps the paper
+// background toward it (rage red, sick green, cold blue...).
 void deskPetSetTint(uint8_t r, uint8_t g, uint8_t b, uint8_t amount);
 // Music vibe bounce: amplitude px and beat frequency Hz (0 amp = off).
 void deskPetSetBounce(float amp_px, float freq_hz);
