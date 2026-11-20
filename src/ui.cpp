@@ -30,6 +30,7 @@
 #include "status_logo.h"
 #include "desk_pet.h"
 #include "pc_stats.h"
+#include "pet_mood.h"
 
 #include <LovyanGFX.hpp>
 #include <SD.h>
@@ -164,6 +165,7 @@ static bool      s_custom_jpeg_dirty = false;
 static bool custom_image_active = false;
 static bool custom_image_rendered = false;
 static bool s_had_active_print = false;
+static bool s_pet_print_woken = false;  // pet->HOME wake fired once per print
 
 // Live Notification Overlay state
 static char notif_title[24] = {0};
@@ -1153,9 +1155,11 @@ static void dispatchButtons(uint8_t ev) {
   // overlay: select = OK (clear latch), any menu action also exits
   if (view == VIEW_OVERLAY) {
     if (ev == 1 || ev == 2 || ev == 3 || ev == 4 || ev == 5) {
+      uint8_t ack_kind = ui_latched_result;   // 1 = complete, 2 = failed
       ui_latched_result = 0;
       s_had_active_print = false;
       view = VIEW_HOME;
+      petMoodCelebrate(ack_kind == 2 ? 2 : 0); // pet reacts after the ACK
     }
     return;
   }
@@ -1312,6 +1316,16 @@ static void dispatchButtons(uint8_t ev) {
       break;
 
     case VIEW_DESK_PET:
+      if (ui_latched_result != 0) {
+        // Pet is showing the print result emotion: any press ACKs it
+        // exactly like the overlay's OK (mood engine reacts to relief)
+        uint8_t ack_kind = ui_latched_result;
+        ui_latched_result = 0;
+        s_had_active_print = false;
+        beepButton();
+        petMoodCelebrate(ack_kind == 2 ? 2 : 0);
+        break;
+      }
       if (ev == 2 || ev == 5 || ev == 9) { // SELECT or LONG-SELECT
         // Double-click within 380ms toggles full-screen PC HUD!
         static uint32_t s_last_pet_click_ms = 0;
@@ -1406,6 +1420,30 @@ void uiSetBacklight(uint8_t pct) {
   }
 }
 
+// ------------------------------------------------------------
+// Mini now-playing strip on the pet screen (vibe mode): the pet
+// keeps the spotlight while a slim chip shows title + progress.
+// ------------------------------------------------------------
+static void drawPetVibeStrip(uint32_t ms) {
+  bool fresh = (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms < 3500));
+  if (!fresh || !g_settings.pet_music_vibe || !g_spotify.title[0]) return;
+
+  sprite.fillRoundRect(2, 2, 156, 20, 6, 0xE71C);          // paper chip
+  sprite.drawRoundRect(2, 2, 156, 20, 6, 0xD69A);
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::middle_left);
+  sprite.setTextColor(0x0000, 0xE71C);
+  char line[30];
+  snprintf(line, sizeof(line), "%.25s", g_spotify.title);
+  sprite.drawString(line, 8, 10);
+
+  float frac = (g_spotify.duration_ms > 0)
+               ? (float)g_spotify.progress_ms / (float)g_spotify.duration_ms : 0.0f;
+  if (frac > 1.0f) frac = 1.0f;
+  sprite.fillRect(6, 18, 148, 2, 0xC638);                  // track base
+  sprite.fillRect(6, 18, (int)(148 * frac), 2, 0x0000);    // progress
+}
+
 // ============================================================
 //  UI TASK
 // ============================================================
@@ -1461,18 +1499,25 @@ static void uiTask(void* /*param*/) {
     }
 
     // --- latch: FINISH/FAILED -> full-screen overlay until OK ---
-    // (suppressed during image mode: the pushed image owns the screen)
+    // (suppressed during image mode: the pushed image owns the screen;
+    //  on the Desk Pet view the mood engine shows the emotion instead -
+    //  the pet slowly turns red while a failure is ignored)
     if (ui_latched_result == 0 && !custom_image_active) {
       if (d.state == PST_FINISH && s_had_active_print && (d.percent >= 98 || (d.percent >= 95 && d.remain_min == 0))) {
         ui_latched_result = 1;
-        view = VIEW_OVERLAY;
+        if (view != VIEW_DESK_PET) view = VIEW_OVERLAY;
         s_had_active_print = false;
+        s_pet_print_woken = false;
       }
       else if (d.state == PST_FAILED && s_had_active_print) {
         ui_latched_result = 2;
-        view = VIEW_OVERLAY;
+        if (view != VIEW_DESK_PET) view = VIEW_OVERLAY;
         s_had_active_print = false;
+        s_pet_print_woken = false;
       }
+    }
+    if (d.state == PST_IDLE && d.percent == 0) {
+      s_pet_print_woken = false;
     }
 
     // --- buttons (single-fire events from peripherals task) ---
@@ -1490,22 +1535,34 @@ static void uiTask(void* /*param*/) {
     bool spotify_idle = (!g_spotify.is_playing || (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms > 8000)));
 
     if (view == VIEW_DESK_PET) {
-      // Wake up on incoming music playback
+      // Wake up on incoming music playback. In vibe mode (pet_music_vibe)
+      // the pet STAYS and dances to the beat with a mini progress strip.
       if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500)) {
-        Serial.println(F("[UI] Music playing -> wake from Desk Pet to SPOTIFY"));
-        view = VIEW_SPOTIFY;
-        s_last_user_activity_ms = ms;
+        if (!g_settings.pet_music_vibe) {
+          Serial.println(F("[UI] Music playing -> wake from Desk Pet to SPOTIFY"));
+          view = VIEW_SPOTIFY;
+          s_last_user_activity_ms = ms;
+        }
       }
-      // Wake up on active 3D printing
+      // Wake up on active 3D printing - only once per print, so the user
+      // can manually go back and let the pet watch (THINKING) if preferred
       else if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
-        Serial.println(F("[UI] Print active -> wake from Desk Pet to HOME"));
-        view = VIEW_HOME;
+        if (!s_pet_print_woken) {
+          s_pet_print_woken = true;
+          Serial.println(F("[UI] Print active -> wake from Desk Pet to HOME"));
+          view = VIEW_HOME;
+        }
         s_last_user_activity_ms = ms;
       }
     } else if (view == VIEW_HOME || view == VIEW_SPOTIFY || view == VIEW_MENU) {
-      // 8s idle silence timeout: transition to Desk Pet (15s if in settings menu)
+      // 8s idle silence timeout: transition to Desk Pet (15s if in settings menu).
+      // With vibe mode on, PLAYING MUSIC also summons the pet (it comes up
+      // to dance; the cover-art view stays reachable via the menu).
       uint32_t timeout_ms = (view == VIEW_MENU) ? 15000 : 8000;
-      if (printer_idle && spotify_idle && (ms - s_last_user_activity_ms >= timeout_ms)) {
+      bool music_vibe_entry = (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500) &&
+                               g_settings.pet_music_vibe && view != VIEW_SPOTIFY);
+      if (printer_idle && (spotify_idle || music_vibe_entry) &&
+          (ms - s_last_user_activity_ms >= timeout_ms)) {
         view = VIEW_DESK_PET;
         deskPetSetMood(PET_MOOD_NEUTRAL);
         Serial.println(F("[UI] Idle timeout -> entered Desk Pet (100 FPS)"));
@@ -1528,6 +1585,7 @@ static void uiTask(void* /*param*/) {
     TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
     static UiView s_prev_view = VIEW_BOOT;
     if (view != s_prev_view) {
+      if (s_prev_view == VIEW_DESK_PET) petMoodOnLeave();
       s_prev_view = view;
       last_wake = xTaskGetTickCount();
     }
@@ -1573,7 +1631,11 @@ static void uiTask(void* /*param*/) {
       case VIEW_OVERLAY: drawOverlayFrame(d, ms); break;
       case VIEW_SPOTIFY:        drawSpotifyFrame(ms); break;
       case VIEW_SPOTIFY_LYRICS: drawSpotifyLyricsFrame(ms); break;
-      case VIEW_DESK_PET:       deskPetDrawFrame(sprite, ms); break;
+      case VIEW_DESK_PET:
+        petMoodUpdate(ms, d);
+        deskPetDrawFrame(sprite, ms);
+        drawPetVibeStrip(ms);
+        break;
       case VIEW_PC_HUD:         drawPcHudFrame(ms); break;
       case VIEW_CUSTOM_IMAGE:
         if (custom_image_active) {

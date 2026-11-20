@@ -31,6 +31,34 @@ FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
 LED_SET_URL = f"http://{DEVICE_IP}/api/led/set"
 PC_STATS_URL = f"http://{DEVICE_IP}/api/pc/stats"
 
+# Music "vibe" energy (0..1) shared with the PC telemetry thread: the desk
+# pet bounces harder to energetic tracks. Derived deterministically from the
+# track name (no extra API calls); 0 = nothing playing.
+g_music_energy = 0.5
+
+def track_energy(artist, title):
+    h = sum(ord(c) for c in (artist or "") + (title or ""))
+    return round(0.3 + (h % 7) / 10.0, 2)  # 0.3 .. 0.9
+
+def lookup_genre(artist, title):
+    """Genre via the same iTunes search used for artwork (no auth needed).
+    Returns e.g. 'Drill', 'Hip-Hop/Rap', 'Metal' or ''."""
+    try:
+        clean_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title or '').replace('|', ' ').strip()
+        clean_artist = (artist or '').split(',')[0].split('&')[0].replace('Music', '').strip()
+        query = urllib.parse.quote(f"{clean_artist} {clean_title}".strip())
+        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("resultCount", 0) > 0:
+                return data["results"][0].get("primaryGenreName", "") or ""
+    except Exception:
+        pass
+    return ""
+
+g_music_genre = ""
+
 PS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "get_media.ps1")
 THUMB_RAW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb_raw.dat")
 THUMB_JPEG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_thumb.jpg")
@@ -336,7 +364,9 @@ def pc_telemetry_loop():
                 "net_up": up_kbs,
                 "temp": weather_info["temp"],
                 "weather": weather_info["weather"],
-                "city": weather_info["city"]
+                "city": weather_info["city"],
+                "vibe": g_music_energy,
+                "genre": g_music_genre
             }
             http_session.post(PC_STATS_URL, json=payload, timeout=1.5)
         except Exception:
@@ -357,7 +387,15 @@ def spawn_ps_stream():
         creationflags=creationflags
     )
 
+def async_lookup_genre(artist, title):
+    """Background genre lookup so the timeline loop never blocks."""
+    global g_music_genre
+    genre = lookup_genre(artist, title)
+    if genre:
+        g_music_genre = genre
+
 def main():
+    global g_music_energy, g_music_genre
     print("=" * 65)
     print(" STΔN studio. Spotify & Media Desk Station Sync (Low-Latency Native)")
     print(f" Target Device: http://{DEVICE_IP}/")
@@ -392,6 +430,8 @@ def main():
                     push_spotify_now("", "", 0, 0, False)
                     last_track_id = ""
                     track_lock["id"] = ""
+                    g_music_energy = 0.0
+                    g_music_genre = ""
                 continue
 
             parts = line.split("::::")
@@ -414,6 +454,12 @@ def main():
 
                 track_id = f"{artist} - {title}"
                 track_lock["id"] = track_id
+                g_music_energy = track_energy(artist, title) if is_playing else 0.0
+                threading.Thread(
+                    target=async_lookup_genre,
+                    args=(artist, title),
+                    daemon=True
+                ).start()
 
                 if track_id != last_track_id:
                     last_track_id = track_id

@@ -457,6 +457,46 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
         </div>
       </div>
     </div>
+
+    <!-- Desk Pet Card -->
+    <div class="card">
+      <div class="card-title">
+        <span>Desk Pet</span>
+        <span id="petMoodVal" style="color:var(--cyan);">NEUTRAL</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:0.7rem;font-weight:600;color:var(--txt-muted);">Mood Sounds</div>
+          <div style="display:flex;gap:6px;">
+            <button class="led-chip active" id="petSnd1" onclick="setPetSetting('pet_sounds',1)">On</button>
+            <button class="led-chip" id="petSnd0" onclick="setPetSetting('pet_sounds',0)">Off</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:0.7rem;font-weight:600;color:var(--txt-muted);">Music Vibe (dance)</div>
+          <div style="display:flex;gap:6px;">
+            <button class="led-chip active" id="petVibe1" onclick="setPetSetting('pet_music_vibe',1)">On</button>
+            <button class="led-chip" id="petVibe0" onclick="setPetSetting('pet_music_vibe',0)">Off</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:0.7rem;font-weight:600;color:var(--txt-muted);">Health</div>
+          <div style="display:flex;gap:6px;">
+            <button class="led-chip active" id="petHlth0" onclick="setPetSetting('pet_sick',0)">Healthy</button>
+            <button class="led-chip" id="petHlth1" onclick="setPetSetting('pet_sick',1)">🤒 Sick</button>
+            <button class="led-chip" id="petHlth2" onclick="setPetSetting('pet_sick',2)">🌡️ Fever</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+          <button class="btn-act" onclick="petMood('angry',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">😤 Angry</button>
+          <button class="btn-act" onclick="petMood('sad',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">😢 Sad</button>
+          <button class="btn-act" onclick="petMood('crying',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">😭 Cry</button>
+          <button class="btn-act" onclick="petMood('dancing',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#A78BFA;color:#A78BFA;">🕺 Dance</button>
+          <button class="btn-act" onclick="petMood('excited',10)" style="padding:4px 8px;font-size:0.65rem;border-color:var(--cyan);color:var(--cyan);">🎉 Party</button>
+          <button class="btn-act" onclick="petMood('treat')" style="padding:4px 8px;font-size:0.65rem;">💊 Treat</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- PANEL 2: LIGHTING -->
@@ -843,6 +883,43 @@ function testBuzzer(pattern='1'){
   vib();
   fetch(getApiUrl('/api/buzzer/test?pattern=' + pattern + '&mode=' + currentBuzzerMode), {method:'POST'}).catch(()=>{});
 }
+
+// --- Desk Pet mood controls ---
+function setPetSetting(key, val){
+  vib();
+  fetch(getApiUrl('/api/settings'), {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({[key]: val})
+  }).then(fetchPetMood).catch(()=>{});
+}
+function petMood(mood, secs=10){
+  vib();
+  fetch(getApiUrl('/api/pet/mood'), {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mood:mood, seconds:secs})
+  }).catch(()=>{});
+}
+function fetchPetMood(){
+  fetch(getApiUrl('/api/pet/mood'))
+    .then(r => r.json())
+    .then(d => {
+      if(!d) return;
+      const m = document.getElementById('petMoodVal');
+      if(m){
+        let t = (d.mood || 'neutral').toUpperCase();
+        if(d.anger > 8 && (d.mood === 'angry' || d.mood === 'frustrated')) t += ' ' + Math.round(d.anger) + '%';
+        m.textContent = t;
+      }
+      const set = (id, on) => { const e = document.getElementById(id); if(e) e.classList.toggle('active', !!on); };
+      set('petSnd1',  d.sounds === 1);  set('petSnd0',  d.sounds !== 1);
+      set('petVibe1', d.vibe === 1);    set('petVibe0', d.vibe !== 1);
+      set('petHlth0', d.sick === 0); set('petHlth1', d.sick === 1); set('petHlth2', d.sick === 2);
+    }).catch(()=>{});
+}
+setInterval(fetchPetMood, 3000);
+setTimeout(fetchPetMood, 800);
 
 // --- High-Speed RLE Display Mirror ---
 const canvas = document.getElementById('liveCanvas');

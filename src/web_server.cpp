@@ -11,6 +11,8 @@
 #include "spotify_service.h"
 #include "network.h"
 #include "pc_stats.h"
+#include "desk_pet.h"
+#include "pet_mood.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -656,6 +658,9 @@ static void handleSettingsGet() {
   doc["led_override"] = g_settings.led_override;
   doc["led_inverted"] = ledGetInverted();
   doc["siren_mode"]   = g_settings.siren_mode;   // 0=auto-mute 1=bark till OK
+  doc["pet_sounds"]     = g_settings.pet_sounds;      // pet mood chirps
+  doc["pet_music_vibe"] = g_settings.pet_music_vibe;  // dance while music plays
+  doc["pet_sick"]       = g_settings.pet_sick;        // 0=ok 1=sick 2=fever
   String out;
   serializeJson(doc, out);
   sendCorsHeaders();
@@ -689,6 +694,18 @@ static void handleSettingsSet() {
       g_settings.siren_mode = doc["siren_mode"] | 0;
       if (g_settings.siren_mode > 1) g_settings.siren_mode = 1;
     }
+    if (!doc["pet_sounds"].isNull()) {
+      g_settings.pet_sounds = doc["pet_sounds"] | 0;
+      if (g_settings.pet_sounds > 1) g_settings.pet_sounds = 1;
+    }
+    if (!doc["pet_music_vibe"].isNull()) {
+      g_settings.pet_music_vibe = doc["pet_music_vibe"] | 0;
+      if (g_settings.pet_music_vibe > 1) g_settings.pet_music_vibe = 1;
+    }
+    if (!doc["pet_sick"].isNull()) {
+      g_settings.pet_sick = doc["pet_sick"] | 0;
+      if (g_settings.pet_sick > 2) g_settings.pet_sick = 2;
+    }
     settingsSave();
   }
   sendCorsHeaders();
@@ -713,11 +730,38 @@ static void handlePcStats() {
       const char* c = doc["city"] | "";
       strncpy(g_pc_stats.weather_desc, w, sizeof(g_pc_stats.weather_desc) - 1);
       strncpy(g_pc_stats.city, c, sizeof(g_pc_stats.city) - 1);
+      g_pc_stats.music_vibe = doc["vibe"] | g_pc_stats.music_vibe;  // 0..1 energy
+      if (g_pc_stats.music_vibe < 0.0f || g_pc_stats.music_vibe > 1.0f) g_pc_stats.music_vibe = 0.5f;
+      const char* gn = doc["genre"] | "";
+      if (gn[0]) strncpy(g_pc_stats.music_genre, gn, sizeof(g_pc_stats.music_genre) - 1);
+      g_pc_stats.music_genre[sizeof(g_pc_stats.music_genre) - 1] = 0;
       g_pc_stats.last_update_ms = millis();
     }
   }
   sendCorsHeaders();
   server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+// ---- Desk Pet mood API ------------------------------------------------
+// POST /api/pet/mood {"mood":"angry","seconds":10}  force a mood
+//                     {"mood":"treat"}              cure sickness
+// GET  /api/pet/mood -> live pet status JSON for the dashboard
+static void handlePetMood() {
+  if (server.method() == HTTP_POST && server.hasArg("plain")) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, server.arg("plain"))) {
+      const char* mood = doc["mood"] | "";
+      uint32_t secs = doc["seconds"] | 10;
+      petMoodForce(mood, secs);
+    }
+    sendCorsHeaders();
+    server.send(200, "application/json", "{\"status\":\"ok\"}");
+    return;
+  }
+  char buf[220];
+  petMoodStatusJson(buf, sizeof(buf));
+  sendCorsHeaders();
+  server.send(200, "application/json", buf);
 }
 
 static void handleSpotifyNow() {
@@ -1007,6 +1051,8 @@ static void webTask(void* /*param*/) {
   });
   server.on("/api/settings", HTTP_GET, handleSettingsGet);
   server.on("/api/settings", HTTP_POST, handleSettingsSet);
+  server.on("/api/pet/mood", HTTP_GET, handlePetMood);
+  server.on("/api/pet/mood", HTTP_POST, handlePetMood);
   server.on("/api/spotify/now", HTTP_POST, handleSpotifyNow);
   server.on("/api/spotify/cover", HTTP_POST, handleSpotifyCoverDone, handleSpotifyCoverLoop);
   server.on("/api/spotify/token", HTTP_POST, handleSpotifyToken);

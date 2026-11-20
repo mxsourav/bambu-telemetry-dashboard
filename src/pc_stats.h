@@ -17,6 +17,10 @@ struct PcStats {
   float weather_temp_c = 0.0f;
   char  weather_desc[16] = "";
   char  city[16] = "";
+  float music_vibe = 0.5f;   // music energy 0..1 from the PC sync script
+                             // (calm -> gentle sway, energetic -> big bounce)
+  char  music_genre[24] = "";// track genre from iTunes lookup (Drill, Metal,
+                             // Lo-Fi...) -> picks the pet's dance style
   uint32_t last_update_ms = 0;
 };
 

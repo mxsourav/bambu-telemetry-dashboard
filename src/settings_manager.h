@@ -14,6 +14,10 @@ struct SystemSettings {
   // 0 = auto-mute after the first notification burst
   // 1 = bark continuously until the user ACKs on the overlay (OK button)
   uint8_t  siren_mode   = 0;
+  // Desk pet: emotion sound effects, music-vibe dancing, manual sickness
+  uint8_t  pet_sounds      = 1;  // 1 = pet chirps/growls on mood changes
+  uint8_t  pet_music_vibe  = 1;  // 1 = pet dances on screen while music plays
+  uint8_t  pet_sick        = 0;  // 0 = healthy, 1 = sick, 2 = fever (manual)
   char     spotify_refresh_token[160] = {0};
 };
 

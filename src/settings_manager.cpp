@@ -35,6 +35,9 @@ void settingsLoad() {
         g_settings.led_g        = doc["led_g"] | 255;
         g_settings.led_b        = doc["led_b"] | 255;
         g_settings.siren_mode   = doc["siren_mode"] | 0;
+        g_settings.pet_sounds      = doc["pet_sounds"] | 1;
+        g_settings.pet_music_vibe  = doc["pet_music_vibe"] | 1;
+        g_settings.pet_sick        = doc["pet_sick"] | 0;
         const char* srt = doc["spotify_refresh_token"] | "";
         if (srt && srt[0]) strncpy(g_settings.spotify_refresh_token, srt, sizeof(g_settings.spotify_refresh_token) - 1);
         loaded_from_sd = true;
@@ -56,6 +59,9 @@ void settingsLoad() {
     g_settings.led_g        = prefs.getUChar("led_g", 255);
     g_settings.led_b        = prefs.getUChar("led_b", 255);
     g_settings.siren_mode   = prefs.getUChar("siren_mode", 0);
+    g_settings.pet_sounds      = prefs.getUChar("pet_sounds", 1);
+    g_settings.pet_music_vibe  = prefs.getUChar("pet_music_vibe", 1);
+    g_settings.pet_sick        = prefs.getUChar("pet_sick", 0);
     String srtNvs = prefs.getString("sp_rtoken", "");
     if (srtNvs.length() > 0) strncpy(g_settings.spotify_refresh_token, srtNvs.c_str(), sizeof(g_settings.spotify_refresh_token) - 1);
     Serial.println(F("[SETTINGS] Loaded configuration from NVS Preferences"));
@@ -111,6 +117,9 @@ void settingsSave() {
               (g_settings.led_g        != s_saved_settings.led_g) ||
               (g_settings.led_b        != s_saved_settings.led_b) ||
               (g_settings.siren_mode   != s_saved_settings.siren_mode) ||
+              (g_settings.pet_sounds      != s_saved_settings.pet_sounds) ||
+              (g_settings.pet_music_vibe  != s_saved_settings.pet_music_vibe) ||
+              (g_settings.pet_sick        != s_saved_settings.pet_sick) ||
               (strncmp(g_settings.spotify_refresh_token, s_saved_settings.spotify_refresh_token, sizeof(g_settings.spotify_refresh_token)) != 0);
   }
 
@@ -130,6 +139,9 @@ void settingsSave() {
   prefs.putUChar("led_g", g_settings.led_g);
   prefs.putUChar("led_b", g_settings.led_b);
   prefs.putUChar("siren_mode", g_settings.siren_mode);
+  prefs.putUChar("pet_sounds", g_settings.pet_sounds);
+  prefs.putUChar("pet_music_vibe", g_settings.pet_music_vibe);
+  prefs.putUChar("pet_sick", g_settings.pet_sick);
   prefs.putString("sp_rtoken", g_settings.spotify_refresh_token);
 
   // 2. Save to SD card if present
@@ -146,6 +158,9 @@ void settingsSave() {
       doc["led_g"]        = g_settings.led_g;
       doc["led_b"]        = g_settings.led_b;
       doc["siren_mode"]   = g_settings.siren_mode;
+      doc["pet_sounds"]      = g_settings.pet_sounds;
+      doc["pet_music_vibe"]  = g_settings.pet_music_vibe;
+      doc["pet_sick"]        = g_settings.pet_sick;
       if (g_settings.spotify_refresh_token[0]) {
         doc["spotify_refresh_token"] = g_settings.spotify_refresh_token;
       }
