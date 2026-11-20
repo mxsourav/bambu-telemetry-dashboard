@@ -390,6 +390,36 @@ bool spotifyIsEnabled() {
   return s_spotify_enabled;
 }
 
+// ---- artist genre (desk pet dance style) ------------------------------
+// Fetched ONCE per track change from /v1/artists/{id}; Spotify returns
+// lowercase tags like "uk drill", "hip hop", "dance pop".
+static char s_artist_id[24] = {0};
+
+static void fetchArtistGenre(const char* artist_id) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(3000);
+  HTTPClient http;
+  char url[96];
+  snprintf(url, sizeof(url), "https://api.spotify.com/v1/artists/%s", artist_id);
+  if (!http.begin(client, url)) return;
+  http.addHeader("Authorization", String("Bearer ") + s_access_token);
+  int code = http.GET();
+  if (code == 200) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, http.getString())) {
+      const char* g0 = doc["genres"][0] | "";
+      const char* g1 = doc["genres"][1] | "";
+      const char* pick = g0[0] ? g0 : g1;
+      strncpy(g_spotify.genre, pick, sizeof(g_spotify.genre) - 1);
+      g_spotify.genre[sizeof(g_spotify.genre) - 1] = 0;
+      Serial.printf("[SPOTIFY] artist genre: %s\n", g_spotify.genre);
+    }
+  }
+  http.end();
+  client.stop();
+}
+
 void spotifyPollLoop() {
   if (!s_spotify_enabled) return;
   if (!s_refresh_token[0] || WiFi.status() != WL_CONNECTED) return;
@@ -448,6 +478,16 @@ void spotifyPollLoop() {
         if (key != s_last_cover_key) {
           if (cacheArtFromUrl(g_spotify.image_url)) s_last_cover_key = key;
         }
+      }
+
+      // artist genre on track change (drives the desk pet's dance style).
+      // One extra GET per track only, skipped when heap is tight.
+      const char* artist_id = item["artists"][0]["id"] | "";
+      if (is_playing && artist_id[0] && strcmp(artist_id, s_artist_id) != 0 &&
+          ESP.getFreeHeap() > 60000) {
+        strncpy(s_artist_id, artist_id, sizeof(s_artist_id) - 1);
+        s_artist_id[sizeof(s_artist_id) - 1] = 0;
+        fetchArtistGenre(s_artist_id);
       }
     }
   } else if (code == 204) {

@@ -1581,8 +1581,9 @@ static void uiTask(void* /*param*/) {
       }
     }
 
-    // Dynamic frame pacing: 100 FPS for Desk Pet (10ms); 30 FPS for dashboards (33ms)
-    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
+    // Dynamic frame pacing: 60 FPS for Desk Pet (16ms - the icon layer
+    // made 100 FPS saturate Core 1 and starve the web task); 30 FPS elsewhere
+    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(16) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
     static UiView s_prev_view = VIEW_BOOT;
     if (view != s_prev_view) {
       if (s_prev_view == VIEW_DESK_PET) petMoodOnLeave();

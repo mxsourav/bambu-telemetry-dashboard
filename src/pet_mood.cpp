@@ -204,12 +204,17 @@ static float vibeEnergy() {
          ? g_pc_stats.music_vibe : 0.5f;
 }
 
-// Map the iTunes genre string to a dance style:
+// Map the track genre to a dance style:
 // 1 = cool drill/trap nod, 2 = hype rave, 3 = rock headbang,
 // 4 = chill lofi sway, 0 = default groove.
+// Genre source: Spotify artist API on-device (primary); the PC sync
+// script's lookup is the fallback while playing YouTube/media outside
+// Spotify (where Spotify has no metadata).
 static uint8_t vibeStyleFromGenre() {
-  const char* g = g_pc_stats.music_genre;
-  if (!g[0] || !pcStatsIsActive()) return 0;
+  const char* g = g_spotify.genre[0] ? g_spotify.genre
+                                     : g_pc_stats.music_genre;
+  if (!g[0]) return 0;
+  if (g == g_pc_stats.music_genre && !pcStatsIsActive()) return 0;
   char buf[24];
   strncpy(buf, g, sizeof(buf) - 1);
   buf[sizeof(buf) - 1] = 0;

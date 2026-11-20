@@ -80,5 +80,5 @@
 
 // ---------------- FreeRTOS task stack sizes (bytes) ------------------
 #define TASK_STACK_NET   8192
-#define TASK_STACK_UI    4096
+#define TASK_STACK_UI    6144   // 4096 was tight once the pet icon layer stacked on the render path
 #define TASK_STACK_PERIPH 3072
