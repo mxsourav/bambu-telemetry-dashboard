@@ -133,8 +133,8 @@ static void handleScreenRle() {
     return;
   }
 
-  // When custom image or Spotify artwork is showing on screen, avoid streaming heavy photo data
-  if (uiIsCustomImageActive() || spotifyIsActive()) {
+  // When custom image or full Spotify artwork is showing, avoid streaming photo data
+  if (uiIsCustomImageActive() || (spotifyIsActive() && !uiIsPetMode())) {
     sendCorsHeaders();
     server.send(204, "text/plain", "");
     return;
@@ -243,16 +243,17 @@ static void handleScreen() {
   const uint16_t* p = fb;
   size_t totalPixels = 160 * 128;
   size_t offset = 0;
-  uint16_t chunk[512]; // 1024 bytes
+  static uint16_t s_bmp_chunk[256];
   while (offset < totalPixels) {
-    size_t n = (totalPixels - offset < 512) ? (totalPixels - offset) : 512;
+    if (!server.client().connected()) break;
+    size_t n = (totalPixels - offset < 256) ? (totalPixels - offset) : 256;
     for (size_t i = 0; i < n; i++) {
       uint16_t w = p[offset + i];
-      chunk[i] = (w << 8) | (w >> 8); // Convert big-endian swap565 to standard little-endian BMP
+      s_bmp_chunk[i] = (w << 8) | (w >> 8); // Convert big-endian swap565 to standard little-endian BMP
     }
-    server.sendContent((const char*)chunk, n * 2);
+    server.sendContent((const char*)s_bmp_chunk, n * 2);
     offset += n;
-    vTaskDelay(pdMS_TO_TICKS(1));
+    vTaskDelay(pdMS_TO_TICKS(2));
   }
 }
 

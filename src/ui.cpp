@@ -888,11 +888,8 @@ static void drawSpotifyFrame(uint32_t ms) {
   const int cardR = 9;
 
   // 1. Cover Artwork (Full 160x128 screen)
-  // Only attempt SD read when new art is signaled (dirty) or throttled to 5s if missing,
-  // to prevent rapid SPI pin toggling / piezo ticking every frame.
-  static uint32_t s_last_art_check_ms = 0;
-  if (spotifyArtDirty() || (!s_art_in_frame && (ms - s_last_art_check_ms >= 5000))) {
-    s_last_art_check_ms = ms;
+  // Only attempt read when new art is signaled (dirty), avoiding stale art resurrection
+  if (spotifyArtDirty()) {
     spotifyClearArtDirty();
     s_art_in_frame = false;
 
@@ -910,7 +907,7 @@ static void drawSpotifyFrame(uint32_t ms) {
       }
     }
 
-    // 2. Secondary fallback: SD card /art.jpg (if mounted)
+    // 2. Secondary fallback: SD card /art.jpg (if mounted and freshly written)
     if (!s_art_in_frame && sdEnsureMounted() && SD.exists("/art.jpg")) {
       File f = SD.open("/art.jpg", FILE_READ);
       if (f) {
@@ -1425,23 +1422,33 @@ void uiSetBacklight(uint8_t pct) {
 // keeps the spotlight while a slim chip shows title + progress.
 // ------------------------------------------------------------
 static void drawPetVibeStrip(uint32_t ms) {
-  bool fresh = (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms < 3500));
-  if (!fresh || !g_settings.pet_music_vibe || !g_spotify.title[0]) return;
+  // Check active playback with 12-second hysteresis grace period to eliminate any flapping/flicker
+  bool is_active = g_spotify.is_playing && (g_spotify.title[0] != '\0') &&
+                   (g_spotify.last_update_ms > 0) && (ms - g_spotify.last_update_ms < 12000);
+  if (!is_active || !g_settings.pet_music_vibe) return;
 
-  sprite.fillRoundRect(2, 2, 156, 20, 6, 0xE71C);          // paper chip
-  sprite.drawRoundRect(2, 2, 156, 20, 6, 0xD69A);
+  const int pill_x = 4;
+  const int pill_y = 3;
+  const int pill_w = 152;
+  const int pill_h = 20;
+  const int pill_r = 5;
+
+  sprite.fillRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xF7BE);
+  sprite.drawRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xD69A);
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
-  sprite.setTextColor(0x0000, 0xE71C);
-  char line[30];
-  snprintf(line, sizeof(line), "%.25s", g_spotify.title);
-  sprite.drawString(line, 8, 10);
+  sprite.setTextColor(0x0000, 0xF7BE);
+
+  char line[32];
+  snprintf(line, sizeof(line), "%.24s", g_spotify.title);
+  sprite.drawString(line, pill_x + 6, pill_y + 7);
 
   float frac = (g_spotify.duration_ms > 0)
                ? (float)g_spotify.progress_ms / (float)g_spotify.duration_ms : 0.0f;
   if (frac > 1.0f) frac = 1.0f;
-  sprite.fillRect(6, 18, 148, 2, 0xC638);                  // track base
-  sprite.fillRect(6, 18, (int)(148 * frac), 2, 0x0000);    // progress
+  if (frac < 0.0f) frac = 0.0f;
+  sprite.fillRect(pill_x + 6, pill_y + 15, pill_w - 12, 2, 0xD69A);                  // track base
+  sprite.fillRect(pill_x + 6, pill_y + 15, (int)((pill_w - 12) * frac), 2, 0x0000); // progress
 }
 
 // ============================================================
@@ -1581,9 +1588,8 @@ static void uiTask(void* /*param*/) {
       }
     }
 
-    // Dynamic frame pacing: 60 FPS for Desk Pet (16ms - the icon layer
-    // made 100 FPS saturate Core 1 and starve the web task); 30 FPS elsewhere
-    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(16) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
+    // Dynamic frame pacing: 100 FPS for Desk Pet (10ms); 30 FPS elsewhere
+    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
     static UiView s_prev_view = VIEW_BOOT;
     if (view != s_prev_view) {
       if (s_prev_view == VIEW_DESK_PET) petMoodOnLeave();

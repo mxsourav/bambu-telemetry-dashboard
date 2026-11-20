@@ -433,15 +433,13 @@ static void peripheralsTask(void* /*param*/) {
     uint32_t ms = millis();
     telemetryRead(d);
 
-    // Auto-calibrate resting polarity at 1200ms: resting voltage is unpressed
+    // Buttons are physically wired with pullups, active LOW (grounded when pressed)
     static bool calibrated = false;
-    if (!calibrated && ms >= 1200) {
-      b_menu.active_level   = (digitalRead(b_menu.pin) == HIGH) ? 0 : 1;
-      b_select.active_level = (digitalRead(b_select.pin) == HIGH) ? 0 : 1;
+    if (!calibrated) {
+      b_menu.active_level   = 0;
+      b_select.active_level = 0;
       calibrated = true;
-      Serial.printf("[BTN] Polarity calibrated: Menu=%s Select=%s\n",
-                    b_menu.active_level ? "Active-HIGH" : "Active-LOW",
-                    b_select.active_level ? "Active-HIGH" : "Active-LOW");
+      Serial.println(F("[BTN] Static polarity locked: Menu=Active-LOW Select=Active-LOW"));
     }
 
     // --- buttons: state-machine driven, one event per press ---

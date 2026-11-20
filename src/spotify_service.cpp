@@ -217,7 +217,17 @@ void spotifyServiceInit() {
 
 void spotifySetTrackInfo(const char* title, const char* artist, uint32_t prog_ms, uint32_t dur_ms, bool playing, const char* img_url, const char* lyric_cur, const char* lyric_next) {
   g_spotify.is_playing = playing;
-  if (title) strncpy(g_spotify.title, title, sizeof(g_spotify.title) - 1);
+  if (title) {
+    if (strncmp(g_spotify.title, title, sizeof(g_spotify.title)) != 0) {
+      // Track changed! Clear stale cover art from previous song
+      spotifyClearCoverArt();
+      if (SD.cardType() != CARD_NONE && SD.exists(ART_CACHE_PATH)) {
+        SD.remove(ART_CACHE_PATH);
+      }
+      spotifySetArtDirty();
+    }
+    strncpy(g_spotify.title, title, sizeof(g_spotify.title) - 1);
+  }
   if (artist) strncpy(g_spotify.artist, artist, sizeof(g_spotify.artist) - 1);
   g_spotify.progress_ms = prog_ms;
   g_spotify.duration_ms = dur_ms > 0 ? dur_ms : 1;
