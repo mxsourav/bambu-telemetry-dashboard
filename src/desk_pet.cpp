@@ -819,63 +819,81 @@ static void drawCartoonGlove(LGFX_Sprite& sprite, float cx, float cy, bool is_le
 }
 
 // ---------------------------------------------------------------------
-// 4. Bitter Burn Pain Grimace Eyes (😖) with Forced Tear Bursts
+// 4. Bitter Burn Anime Eye Squint (> <) with Morphing Teardrops (💧)
 // ---------------------------------------------------------------------
 static void drawExpressivePainEyes(LGFX_Sprite& sprite, float left_cx, float right_cx, float cy, float sip_factor, uint32_t ms, bool is_dark) {
-  const uint16_t col_line  = is_dark ? 0xDEFB : 0x18C3;
-  const uint16_t col_tear  = 0x245F; // Vivid tear blue
-  const uint16_t col_white = 0xFFFF;
+  const uint16_t col_line       = is_dark ? 0xDEFB : 0x18C3;
+  const uint16_t col_tear       = 0x245F; // Vivid tear blue
+  const uint16_t col_tear_trail = is_dark ? 0x11AB : 0x4B3D;
+  const uint16_t col_white      = 0xFFFF;
 
   float tremble_y = sinf((float)ms * 0.05f) * 0.4f;
-  float h = 7.5f * sip_factor;
 
   for (int side = 0; side < 2; ++side) {
     float cx = (side == 0) ? left_cx : right_cx;
-    float sign = (side == 0) ? 1.0f : -1.0f;
+    float sign = (side == 0) ? 1.0f : -1.0f; // 1 = left, -1 = right
 
-    float x_in  = cx + sign * 11.0f; // Inner corner near nose
-    float x_out = cx - sign * 10.0f; // Outer corner pinched tight
-    float y_top = cy - h + tremble_y;
-    float y_bot = cy + h + tremble_y;
-    float y_mid = cy + tremble_y;
+    // Proportional anime eye squeeze chevrons (> <)
+    // Left eye (>): apex points right (+sign), outer corner is on the left (-sign)
+    // Right eye (<): apex points left (-sign), outer corner is on the right (+sign)
+    float apex_x  = cx + sign * 9.0f;
+    float outer_x = cx - sign * 11.0f;
+    float apex_y  = cy + tremble_y;
+    float top_y   = cy - 9.0f * sip_factor + tremble_y;
+    float bot_y   = cy + 9.0f * sip_factor + tremble_y;
 
-    // Heavy curved eyelid squeeze strokes
+    // Bold, smooth 3-pixel wide chevrons
     for (int t = -1; t <= 1; ++t) {
-      sprite.drawLine((int)x_in, (int)(y_top + 1.0f + t), (int)x_out, (int)(y_mid + t), col_line);
-      sprite.drawLine((int)x_in, (int)(y_bot - 1.0f + t), (int)x_out, (int)(y_mid + t), col_line);
+      sprite.drawLine((int)outer_x, (int)(top_y + t), (int)apex_x, (int)(apex_y + t), col_line);
+      sprite.drawLine((int)apex_x, (int)(apex_y + t), (int)outer_x, (int)(bot_y + t), col_line);
     }
 
-    // Radiating crow's-feet stress wrinkles at outer temple corner
-    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 5.0f), (int)(y_mid - 4.0f), col_line);
-    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 5.5f), (int)(y_mid + 4.0f), col_line);
-    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 6.5f), (int)y_mid, col_line);
+    // Teardrop morphing physics:
+    // Origin at outer eye corner
+    float drop_ox = outer_x;
+    float drop_oy = apex_y + 1.0f;
 
-    // Center squint pinch line
-    sprite.drawLine((int)(x_out + sign * 2.0f), (int)y_mid, (int)(x_in - sign * 2.0f), (int)y_mid, col_line);
+    // Progression: 1000ms loop during sip
+    float drop_phase = (float)(ms % 1000) / 1000.0f;
+    float drip_t = drop_phase;
+    float bulb_r = 3.5f;
+    float bulb_cy = drop_oy + 4.0f + drip_t * 20.0f;
+    float bulb_cx = drop_ox - sign * 1.0f;
+    float apex_len = fminf(7.5f, 2.5f + drip_t * 5.5f);
+    float apex_cy = bulb_cy - apex_len;
 
-    // Forced teardrops bursting out of outer eye corner
-    float drop_progress = (float)(ms % 1000) / 1000.0f;
-    float drop_x = x_out - sign * 2.0f;
-    float drop_y = cy + 4.0f + drop_progress * 18.0f;
-    sprite.drawLine((int)x_out, (int)(cy + 2.0f), (int)drop_x, (int)(drop_y - 2.0f), col_tear);
-    sprite.fillCircle((int)drop_x, (int)drop_y, 3, col_tear);
-    sprite.drawCircle((int)drop_x, (int)drop_y, 3, col_line);
-    sprite.fillCircle((int)drop_x - 1, (int)drop_y - 1, 1, col_white);
+    // Faint wet tear trail from corner to drop
+    sprite.drawLine((int)drop_ox, (int)drop_oy, (int)bulb_cx, (int)apex_cy, col_tear_trail);
+
+    // Teardrop geometry:
+    // 1. Bottom circular bulb
+    sprite.fillCircle((int)bulb_cx, (int)bulb_cy, (int)bulb_r, col_tear);
+    sprite.drawCircle((int)bulb_cx, (int)bulb_cy, (int)bulb_r, col_line);
+
+    // 2. Triangular tapered top apex
+    sprite.fillTriangle((int)(bulb_cx - bulb_r + 0.6f), (int)(bulb_cy - 0.4f),
+                        (int)(bulb_cx + bulb_r - 0.6f), (int)(bulb_cy - 0.4f),
+                        (int)bulb_cx, (int)apex_cy, col_tear);
+    sprite.drawLine((int)(bulb_cx - bulb_r + 0.6f), (int)(bulb_cy - 0.4f), (int)bulb_cx, (int)apex_cy, col_line);
+    sprite.drawLine((int)(bulb_cx + bulb_r - 0.6f), (int)(bulb_cy - 0.4f), (int)bulb_cx, (int)apex_cy, col_line);
+
+    // 3. Specular reflection glint (crisp white highlight)
+    sprite.fillCircle((int)(bulb_cx - 1.2f), (int)(bulb_cy - 1.2f), 1, col_white);
   }
 }
 
 // ---------------------------------------------------------------------
-// 5. 100Hz Silky Smooth Breakup Scene Controller (10s continuous cycle)
+// 5. 100Hz Silky Smooth Breakup Scene Controller (4.5s Snappy Fluid Cycle)
 // ---------------------------------------------------------------------
 static void drawBreakupDrinkingScene(LGFX_Sprite& sprite, float mouth_x, float mouth_y, uint32_t ms) {
   float t_sec = (float)ms * 0.001f;
-  float cycle = fmodf(t_sec, 10.0f);
+  float cycle = fmodf(t_sec, 4.5f);
   bool is_dark = (s_bg_r < 60);
 
   const float bottle_home_x = 138.0f;
-  const float bottle_home_y = 105.0f;
+  const float bottle_home_y = 108.0f;
   const float glass_home_x  = 80.0f;
-  const float glass_home_y  = 107.0f;
+  const float glass_home_y  = 114.0f;
 
   float bottle_x = bottle_home_x;
   float bottle_y = bottle_home_y;
@@ -884,7 +902,6 @@ static void drawBreakupDrinkingScene(LGFX_Sprite& sprite, float mouth_x, float m
 
   float glass_x = glass_home_x;
   float glass_y = glass_home_y;
-  float glass_ang = 0.0f;
   float fill_pct = 0.15f;
   float sip_factor = 0.0f;
 
@@ -892,123 +909,115 @@ static void drawBreakupDrinkingScene(LGFX_Sprite& sprite, float mouth_x, float m
   float r_hand_y = glass_y + 1.0f;
   const char* r_grasp = "glass";
 
-  // 0.0s -> 1.5s: Resting sorrow slump
-  if (cycle < 1.5f) {
+  // 0.00s -> 0.55s: Bottle reaches from table to rocks glass rim
+  if (cycle < 0.55f) {
+    float p = smoothstep(0.0f, 0.55f, cycle);
+    bottle_x = bottle_home_x + p * (101.0f - bottle_home_x);
+    bottle_y = bottle_home_y + p * (110.0f - bottle_home_y);
+    bottle_ang = p * (-55.0f);
+
+    r_hand_x = bottle_x + 1.0f;
+    r_hand_y = bottle_y + 2.0f;
+    r_grasp = "bottle";
     fill_pct = 0.15f;
+  }
+  // 0.55s -> 1.55s: Pouring amber whiskey into rocks glass
+  else if (cycle < 1.55f) {
+    float p = smoothstep(0.55f, 1.55f, cycle);
+    bottle_x = 101.0f;
+    bottle_y = 110.0f;
+    bottle_ang = -55.0f;
+    is_pouring = true;
+    fill_pct = 0.15f + p * 0.70f;
+
+    r_hand_x = bottle_x + 1.0f;
+    r_hand_y = bottle_y + 2.0f;
+    r_grasp = "bottle";
+  }
+  // 1.55s -> 2.15s: Bottle returns to table, right hand moves back to glass
+  else if (cycle < 2.15f) {
+    float p = smoothstep(1.55f, 2.15f, cycle);
+    bottle_x = 101.0f + p * (bottle_home_x - 101.0f);
+    bottle_y = 110.0f + p * (bottle_home_y - 110.0f);
+    bottle_ang = -55.0f * (1.0f - p);
+    fill_pct = 0.85f;
+
+    float r_target_x = glass_x + 11.5f;
+    float r_target_y = glass_y + 1.0f;
+    r_hand_x = 101.0f + p * (r_target_x - 101.0f);
+    r_hand_y = 110.0f + p * (r_target_y - 110.0f);
+    r_grasp = (p < 0.4f) ? "bottle" : "glass";
+  }
+  // 2.15s -> 2.75s: Dual hands lift glass straight up in front view to mouth
+  else if (cycle < 2.75f) {
+    float p = smoothstep(2.15f, 2.75f, cycle);
+    fill_pct = 0.85f;
+    glass_x = glass_home_x;
+    glass_y = glass_home_y - p * 8.0f; // lifts straight up: rim reaches mouth at y=94.0
+
+    r_hand_x = glass_x + 11.5f;
+    r_hand_y = glass_y + 1.0f;
+    r_grasp = "glass";
+    sip_factor = p * 0.3f;
+  }
+  // 2.75s -> 3.75s: Front-facing sip at mouth (anime eye squeeze (> <) & teardrop drip)
+  else if (cycle < 3.75f) {
+    float p_drink = smoothstep(2.75f, 3.75f, cycle);
+    glass_x = glass_home_x;
+    glass_y = glass_home_y - 8.0f; // top rim at y=94.0 (mouth)
+    fill_pct = 0.85f - p_drink * 0.70f;
+
+    if (cycle < 2.95f) {
+      sip_factor = smoothstep(2.75f, 2.95f, cycle);
+    } else if (cycle < 3.55f) {
+      sip_factor = 1.0f;
+    } else {
+      sip_factor = 1.0f - smoothstep(3.55f, 3.75f, cycle) * 0.5f;
+    }
+
     r_hand_x = glass_x + 11.5f;
     r_hand_y = glass_y + 1.0f;
     r_grasp = "glass";
   }
-  // 1.5s -> 3.2s: Reaching and Tilting Bottle (kept at x=130 to keep right eye 100% visible!)
-  else if (cycle < 3.2f) {
-    fill_pct = 0.15f;
-    float p = smoothstep(1.5f, 3.2f, cycle);
-    bottle_x = bottle_home_x + p * (130.0f - bottle_home_x);
-    bottle_y = bottle_home_y + p * (96.0f - bottle_home_y);
-    bottle_ang = p * (-48.0f);
-
-    r_hand_x = bottle_x + sinf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
-    r_hand_y = bottle_y + cosf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
-    r_grasp = "bottle";
-  }
-  // 3.2s -> 5.0s: Pouring Stream into Glass
-  else if (cycle < 5.0f) {
-    float p = smoothstep(3.2f, 5.0f, cycle);
-    bottle_x = 130.0f;
-    bottle_y = 96.0f;
-    bottle_ang = -48.0f;
-    is_pouring = true;
-    fill_pct = 0.15f + p * 0.75f;
-
-    r_hand_x = bottle_x + sinf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
-    r_hand_y = bottle_y + cosf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
-    r_grasp = "bottle";
-  }
-  // 5.0s -> 6.5s: Bottle returns to table, right hand returns to glass
-  else if (cycle < 6.5f) {
-    float p = smoothstep(5.0f, 6.5f, cycle);
-    bottle_x = 130.0f + p * (bottle_home_x - 130.0f);
-    bottle_y = 96.0f + p * (bottle_home_y - 96.0f);
-    bottle_ang = -48.0f * (1.0f - p);
-    fill_pct = 0.90f;
-
-    float r_target_x = glass_x + 11.5f;
-    float r_target_y = glass_y + 1.0f;
-    r_hand_x = 130.0f + p * (r_target_x - 130.0f);
-    r_hand_y = 98.0f + p * (r_target_y - 98.0f);
-    r_grasp = (p < 0.4f) ? "bottle" : "glass";
-  }
-  // 6.5s -> 7.8s: Raising Rocks Glass to Mouth!
-  else if (cycle < 7.8f) {
-    float p = smoothstep(6.5f, 7.8f, cycle);
-    fill_pct = 0.90f;
-    glass_x = glass_home_x;
-    glass_y = glass_home_y - p * 5.5f; // aligns rim with mouth
-    glass_ang = p * 26.0f;
-
-    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
-    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
-    r_grasp = "glass";
-    sip_factor = p * 0.4f;
-  }
-  // 7.8s -> 9.2s: SIPPING AT MOUTH (😖 Bitter Burn Grimace Eyes & Chug)
-  else if (cycle < 9.2f) {
-    float p_drink = smoothstep(7.8f, 9.2f, cycle);
-    glass_x = glass_home_x;
-    glass_y = glass_home_y - 5.5f; // exact mouth contact!
-    glass_ang = 26.0f + sinf(p_drink * 3.14159265f) * 8.0f; // tilts up to 34 deg
-
-    fill_pct = 0.90f - p_drink * 0.74f;
-
-    if (cycle < 8.1f) {
-      sip_factor = smoothstep(7.8f, 8.1f, cycle);
-    } else if (cycle < 8.9f) {
-      sip_factor = 1.0f;
-    } else {
-      sip_factor = 1.0f - smoothstep(8.9f, 9.2f, cycle) * 0.6f;
-    }
-
-    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
-    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
-    r_grasp = "glass";
-  }
-  // 9.2s -> 10.0s: Lowering Glass back to Table, Eyes slowly Reopening
+  // 3.75s -> 4.50s: Lowering glass back to table, eyes reopening
   else {
-    float p = smoothstep(9.2f, 10.0f, cycle);
-    fill_pct = 0.16f;
+    float p = smoothstep(3.75f, 4.50f, cycle);
+    fill_pct = 0.15f;
     glass_x = glass_home_x;
-    glass_y = (glass_home_y - 5.5f) + p * 5.5f;
-    glass_ang = 26.0f * (1.0f - p);
-    sip_factor = fmaxf(0.0f, 0.4f * (1.0f - p * 1.6f));
+    glass_y = (glass_home_y - 8.0f) + p * 8.0f;
+    sip_factor = fmaxf(0.0f, 0.5f * (1.0f - p * 1.5f));
 
-    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
-    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+    r_hand_x = glass_x + 11.5f;
+    r_hand_y = glass_y + 1.0f;
     r_grasp = "glass";
   }
 
   s_breakup_sip_factor = sip_factor;
 
-  float l_hand_x = glass_x - 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
-  float l_hand_y = glass_y + 1.0f - 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+  float l_hand_x = glass_x - 11.5f;
+  float l_hand_y = glass_y + 1.0f;
 
   // 1. Draw Bourbon Bottle
   int spout_x = 0;
   int spout_y = 0;
   drawBoozeBottle(sprite, bottle_x, bottle_y, bottle_ang, spout_x, spout_y, is_dark);
 
-  // 2. Draw Golden Amber Stream if pouring
+  // 2. Draw Vertical Amber Pour Stream directly into Rocks Glass rim
   if (is_pouring) {
-    sprite.drawLine(spout_x, spout_y, (int)glass_x + 4, (int)glass_y - 8, 0xFD20);
-    sprite.drawLine(spout_x + 1, spout_y, (int)glass_x + 5, (int)glass_y - 8, 0xFE25);
-    sprite.fillCircle((int)glass_x + 4, (int)glass_y - 6, 2, 0xFE25);
+    float stream_x = (float)spout_x;
+    float stream_top_y = (float)spout_y;
+    float liq_top_y = glass_y + 7.0f - (16.5f * fill_pct);
+    sprite.drawLine((int)stream_x, (int)stream_top_y, (int)stream_x, (int)liq_top_y, 0xFD20);
+    sprite.drawLine((int)stream_x + 1, (int)stream_top_y, (int)stream_x + 1, (int)liq_top_y, 0xFE25);
+    sprite.fillCircle((int)stream_x, (int)liq_top_y, 2, 0xFE25);
   }
 
-  // 3. Draw Heavy Tumbler Glass with Whiskey Gradient & Floating Ice
-  drawBigTumblerGlass(sprite, glass_x, glass_y, fill_pct, glass_ang, is_dark);
+  // 3. Draw Heavy Tumbler Glass (Front-facing, angle = 0.0)
+  drawBigTumblerGlass(sprite, glass_x, glass_y, fill_pct, 0.0f, is_dark);
 
-  // 4. Draw Cute Puffy Cartoon Gloves
-  drawCartoonGlove(sprite, l_hand_x, l_hand_y, true, "glass", glass_ang, is_dark);
-  drawCartoonGlove(sprite, r_hand_x, r_hand_y, false, r_grasp, (r_grasp == "bottle" ? bottle_ang : glass_ang), is_dark);
+  // 4. Draw Cute Puffy Cartoon Gloves holding glass symmetrically
+  drawCartoonGlove(sprite, l_hand_x, l_hand_y, true, "glass", 0.0f, is_dark);
+  drawCartoonGlove(sprite, r_hand_x, r_hand_y, false, r_grasp, (r_grasp == "bottle" ? bottle_ang : 0.0f), is_dark);
 }
 
 // ---------------------------------------------------------------------
@@ -1823,21 +1832,21 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   // Synchronize breakup phase sipping factor for eyes, brows and drinking sequence
   if (s_mood == PET_MOOD_DANCING && s_vibe_style == 5) {
     float t_sec = (float)ms * 0.001f;
-    float cycle = fmodf(t_sec, 10.0f);
-    if (cycle >= 6.5f && cycle < 7.8f) {
-      float p = smoothstep(6.5f, 7.8f, cycle);
-      s_breakup_sip_factor = p * 0.4f;
-    } else if (cycle >= 7.8f && cycle < 9.2f) {
-      if (cycle < 8.1f) {
-        s_breakup_sip_factor = smoothstep(7.8f, 8.1f, cycle);
-      } else if (cycle < 8.9f) {
+    float cycle = fmodf(t_sec, 4.5f);
+    if (cycle >= 2.15f && cycle < 2.75f) {
+      float p = smoothstep(2.15f, 2.75f, cycle);
+      s_breakup_sip_factor = p * 0.3f;
+    } else if (cycle >= 2.75f && cycle < 3.75f) {
+      if (cycle < 2.95f) {
+        s_breakup_sip_factor = smoothstep(2.75f, 2.95f, cycle);
+      } else if (cycle < 3.55f) {
         s_breakup_sip_factor = 1.0f;
       } else {
-        s_breakup_sip_factor = 1.0f - smoothstep(8.9f, 9.2f, cycle) * 0.6f;
+        s_breakup_sip_factor = 1.0f - smoothstep(3.55f, 3.75f, cycle) * 0.5f;
       }
-    } else if (cycle >= 9.2f) {
-      float p = smoothstep(9.2f, 10.0f, cycle);
-      s_breakup_sip_factor = fmaxf(0.0f, 0.4f * (1.0f - p * 1.6f));
+    } else if (cycle >= 3.75f) {
+      float p = smoothstep(3.75f, 4.50f, cycle);
+      s_breakup_sip_factor = fmaxf(0.0f, 0.5f * (1.0f - p * 1.5f));
     } else {
       s_breakup_sip_factor = 0.0f;
     }

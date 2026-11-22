@@ -619,31 +619,41 @@ class PetAICortex:
             "- Lofi, chillhop, ambient, study beats -> \"Lofi\"\n"
             "- Commercial upbeat -> \"Pop\""
         )
-        try:
-            url = f"{self.cfg.get('nvidia_base_url', 'https://integrate.api.nvidia.com/v1')}/chat/completions"
-            key = self.cfg.get("nvidia_api_key", "")
-            payload = {
-                "model": self.cfg.get("primary_reflex_model", "nvidia/nemotron-3.5-bolt-e4b"),
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 30,
-                "temperature": 0.1
-            }
-            resp = self.session.post(
-                url,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json=payload,
-                timeout=3.5
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                content = data["choices"][0]["message"].get("content", "")
-                parsed = self._extract_json(content)
-                if parsed and parsed.get("genre"):
-                    g = parsed["genre"]
-                    self._genre_cache[cache_key] = g
-                    return g
-        except Exception:
-            pass
+        # Multi-provider LLM pipeline: NVIDIA NIM fast reflex -> Dahl GLM fallback
+        providers = [
+            ("nvidia", f"{self.cfg.get('nvidia_base_url', 'https://integrate.api.nvidia.com/v1')}/chat/completions",
+             self.cfg.get("nvidia_api_key", ""), self.cfg.get("primary_reflex_model", "nvidia/nemotron-3.5-bolt-e4b")),
+            ("dahl", f"{self.cfg.get('dahl_base_url', 'https://api.dahl.global/v1')}/chat/completions",
+             self.cfg.get("dahl_api_key", ""), self.cfg.get("dahl_flash_model", "zai-org/GLM-5.3-Flash"))
+        ]
+
+        for prov, url, key, model in providers:
+            if not key:
+                continue
+            try:
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 30,
+                    "temperature": 0.1
+                }
+                resp = self.session.post(
+                    url,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=3.5 if prov == "nvidia" else 5.0
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"].get("content", "")
+                    parsed = self._extract_json(content)
+                    if parsed and parsed.get("genre"):
+                        g = parsed["genre"]
+                        self._genre_cache[cache_key] = g
+                        return g
+            except Exception:
+                continue
+
         return "Pop"
 
     def inspect_music_vibe(self, title, artist, genre, bpm, energy):

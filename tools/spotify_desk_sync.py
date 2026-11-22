@@ -91,6 +91,23 @@ def get_url(path):
 # pet bounces harder to energetic tracks. Derived deterministically from the
 # track name (no extra API calls); 0 = nothing playing.
 g_music_energy = 0.5
+g_ai_cortex = None
+
+GENRE_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "genre_cache.json")
+g_genre_cache = {}
+try:
+    if os.path.exists(GENRE_CACHE_FILE):
+        with open(GENRE_CACHE_FILE, "r", encoding="utf-8") as _f:
+            g_genre_cache = json.load(_f)
+except Exception:
+    g_genre_cache = {}
+
+def save_genre_cache():
+    try:
+        with open(GENRE_CACHE_FILE, "w", encoding="utf-8") as _f:
+            json.dump(g_genre_cache, _f, indent=2)
+    except Exception:
+        pass
 
 def classify_track_genre(artist, title, raw_itunes_genre=""):
     """
@@ -219,11 +236,18 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
         if "singer" in low_it or "acoustic" in low_it or "blues" in low_it:
             return "Ballad"
 
+    # 6. Check persistent cache
+    cache_key = f"{artist or ''} - {title or ''}".strip().lower()
+    if cache_key in g_genre_cache:
+        return g_genre_cache[cache_key]
+
     # 7. Instant LLM Query (sub-0.5s) if AI cortex is active
-    if 'g_ai_cortex' in globals() and g_ai_cortex:
+    if g_ai_cortex:
         try:
             ai_genre = g_ai_cortex.classify_song_genre(artist, title)
-            if ai_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi", "Ballad"]:
+            if ai_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi", "Ballad", "Pop"]:
+                g_genre_cache[cache_key] = ai_genre
+                save_genre_cache()
                 return ai_genre
         except Exception:
             pass
@@ -713,19 +737,33 @@ def spawn_ps_stream():
 
 def async_lookup_genre(artist, title, current_track_id, track_lock, pos_ms=0, dur_ms=0, is_playing=True):
     """Background genre lookup so the timeline loop never blocks."""
-    global g_music_genre
-    # If genre is already identified with confidence, do not disrupt the playing track
+    global g_music_genre, g_ai_cortex, g_genre_cache
     if g_music_genre and g_music_genre != "Pop":
         return
     try:
         raw_genre = lookup_genre(artist, title)
         refined = classify_track_genre(artist, title, raw_genre)
-        if track_lock["id"] == current_track_id and refined and refined != g_music_genre and refined != "Pop":
+
+        # If keyword / iTunes returned Pop or unknown, ask the AI Cortex LLM!
+        if (not refined or refined == "Pop") and g_ai_cortex:
+            try:
+                ai_genre = g_ai_cortex.classify_song_genre(artist, title)
+                if ai_genre and ai_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi", "Ballad", "Pop"]:
+                    refined = ai_genre
+                    cache_key = f"{artist or ''} - {title or ''}".strip().lower()
+                    g_genre_cache[cache_key] = refined
+                    save_genre_cache()
+                    print(f"  [AI LLM GENRE] -> {refined} for {artist} - {title}")
+            except Exception as e:
+                print(f"  [AI LLM ERROR] {e}")
+
+        if track_lock["id"] == current_track_id and refined and refined != g_music_genre:
             g_music_genre = refined
-            print(f"  [GENRE REFINED] -> {refined} (via catalog: {raw_genre})")
+            print(f"  [GENRE REFINED] -> {refined}")
+            sync_ambient_lighting(g_music_genre, title)
             push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  [GENRE LOOKUP ERROR] {e}")
 
 def main():
     global g_music_energy, g_music_genre
