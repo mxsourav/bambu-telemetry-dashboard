@@ -51,6 +51,7 @@ PetMood deskPetGetMood();
 void deskPetSetTint(uint8_t r, uint8_t g, uint8_t b, uint8_t amount);
 // Music vibe bounce: amplitude px and beat frequency Hz (0 amp = off).
 void deskPetSetBounce(float amp_px, float freq_hz);
+float deskPetGetVibeHz();
 // Vibe STYLE from the track's genre: 0=groove, 1=cool drill nod,
 // 2=hype rave, 3=rock headbang, 4=chill sway.
 void deskPetSetVibeStyle(uint8_t style);

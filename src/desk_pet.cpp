@@ -109,6 +109,10 @@ void deskPetSetBounce(float amp_px, float freq_hz) {
   s_vibe_hz  = (freq_hz > 0.5f && freq_hz < 8.0f) ? freq_hz : 2.0f;
 }
 
+float deskPetGetVibeHz() {
+  return s_vibe_hz;
+}
+
 void deskPetSetVibeStyle(uint8_t style) {
   s_vibe_style = (style <= 5) ? style : 0;
 }

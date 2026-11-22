@@ -118,7 +118,40 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
     if any(k in combined for k in edm_keywords):
         return "EDM"
 
-    # 2. Hip-Hop / Drill / Trap / Rap / Desi Hip-Hop (Vibe 1 - Swagger 11px nod)
+    # 2. Explicit Emotional / Sad Ballads / Emo Rap / Heartbreak (Vibe 5 - Tears, heartbreak, booze)
+    sad_keywords = [
+        "breakup", "break up", "broken", "heartbreak", "crying", "tears", "goodbye", "sorrow",
+        "alone", "lonely", "depressed", "pain", "hurt", "miss you", "farewell", "alcohol",
+        "drunk", "whiskey", "beer", "wine", "sober", "sad version", "sad song", "ballad",
+        "emo rap", "emo", "sad rap", "heartbreak rap", "melancholy rap", "storytelling", "story telling",
+        # Specific MC Stan heartbreak & sad tracks:
+        "regret", "how to hate", "fuck love", "fuckk love", "bitch", "dil pe mat le",
+        # Specific Juice WRLD heartbreak & emo rap tracks:
+        "all girls are the same", "lucid dreams", "robbery", "wishing well", "already dead",
+        "cigarettes", "lean wit me", "flaws and sins", "scared of love", "hear me calling",
+        # Specific Talha Anjum melancholy & storytelling tracks:
+        "downers at dusk", "down at dusk", "gumaan", "afsanay", "open letter", "glass half full",
+        # XXXTentacion & Lil Peep emo classics:
+        "jocelyn flores", "star shopping", "save that shit", "everybody dies in their nightmares",
+        # Iconic Ballads & Heartbreak Classics:
+        "die with a smile", "someone like you", "easy on me", "set fire to the rain",
+        "hello", "rolling in the deep", "someone you loved", "before you go", "drivers license",
+        "traitor", "deja vu", "vampire", "happier than ever", "when the party's over",
+        "glimpse of us", "slow dancing in the dark", "sanctuary", "lose you to love me",
+        "all too well", "cardigan", "exile", "champagne problems", "stay with me",
+        "i'm not the only one", "too good at goodbyes", "adele", "lewis capaldi",
+        "joji", "olivia rodrigo", "conan gray",
+        "kal ho naa ho", "bela bose", "2441139", "agar tum saath", "channa mereya",
+        "tujhe bhula diya", "tum hi ho", "sunn raha hai", "hamari adhuri", "bekhayali",
+        "pachtaoge", "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko",
+        "ranjish hi sahi", "faasle", "woh lamhe", "kyun main jaagoon", "chithi na koi",
+        "kahani suno", "kaifi khalil", "iraaday", "kinna sona", "mann bharryaa",
+        "shei tumi", "boba tunnel"
+    ]
+    if ("mc stan" in combined and "numb" in combined) or any(k in combined for k in sad_keywords):
+        return "Ballad"
+
+    # 3. Hip-Hop / Drill / Trap / Rap / Desi Hip-Hop (Vibe 1 - Swagger 11px nod)
     hiphop_keywords = [
         "hip-hop", "hip hop", "rap", "drill", "trap", "808", "grime", "urban", "r&b",
         "boom bap", "freestyle", "cypher", "sambata", "palti fire", "lal ranga",
@@ -165,29 +198,7 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
     if any(k in combined for k in lofi_keywords):
         return "Lofi"
 
-    # 5. Explicit Emotional / Sad Ballads / Heartbreak (Vibe 5 - Tears, heartbreak, alcohol)
-    sad_keywords = [
-        "breakup", "break up", "broken", "heartbreak", "crying", "tears", "goodbye", "sorrow",
-        "alone", "lonely", "depressed", "pain", "hurt", "miss you", "farewell", "alcohol",
-        "drunk", "whiskey", "beer", "wine", "sober", "sad version", "sad song", "ballad",
-        "die with a smile", "someone like you", "easy on me", "set fire to the rain",
-        "hello", "rolling in the deep", "someone you loved", "before you go", "drivers license",
-        "traitor", "deja vu", "vampire", "happier than ever", "when the party's over",
-        "glimpse of us", "slow dancing in the dark", "sanctuary", "lose you to love me",
-        "all too well", "cardigan", "exile", "champagne problems", "stay with me",
-        "i'm not the only one", "too good at goodbyes", "adele", "lewis capaldi",
-        "joji", "olivia rodrigo", "conan gray",
-        "kal ho naa ho", "bela bose", "2441139", "agar tum saath", "channa mereya",
-        "tujhe bhula diya", "tum hi ho", "sunn raha hai", "hamari adhuri", "bekhayali",
-        "pachtaoge", "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko",
-        "ranjish hi sahi", "faasle", "woh lamhe", "kyun main jaagoon", "chithi na koi",
-        "kahani suno", "kaifi khalil", "iraaday", "kinna sona", "mann bharryaa",
-        "shei tumi", "boba tunnel"
-    ]
-    if any(k in combined for k in sad_keywords):
-        return "Ballad"
-
-    # 6. Fallback based on raw iTunes primaryGenreName
+    # 5. Fallback based on raw iTunes primaryGenreName
     if raw_itunes_genre:
         low_it = raw_itunes_genre.lower()
         if "hip-hop" in low_it or "rap" in low_it or "r&b" in low_it:
@@ -407,11 +418,47 @@ def extract_vibrant_rgb(im):
     except Exception:
         return (180, 180, 180)
 
+def get_genre_led_color(genre):
+    g = (genre or "").lower()
+    if "ballad" in g or "breakup" in g or "sad" in g:
+        return (20, 70, 255)    # Deep sorrow oceanic blue (Breakup, Emo Rap, Crying)
+    if "rock" in g or "metal" in g:
+        return (255, 20, 20)    # Fiery crimson rage (Rock, Metal)
+    if "edm" in g or "dance" in g:
+        return (240, 30, 200)   # Neon electric magenta / cyber violet (EDM, Rave)
+    if "hip-hop" in g or "rap" in g or "drill" in g:
+        return (140, 30, 255)   # Midnight 808 purple (Hip-Hop, Drill)
+    if "lofi" in g or "chill" in g:
+        return (255, 120, 35)   # Warm sunset amber / candle peach (Lo-Fi)
+    return (255, 180, 35)       # Sunny golden glow (Pop, Happy)
+
 def push_ambient_led(r, g, b):
     try:
         http_session.post(get_url("/api/led/set"), json={"r": int(r), "g": int(g), "b": int(b)}, timeout=1.5)
     except Exception:
         pass
+
+def sync_ambient_lighting(genre, title, raw_art=None):
+    """
+    Sets the monitor ambient back-light color:
+    1. Visualizer tracks or unclassified ambient -> extracted dominant thumbnail theme color.
+    2. Specific genre tracks (Sad/Breakup, Rock/Rage, EDM, Hip-Hop, Lofi, Pop) -> genre signature mood color.
+    """
+    low_title = (title or "").lower()
+    is_visualizer = any(w in low_title for w in ["visualizer", "visualiser", "audio video", "bass boosted", "loop", "bgm", "instrumental"])
+
+    target_rgb = None
+    if raw_art and (is_visualizer or genre in ["Pop", "Auto", ""]):
+        target_rgb = extract_vibrant_rgb(raw_art)
+    elif genre and genre != "Pop":
+        target_rgb = get_genre_led_color(genre)
+    elif raw_art:
+        target_rgb = extract_vibrant_rgb(raw_art)
+    else:
+        target_rgb = get_genre_led_color(genre)
+
+    if target_rgb:
+        threading.Thread(target=push_ambient_led, args=target_rgb, daemon=True).start()
 
 def upload_album_art(source_path_or_url):
     try:
@@ -434,10 +481,9 @@ def upload_album_art(source_path_or_url):
         else:
             return False
 
-        # Ambient RGB desk lighting: extract dominant vibrant color and push to LED strip
+        # Ambient RGB monitor backlight: sync genre mood color or thumbnail theme
         if raw_art:
-            ambient_rgb = extract_vibrant_rgb(raw_art)
-            threading.Thread(target=push_ambient_led, args=ambient_rgb, daemon=True).start()
+            sync_ambient_lighting(g_music_genre, "", raw_art)
 
         if os.path.exists(jpeg_to_upload) and os.path.getsize(jpeg_to_upload) > 500:
             with open(jpeg_to_upload, "rb") as f:
@@ -764,6 +810,8 @@ def main():
                     g_music_energy = track_energy(artist, title) if is_playing else 0.0
                     print(f"\n[MEDIA EVENT] {artist} - {title} (Playing: {is_playing}, Genre: {g_music_genre})")
                     push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
+                    if is_playing:
+                        sync_ambient_lighting(g_music_genre, title)
 
                     # Trigger Autonomous AI Music Critic
                     if 'g_ai_cortex' in globals() and g_ai_cortex and is_playing:

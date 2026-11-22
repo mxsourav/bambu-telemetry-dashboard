@@ -155,7 +155,7 @@ static void ledMirrorEdge(PetMood now) {
                  now == PET_MOOD_CRYING || now == PET_MOOD_COLD ||
                  now == PET_MOOD_SICK  || now == PET_MOOD_FEVER ||
                  now == PET_MOOD_HOT   || now == PET_MOOD_DANCING);
-  if (strong && ledGetOverride() == 0 && !s_led_applied) {
+  if (strong && (ledGetOverride() == 0 || s_led_applied)) {
     uint8_t r = 255, g = 140, b = 170;
     switch (now) {
       case PET_MOOD_ANGRY: case PET_MOOD_FRUSTRATED: r = 255; g = 30; b = 30; break;
@@ -164,7 +164,18 @@ static void ledMirrorEdge(PetMood now) {
       case PET_MOOD_SICK:     r = 60; g = 220; b = 80;  break;
       case PET_MOOD_FEVER:    r = 255; g = 40; b = 40;  break;
       case PET_MOOD_HOT:      r = 255; g = 110; b = 30; break;
-      case PET_MOOD_DANCING:  r = 180; g = 60; b = 255; break;
+      case PET_MOOD_DANCING: {
+        uint8_t style = vibeStyleFromGenre();
+        switch (style) {
+          case 5: r = 20;  g = 70;  b = 255; break; // Breakup / Sad / Emo Rap: deep sorrow oceanic blue
+          case 3: r = 255; g = 20;  b = 20;  break; // Rock / Metal / Rage: fiery crimson rage
+          case 2: r = 240; g = 30;  b = 200; break; // EDM / Rave / Party: neon electric magenta
+          case 1: r = 140; g = 30;  b = 255; break; // Hip-Hop / Drill / Trap: midnight 808 purple
+          case 4: r = 255; g = 120; b = 35;  break; // Lo-Fi / Chill / Acoustic: warm sunset amber
+          default:r = 255; g = 180; b = 35;  break; // Pop / Happy: warm golden glow
+        }
+        break;
+      }
       default: break;
     }
     ledSetCustomRgb(r, g, b);
@@ -243,7 +254,47 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "chainsmokers") || strstr(buf, "zedd") || strstr(buf, "nucleya") ||
       strstr(buf, "ritviz") || strstr(buf, "pitbull") || strstr(buf, "dua lipa")) return 2;
 
-  // 2. Hip-Hop / Rap / Drill / Trap / Urban / R&B / Desi Hip-Hop
+  // 2. Breakup Phase / Sad Heartbreak / Emo Rap / Melancholy (Priority 2: Heartbreak takes precedence over generic rap)
+  if (strstr(buf, "breakup") || strstr(buf, "break up") || strstr(buf, "broken") ||
+      strstr(buf, "heartbreak") || strstr(buf, "sad") || strstr(buf, "crying") ||
+      strstr(buf, "tears") || strstr(buf, "alone") || strstr(buf, "lonely") ||
+      strstr(buf, "depressed") || strstr(buf, "pain") || strstr(buf, "hurt") ||
+      strstr(buf, "miss you") || strstr(buf, "goodbye") || strstr(buf, "farewell") ||
+      strstr(buf, "sober") || strstr(buf, "drunk") || strstr(buf, "alcohol") ||
+      strstr(buf, "whiskey") || strstr(buf, "beer") || strstr(buf, "wine") ||
+      strstr(buf, "ballad") || strstr(buf, "sad version") || strstr(buf, "sad song") ||
+      strstr(buf, "emo rap") || strstr(buf, "emo") || strstr(buf, "sad rap") ||
+      strstr(buf, "storytelling") || strstr(buf, "story telling") ||
+      // MC Stan heartbreak & sad tracks:
+      strstr(buf, "regret") || strstr(buf, "how to hate") || strstr(buf, "fuck love") ||
+      strstr(buf, "fuckk love") || strstr(buf, "bitch") || strstr(buf, "dil pe mat le") ||
+      (strstr(buf, "mc stan") && strstr(buf, "numb")) ||
+      // Juice WRLD heartbreak & emo rap tracks:
+      strstr(buf, "all girls are the same") || strstr(buf, "lucid dreams") ||
+      strstr(buf, "robbery") || strstr(buf, "wishing well") || strstr(buf, "already dead") ||
+      strstr(buf, "cigarettes") || strstr(buf, "lean wit me") || strstr(buf, "flaws and sins") ||
+      strstr(buf, "scared of love") || strstr(buf, "hear me calling") ||
+      // Talha Anjum melancholy & storytelling tracks:
+      strstr(buf, "downers at dusk") || strstr(buf, "down at dusk") || strstr(buf, "gumaan") ||
+      strstr(buf, "afsanay") || strstr(buf, "open letter") || strstr(buf, "glass half full") ||
+      // XXXTentacion & Lil Peep emo classics:
+      strstr(buf, "jocelyn flores") || strstr(buf, "star shopping") || strstr(buf, "save that shit") ||
+      strstr(buf, "everybody dies in their nightmares") ||
+      // Iconic Ballad & Desi Melancholy Classics:
+      strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
+      strstr(buf, "agar tum saath") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula diya") ||
+      strstr(buf, "tum hi ho") || strstr(buf, "sunn raha hai") || strstr(buf, "hamari adhuri") ||
+      strstr(buf, "bekhayali") || strstr(buf, "pachtaoge") || strstr(buf, "duaa") ||
+      strstr(buf, "alvida") || strstr(buf, "tadap tadap") || strstr(buf, "bhula dena") ||
+      strstr(buf, "phir bhi tumko") || strstr(buf, "ranjish hi sahi") || strstr(buf, "faasle") ||
+      strstr(buf, "woh lamhe") || strstr(buf, "kyun main jaagoon") || strstr(buf, "chithi na koi") ||
+      strstr(buf, "kahani suno") || strstr(buf, "kaifi khalil") || strstr(buf, "iraaday") ||
+      strstr(buf, "kinna sona") || strstr(buf, "mann bharryaa") || strstr(buf, "shei tumi") ||
+      strstr(buf, "boba tunnel") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
+      strstr(buf, "someone you loved") || strstr(buf, "drivers license") || strstr(buf, "glimpse of us") ||
+      strstr(buf, "slow dancing in the dark") || strstr(buf, "die with a smile")) return 5;
+
+  // 3. Hip-Hop / Rap / Drill / Trap / Urban / R&B / Desi Hip-Hop
   if (strstr(buf, "hip-hop") || strstr(buf, "hip hop") || strstr(buf, "rap") ||
       strstr(buf, "drill") || strstr(buf, "trap") || strstr(buf, "grime") ||
       strstr(buf, "808") || strstr(buf, "r&b") || strstr(buf, "urban") ||
@@ -291,28 +342,6 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "jazz") || strstr(buf, "classical") || strstr(buf, "ambient") ||
       strstr(buf, "chill") || strstr(buf, "folk") || strstr(buf, "piano") ||
       strstr(buf, "study") || strstr(buf, "instrumental")) return 4;
-
-  // 5. Breakup Phase / Sad Heartbreak / Melancholy (Watering crying eyes + drinking booze)
-  if (strstr(buf, "breakup") || strstr(buf, "break up") || strstr(buf, "broken") ||
-      strstr(buf, "heartbreak") || strstr(buf, "sad") || strstr(buf, "crying") ||
-      strstr(buf, "tears") || strstr(buf, "alone") || strstr(buf, "lonely") ||
-      strstr(buf, "depressed") || strstr(buf, "pain") || strstr(buf, "hurt") ||
-      strstr(buf, "miss you") || strstr(buf, "goodbye") || strstr(buf, "farewell") ||
-      strstr(buf, "sober") || strstr(buf, "drunk") || strstr(buf, "alcohol") ||
-      strstr(buf, "whiskey") || strstr(buf, "beer") || strstr(buf, "wine") ||
-      strstr(buf, "ballad") || strstr(buf, "sad version") || strstr(buf, "sad song") ||
-      strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
-      strstr(buf, "agar tum saath") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula diya") ||
-      strstr(buf, "tum hi ho") || strstr(buf, "sunn raha hai") || strstr(buf, "hamari adhuri") ||
-      strstr(buf, "bekhayali") || strstr(buf, "pachtaoge") || strstr(buf, "duaa") ||
-      strstr(buf, "alvida") || strstr(buf, "tadap tadap") || strstr(buf, "bhula dena") ||
-      strstr(buf, "phir bhi tumko") || strstr(buf, "ranjish hi sahi") || strstr(buf, "faasle") ||
-      strstr(buf, "woh lamhe") || strstr(buf, "kyun main jaagoon") || strstr(buf, "chithi na koi") ||
-      strstr(buf, "kahani suno") || strstr(buf, "kaifi khalil") || strstr(buf, "iraaday") ||
-      strstr(buf, "kinna sona") || strstr(buf, "mann bharryaa") || strstr(buf, "shei tumi") ||
-      strstr(buf, "boba tunnel") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
-      strstr(buf, "someone you loved") || strstr(buf, "drivers license") || strstr(buf, "glimpse of us") ||
-      strstr(buf, "slow dancing in the dark") || strstr(buf, "die with a smile")) return 5;
 
   return 0; // Pop / Commercial / Upbeat Groove
 }

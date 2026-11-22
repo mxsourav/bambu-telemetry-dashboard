@@ -3,6 +3,8 @@
 #include "telemetry.h"
 #include "ui.h"
 #include "settings_manager.h"
+#include "desk_pet.h"
+#include "spotify_service.h"
 
 #include <Arduino.h>
 
@@ -301,9 +303,18 @@ static bool led_inverted = false;
 void ledSetInverted(bool inv) { led_inverted = inv; }
 bool ledGetInverted() { return led_inverted; }
 
-static void ledApply(uint8_t r, uint8_t g, uint8_t b) {
+static void ledApply(uint8_t r, uint8_t g, uint8_t b, uint32_t ms = 0) {
   // Direct, instant, exact PWM output without lag or math truncation
-  uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * led_brightness_pct / 100;
+  uint8_t eff_pct = led_brightness_pct;
+  // Dynamic music beat pulsation: kick transients pump the LED strip in sync with the beat
+  if (ms > 0 && spotifyIsActive()) {
+    float hz = deskPetGetVibeHz();
+    if (hz < 0.5f || hz > 8.0f) hz = 2.0f;
+    float ph = (float)ms * 0.001f * hz * 6.2831853f;
+    float kick = powf(0.5f - 0.5f * cosf(ph), 4.0f);
+    eff_pct = (uint8_t)(led_brightness_pct * (0.50f + 0.50f * kick));
+  }
+  uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
   uint8_t wr = (uint16_t)r * cap / 255;
   uint8_t wg = (uint16_t)g * cap / 255;
   uint8_t wb = (uint16_t)b * cap / 255;
@@ -363,7 +374,7 @@ static void ledStateMachine(const TelemetryData& d, uint32_t ms) {
     return;
   }
   if (led_override == 8) {
-    ledApply(led_custom_r, led_custom_g, led_custom_b);
+    ledApply(led_custom_r, led_custom_g, led_custom_b, ms);
     return;
   }
 
