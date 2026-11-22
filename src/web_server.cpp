@@ -128,8 +128,8 @@ static void handleStatus() {
 }
 
 static void handleScreenRle() {
-  // When custom image or full Spotify artwork is showing, avoid streaming photo data
-  if (uiIsCustomImageActive() || (spotifyIsActive() && !uiIsPetMode())) {
+  // When full Spotify artwork is showing, avoid streaming photo data
+  if (spotifyIsActive() && !uiIsPetMode()) {
     sendCorsHeaders();
     server.send(204, "text/plain", "");
     return;
@@ -145,7 +145,7 @@ static void handleScreenRle() {
   }
 
   const int totalPixels = 160 * 128;
-  static uint8_t s_rle_buf[8192];
+  static uint8_t s_rle_buf[24576];
   size_t rle_len = 0;
   int i = 0;
   bool overflow = false;
@@ -529,11 +529,11 @@ static void handleDisplayImageLoop() {
       }
     }
     if (display_upload_is_jpeg) {
-      uint8_t* buf = uiGetCustomJpegBuffer(32768);
-      if (buf && display_upload_bytes < 32768) {
+      uint8_t* buf = uiGetCustomJpegBuffer(49152);
+      if (buf && display_upload_bytes < 49152) {
         size_t copyLen = upload.currentSize;
-        if (display_upload_bytes + copyLen > 32768) {
-          copyLen = 32768 - display_upload_bytes;
+        if (display_upload_bytes + copyLen > 49152) {
+          copyLen = 49152 - display_upload_bytes;
         }
         memcpy(buf + display_upload_bytes, upload.buf, copyLen);
         display_upload_bytes += copyLen;
@@ -1215,9 +1215,13 @@ static void webTask(void* /*param*/) {
   server.on("/api/fs/list", HTTP_GET, handleFsList);
   server.on("/api/fs/download", HTTP_GET, handleFsDownload);
   server.on("/api/fs/delete", HTTP_POST, handleFsDelete);
+  server.on("/api/fs/upload", HTTP_OPTIONS, handleOptions);
   server.on("/api/fs/upload", HTTP_POST, handleFsUploadDone, handleFsUploadLoop);
+  server.on("/api/led/set", HTTP_OPTIONS, handleOptions);
   server.on("/api/led/set", HTTP_POST, handleLedSet);
+  server.on("/api/display/image", HTTP_OPTIONS, handleOptions);
   server.on("/api/display/image", HTTP_POST, handleDisplayImageDone, handleDisplayImageLoop);
+  server.on("/api/display/clear", HTTP_OPTIONS, handleOptions);
   server.on("/api/display/clear", HTTP_POST, handleDisplayClear);
   server.on("/api/system/update", HTTP_POST, handleOtaDone, handleOtaLoop);
   server.on("/api/system/reboot", HTTP_POST, handleReboot);

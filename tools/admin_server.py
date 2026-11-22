@@ -139,6 +139,12 @@ def main():
     esp_ip = probe_esp_ip()
     print(f" Target Device: http://{esp_ip}/")
 
+    try:
+        from setup_vercel_pna import apply_browser_policies
+        apply_browser_policies()
+    except Exception:
+        pass
+
     port = 3000
     server = None
     for p in range(3000, 3010):

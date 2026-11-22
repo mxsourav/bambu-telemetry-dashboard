@@ -924,13 +924,21 @@ function updateIpUrls() {
 updateIpUrls();
 
 if(window.location.protocol === 'https:'){
-  const b = document.getElementById('httpsWarningBanner');
-  if(b) b.style.display = 'block';
+  testVercelConnection(true).then(connected => {
+    if(!connected) {
+      const b = document.getElementById('httpsWarningBanner');
+      if(b) b.style.display = 'block';
+    }
+  });
 }
 
 function getApiUrl(endpoint){
   if(window.location.hostname === deviceIp){
     return endpoint;
+  }
+  if((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+     (window.location.port === '3000' || window.location.port === '8765')){
+    return '/esp' + endpoint;
   }
   return 'http://' + deviceIp + endpoint;
 }
@@ -994,25 +1002,29 @@ function setAndApplyDeviceIp(ip){
   pollStatus();
 }
 
-async function testVercelConnection() {
+async function testVercelConnection(silent = false) {
   const btn = document.getElementById('btnVercelTest');
-  if (btn) btn.innerText = "Testing...";
+  if (btn && !silent) btn.innerText = "Testing...";
   try {
     const c = new AbortController();
-    setTimeout(() => c.abort(), 2500);
+    setTimeout(() => c.abort(), 2000);
     const r = await fetch('http://' + deviceIp + '/api/status', { signal: c.signal });
     if (r.ok) {
       const b = document.getElementById('httpsWarningBanner');
       if (b) b.style.display = 'none';
       document.getElementById('cDot').className = 'dot';
       pollStatus();
-      alert("Connected to Desk Monitor at " + deviceIp + "! Insecure content is allowed.");
+      if (!silent) alert("Connected to Desk Monitor at " + deviceIp + "! Insecure content is allowed.");
+      return true;
     } else {
       throw new Error("HTTP " + r.status);
     }
   } catch(e) {
-    if (btn) btn.innerText = "Test Connection";
-    alert("Connection blocked or unreachable at http://" + deviceIp + ".\n\nTo allow Vercel to reach your device in Chrome/Edge:\n1. Click the lock/tune icon left of the address bar.\n2. Click 'Site settings' -> Set 'Insecure content' to 'Allow'.\n3. Refresh this page.");
+    if (btn && !silent) btn.innerText = "Test Connection";
+    if (!silent) {
+      alert("Connection blocked or unreachable at http://" + deviceIp + ".\n\nTo allow Vercel to reach your device in Chrome/Edge:\n1. Run AUTO_SETUP_VERCEL.bat once on your PC, OR\n2. Click the lock/tune icon left of the address bar -> 'Site settings' -> Set 'Insecure content' to 'Allow'.\n3. Refresh this page.");
+    }
+    return false;
   }
 }
 
@@ -1425,9 +1437,14 @@ function fetchScreen(){
   fetch(getApiUrl('/api/control/screen_rle?t=' + Date.now()), { signal: screenAbortController.signal })
     .then(r => {
       if(r.status === 204){
-        // Custom image is active on device; pause live polling to preserve WiFi bandwidth
-        isCustomImageShowing = true;
-        return null;
+        // RLE buffer overflow or photo: fetch uncompressed BMP snapshot
+        return fetch(getApiUrl('/api/control/screen?t=' + Date.now()))
+          .then(r2 => r2.blob())
+          .then(blob => createImageBitmap(blob))
+          .then(bmp => {
+            if(ctx) ctx.drawImage(bmp, 0, 0);
+            return null;
+          }).catch(() => null);
       }
       if(!r.ok) throw new Error("HTTP " + r.status);
       return r.arrayBuffer();
@@ -1826,10 +1843,10 @@ function previewImg(input){
       cropCtx.filter = 'none';
       cropCtx.drawImage(img, dx, dy, dw, dh);
 
-      // Convert to high-quality JPEG for Direct-to-RAM upload
+      // Convert to high-quality JPEG for Direct-to-RAM upload (0.88 quality is ~6-8 KB)
       cropEl.toBlob(blob => {
         customImageBlob = blob;
-      }, 'image/jpeg', 0.95);
+      }, 'image/jpeg', 0.88);
     };
     img.src = e.target.result;
   };
@@ -1837,9 +1854,16 @@ function previewImg(input){
 }
 
 async function pushCustomImg(){
-  if(!customImageBlob) return alert("Select an image first!");
+  const cropEl = document.getElementById('cropCanvas');
   const statusEl = document.getElementById('imgPushStatus');
   const btn = document.getElementById('btnPushImg');
+
+  // If blob not cached yet, generate from canvas on demand
+  if(!customImageBlob && cropEl){
+    customImageBlob = await new Promise(r => cropEl.toBlob(r, 'image/jpeg', 0.88));
+  }
+  if(!customImageBlob) return alert("Select an image first!");
+
   if(btn) btn.disabled = true;
 
   // 1. Immediately abort any in-flight background screen fetch to free up the ESP32 socket
@@ -1872,6 +1896,19 @@ async function pushCustomImg(){
       return await res.json();
     } catch(err) {
       clearTimeout(to);
+      // Secondary fallback: raw JPEG binary post
+      try {
+        const c2 = new AbortController();
+        const to2 = setTimeout(() => c2.abort(), 8000);
+        const res2 = await fetch(getApiUrl('/api/display/image'), {
+          method:'POST',
+          headers: {'Content-Type': 'image/jpeg'},
+          body: customImageBlob,
+          signal: c2.signal
+        });
+        clearTimeout(to2);
+        if(res2.ok) return await res2.json();
+      } catch(e2){}
       throw err;
     }
   };
@@ -1881,10 +1918,9 @@ async function pushCustomImg(){
     try {
       result = await doAttempt();
     } catch(err1) {
-      // Automatic quick retry on transient socket collision
       console.warn("Attempt 1 failed, retrying push...", err1);
       if(statusEl) statusEl.innerText = "Retrying push...";
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 300));
       result = await doAttempt();
     }
 
@@ -1892,16 +1928,19 @@ async function pushCustomImg(){
       statusEl.style.color = 'var(--green)';
       statusEl.innerText = "Pushed image to display successfully.";
     }
-    // Render cropped image directly onto canvas preview so client doesn't need to fetch 61 KB RLE
     const cropEl = document.getElementById('cropCanvas');
     if(cropEl && ctx){
       ctx.drawImage(cropEl, 0, 0);
     }
-    isCustomImageShowing = true;
+    // Re-enable polling after a brief pause so mirror shows the actual ESP32 framebuffer
+    setTimeout(() => {
+      isCustomImageShowing = false;
+      fetchScreen();
+    }, 600);
   } catch(e) {
     let msg = e.message;
     if(window.location.protocol === 'https:' && (msg.includes('Failed to fetch') || msg.includes('NetworkError'))){
-      msg = "Browser blocked HTTP call from HTTPS. Open http://" + deviceIp + "/ directly in your address bar.";
+      msg = "Browser blocked HTTP call from HTTPS. Open http://" + deviceIp + "/ directly or run AUTO_SETUP_VERCEL.bat.";
     }
     if(statusEl){
       statusEl.style.color = 'var(--red)';
@@ -1911,7 +1950,6 @@ async function pushCustomImg(){
   } finally {
     isUploadBusy = false;
     if(btn) btn.disabled = false;
-    if(!isCustomImageShowing) setTimeout(fetchScreen, 200);
   }
 }
 

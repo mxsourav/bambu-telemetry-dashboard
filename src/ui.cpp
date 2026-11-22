@@ -295,16 +295,16 @@ uint16_t* uiGetCustomImageBuffer() {
 
 uint8_t* uiGetCustomJpegBuffer(size_t max_len) {
   if (!s_custom_jpeg_buf) {
-    s_custom_jpeg_buf = (uint8_t*)malloc(32768);
+    s_custom_jpeg_buf = (uint8_t*)malloc(49152);
     if (s_custom_jpeg_buf) {
-      memset(s_custom_jpeg_buf, 0, 32768);
+      memset(s_custom_jpeg_buf, 0, 49152);
     }
   }
   return s_custom_jpeg_buf;
 }
 
 void uiSetCustomJpeg(const uint8_t* data, size_t len) {
-  if (!data || len == 0 || len > 32768) return;
+  if (!data || len == 0 || len > 49152) return;
   uint8_t* buf = uiGetCustomJpegBuffer(len);
   if (buf) {
     if (buf != data) memcpy(buf, data, len);
@@ -1918,8 +1918,9 @@ static void uiTask(void* /*param*/) {
       }
     }
 
-    // Dynamic frame pacing: 100 FPS for Desk Pet (10ms); 30 FPS elsewhere
-    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
+    // Dynamic frame pacing: 100 FPS for Desk Pet (10ms); 10 FPS for static image (100ms); 30 FPS elsewhere
+    TickType_t current_frame_ticks = (view == VIEW_DESK_PET) ? pdMS_TO_TICKS(10) :
+                                     (view == VIEW_CUSTOM_IMAGE) ? pdMS_TO_TICKS(100) : pdMS_TO_TICKS(1000 / UI_TARGET_FPS);
     static UiView s_prev_view = VIEW_BOOT;
     if (view != s_prev_view) {
       if (s_prev_view == VIEW_DESK_PET) petMoodOnLeave();
@@ -1992,10 +1993,6 @@ static void uiTask(void* /*param*/) {
             }
             custom_image_rendered = true;
             had_notif = has_notif;
-          } else {
-            // Static image already drawn to screen; yield CPU and avoid 30 FPS DMA bus saturation
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
           }
         }
         break;
