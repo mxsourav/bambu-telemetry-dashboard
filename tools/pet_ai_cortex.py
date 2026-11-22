@@ -671,17 +671,68 @@ class PetAICortex:
 
         class CortexHandler(BaseHTTPRequestHandler):
             def do_OPTIONS(self):
-                self.send_response(200)
+                self.send_response(204)
                 self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+                self.send_header("Access-Control-Allow-Headers", "*")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.end_headers()
 
             def do_GET(self):
-                if self.path == "/api/ai/status":
+                clean_path = self.path.split("?")[0]
+                if clean_path in ["/", "/index.html"]:
+                    web_index = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "index.html")
+                    if os.path.exists(web_index):
+                        with open(web_index, "rb") as f:
+                            content = f.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_header("Access-Control-Allow-Private-Network", "true")
+                        self.end_headers()
+                        self.wfile.write(content)
+                        return
+                elif clean_path in ["/manifest.json", "/sw.js", "/icon.svg", "/icon-192.png", "/icon-512.png"]:
+                    fpath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", clean_path.lstrip("/"))
+                    if os.path.exists(fpath):
+                        with open(fpath, "rb") as f:
+                            content = f.read()
+                        ctype = "application/javascript" if clean_path.endswith(".js") else ("image/svg+xml" if clean_path.endswith(".svg") else "application/json")
+                        self.send_response(200)
+                        self.send_header("Content-Type", ctype)
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        self.wfile.write(content)
+                        return
+                elif self.path.startswith("/esp/"):
+                    # Localhost reverse-proxy to ESP32
+                    subpath = self.path[5:]
+                    target_url = f"http://{cortex.esp_ip}/{subpath}"
+                    try:
+                        req = urllib.request.Request(target_url, headers={"User-Agent": "CortexProxy/1.0"})
+                        with urllib.request.urlopen(req, timeout=3.0) as resp:
+                            body = resp.read()
+                            self.send_response(resp.status)
+                            for k, v in resp.headers.items():
+                                if k.lower() not in ["content-length", "transfer-encoding", "connection"]:
+                                    self.send_header(k, v)
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Access-Control-Allow-Private-Network", "true")
+                            self.send_header("Content-Length", str(len(body)))
+                            self.end_headers()
+                            self.wfile.write(body)
+                            return
+                    except Exception as pe:
+                        self.send_response(502)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(pe)}).encode())
+                        return
+
+                if self.path == "/api/ai/status" or self.path == "/api/device/ip":
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Access-Control-Allow-Private-Network", "true")
                     self.end_headers()
                     out = {
                         "status": "online",
@@ -713,6 +764,34 @@ class PetAICortex:
                     self.end_headers()
 
             def do_POST(self):
+                if self.path.startswith("/esp/"):
+                    subpath = self.path[5:]
+                    target_url = f"http://{cortex.esp_ip}/{subpath}"
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length) if length > 0 else b""
+                    try:
+                        req = urllib.request.Request(target_url, data=body, method="POST")
+                        for k, v in self.headers.items():
+                            if k.lower() in ["content-type", "accept", "user-agent"]:
+                                req.add_header(k, v)
+                        with urllib.request.urlopen(req, timeout=4.0) as resp:
+                            resp_body = resp.read()
+                            self.send_response(resp.status)
+                            for k, v in resp.headers.items():
+                                if k.lower() not in ["content-length", "transfer-encoding", "connection"]:
+                                    self.send_header(k, v)
+                            self.send_header("Access-Control-Allow-Origin", "*")
+                            self.send_header("Access-Control-Allow-Private-Network", "true")
+                            self.send_header("Content-Length", str(len(resp_body)))
+                            self.end_headers()
+                            self.wfile.write(resp_body)
+                            return
+                    except Exception as pe:
+                        self.send_response(502)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(pe)}).encode())
+                        return
+
                 if self.path == "/api/ai/ask":
                     length = int(self.headers.get("Content-Length", 0))
                     body = self.rfile.read(length).decode("utf-8")

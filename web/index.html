@@ -348,25 +348,34 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
       </button>
       <div class="badge" onclick="openIpModal()">
         <div class="dot" id="cDot"></div>
-        <span id="cIp">192.168.0.154</span>
+        <span id="cIp">192.168.137.35</span>
       </div>
     </div>
   </div>
 
   <!-- HTTPS Mixed-Content Alert (For Vercel / Cloud hosted dashboard) -->
-  <div id="httpsWarningBanner" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+  <div id="httpsWarningBanner" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-      <div style="font-weight:700;color:#F87171;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="#F87171"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>Browser HTTPS Restriction</span>
+      <div style="font-weight:700;color:#F87171;font-size:0.82rem;display:flex;align-items:center;gap:6px;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="#F87171"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>Browser HTTPS Notice (Vercel)</span>
       </div>
       <button onclick="document.getElementById('httpsWarningBanner').style.display='none'" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;display:flex;align-items:center;padding:4px;"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
-    <div style="font-size:0.75rem;color:var(--txt-muted);margin:4px 0 8px 0;line-height:1.4;">
-      Web browsers block HTTPS sites from contacting local devices (<span class="bannerDirectIp">192.168.0.154</span>). To control your desk monitor without browser blocks, open the monitor's local address directly:
+    <div style="font-size:0.75rem;color:var(--txt-muted);margin:6px 0 8px 0;line-height:1.45;">
+      Browsers block HTTPS sites (like Vercel) from fetching local devices (<span class="bannerDirectIp">192.168.137.35</span>) by default.<br>
+      <b>To use this Vercel dashboard:</b> Click the lock/tune icon left of the address bar &rarr; <b>Site settings</b> &rarr; Set <b>Insecure content</b> to <b>Allow</b> &rarr; Click Test below!
     </div>
-    <a id="httpsDirectDeviceLink" href="http://192.168.0.154/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;font-weight:700;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
-      <span>Open Local Monitor (http://<span class="bannerDirectIp">192.168.0.154</span>)</span><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
-    </a>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+      <button onclick="testVercelConnection()" id="btnVercelTest" style="display:inline-flex;align-items:center;gap:6px;background:var(--cyan);color:#08080a;font-weight:700;font-size:0.75rem;padding:7px 14px;border:none;border-radius:8px;cursor:pointer;">
+        <span>Test Connection</span>
+      </button>
+      <a id="httpsDirectDeviceLink" href="http://192.168.137.35/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-weight:600;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
+        <span>Open Direct Monitor (http://<span class="bannerDirectIp">192.168.137.35</span>)</span>
+      </a>
+      <a href="http://localhost:3000/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-weight:600;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
+        <span>Open Localhost (3000)</span>
+      </a>
+    </div>
   </div>
 
   <!-- Navigation -->
@@ -477,9 +486,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
           <button class="led-chip" id="scrBtn_weather" onclick="switchDisplayScreen('weather')" style="padding:5px 9px;font-size:0.68rem;">Weather</button>
           <button class="led-chip" id="scrBtn_ai" onclick="switchDisplayScreen('ai')" style="padding:5px 9px;font-size:0.68rem;">AI Brain</button>
           <button class="led-chip" id="scrBtn_spotify" onclick="switchDisplayScreen('spotify')" style="padding:5px 9px;font-size:0.68rem;">Spotify</button>
+          <button class="led-chip" id="scrBtn_lyrics" onclick="switchDisplayScreen('lyrics')" style="padding:5px 9px;font-size:0.68rem;">Lyrics</button>
           <button class="led-chip" id="scrBtn_image" onclick="switchDisplayScreen('image')" style="padding:5px 9px;font-size:0.68rem;">Custom Image</button>
           <button class="led-chip" id="scrBtn_clock" onclick="switchDisplayScreen('clock')" style="padding:5px 9px;font-size:0.68rem;">Clock</button>
           <button class="led-chip" id="scrBtn_timer" onclick="switchDisplayScreen('timer')" style="padding:5px 9px;font-size:0.68rem;">Timer</button>
+          <button class="led-chip" id="scrBtn_about" onclick="switchDisplayScreen('about')" style="padding:5px 9px;font-size:0.68rem;">About</button>
         </div>
       </div>
     </div>
@@ -850,11 +861,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
   <div class="modal-card">
     <div class="modal-title">Device Connection</div>
     <div class="modal-desc">Enter the IP address of your ESP32 Bambu Monitor on your local Wi-Fi network.</div>
-    <input type="text" class="modal-input" id="ipInput" placeholder="192.168.0.154" value="192.168.0.154">
+    <input type="text" class="modal-input" id="ipInput" placeholder="192.168.137.35" value="192.168.137.35">
     <div id="ipModalStatus" style="font-size:0.75rem;margin:10px 0 2px 0;min-height:18px;line-height:1.3;"></div>
     <div id="ipModalDirectBtn" style="display:none;margin-top:6px;">
-      <a id="ipModalDirectLink" href="http://192.168.0.154/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
-        <span>Open Direct Link (http://<span class="bannerDirectIp">192.168.0.154</span>)</span>
+      <a id="ipModalDirectLink" href="http://192.168.137.35/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
+        <span>Open Direct Link (http://<span class="bannerDirectIp">192.168.137.35</span>)</span>
       </a>
     </div>
     <div class="modal-btns">
@@ -877,7 +888,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
   if (code) {
     let ip = null;
     try { ip = localStorage.getItem('bambu_esp32_ip'); } catch(e){}
-    if (!ip) ip = "192.168.0.154";
+    if (!ip) ip = "192.168.137.35";
     window.location.replace("http://" + ip + "/api/spotify/callback?code=" +
                             encodeURIComponent(code));
   }
@@ -885,14 +896,16 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
 </script>
 <script>
 // --- IP Configuration & Host Management ---
-const DEFAULT_IP = "192.168.0.154";
+const DEFAULT_IP = "192.168.137.35";
+const CANDIDATE_IPS = ["192.168.137.35", "192.168.0.154", "192.168.1.35", "192.168.0.35"];
+
 function getDeviceIp(){
   const urlParams = new URLSearchParams(window.location.search);
   const qIp = urlParams.get('ip');
   if(qIp) return qIp;
   const sIp = localStorage.getItem('bambu_esp32_ip');
   if(sIp) return sIp;
-  if(window.location.hostname && window.location.hostname !== "localhost" && !window.location.hostname.includes("vercel.app")){
+  if(window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" && !window.location.hostname.includes("vercel.app")){
     return window.location.hostname;
   }
   return DEFAULT_IP;
@@ -920,6 +933,87 @@ function getApiUrl(endpoint){
     return endpoint;
   }
   return 'http://' + deviceIp + endpoint;
+}
+
+let isAutoProbing = false;
+async function autoProbeDeviceIp() {
+  if (isAutoProbing) return;
+  if (window.location.hostname === deviceIp && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") return;
+  isAutoProbing = true;
+  try {
+    // If on localhost, probe local AI cortex / sync tool first
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        const c = new AbortController();
+        setTimeout(() => c.abort(), 700);
+        const r = await fetch('http://localhost:8765/api/ai/status', { signal: c.signal });
+        if (r.ok) {
+          const d = await r.json();
+          if (d && d.device_ip && d.device_ip !== deviceIp) {
+            console.log('[AUTO-IP] Found live device IP via Cortex:', d.device_ip);
+            setAndApplyDeviceIp(d.device_ip);
+            isAutoProbing = false;
+            return;
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Probe candidate IPs in order
+    const list = [deviceIp, ...CANDIDATE_IPS];
+    const unique = [...new Set(list.filter(Boolean))];
+    for (const ip of unique) {
+      try {
+        const c = new AbortController();
+        setTimeout(() => c.abort(), 900);
+        const r = await fetch('http://' + ip + '/api/status', { signal: c.signal });
+        if (r.ok) {
+          const d = await r.json();
+          if (d && (d.ip || typeof d.heap_free !== 'undefined')) {
+            console.log('[AUTO-IP] Found responding ESP32 at:', ip);
+            setAndApplyDeviceIp(ip);
+            isAutoProbing = false;
+            return;
+          }
+        }
+      } catch(e) {}
+    }
+  } finally {
+    isAutoProbing = false;
+  }
+}
+
+function setAndApplyDeviceIp(ip){
+  deviceIp = ip;
+  try { localStorage.setItem('bambu_esp32_ip', ip); } catch(e){}
+  const cIp = document.getElementById('cIp');
+  if(cIp) cIp.innerText = ip;
+  const ipInput = document.getElementById('ipInput');
+  if(ipInput) ipInput.value = ip;
+  updateIpUrls();
+  pollStatus();
+}
+
+async function testVercelConnection() {
+  const btn = document.getElementById('btnVercelTest');
+  if (btn) btn.innerText = "Testing...";
+  try {
+    const c = new AbortController();
+    setTimeout(() => c.abort(), 2500);
+    const r = await fetch('http://' + deviceIp + '/api/status', { signal: c.signal });
+    if (r.ok) {
+      const b = document.getElementById('httpsWarningBanner');
+      if (b) b.style.display = 'none';
+      document.getElementById('cDot').className = 'dot';
+      pollStatus();
+      alert("Connected to Desk Monitor at " + deviceIp + "! Insecure content is allowed.");
+    } else {
+      throw new Error("HTTP " + r.status);
+    }
+  } catch(e) {
+    if (btn) btn.innerText = "Test Connection";
+    alert("Connection blocked or unreachable at http://" + deviceIp + ".\n\nTo allow Vercel to reach your device in Chrome/Edge:\n1. Click the lock/tune icon left of the address bar.\n2. Click 'Site settings' -> Set 'Insecure content' to 'Allow'.\n3. Refresh this page.");
+  }
 }
 
 function openIpModal(){
@@ -1245,7 +1339,7 @@ function switchDisplayScreen(screenName){
 
 function updateDisplayScreenUI(screenName){
   if (!screenName) return;
-  const screens = ['pet', 'printer', 'pc_hud', 'weather', 'ai', 'spotify', 'image', 'clock', 'timer'];
+  const screens = ['pet', 'printer', 'pc_hud', 'weather', 'ai', 'spotify', 'lyrics', 'image', 'clock', 'timer', 'about'];
   screens.forEach(s => {
     const el = document.getElementById('scrBtn_' + s);
     if (el) el.classList.toggle('active', s === screenName);
@@ -1417,6 +1511,9 @@ function pollStatus(){
     .catch(()=>{
       clearTimeout(to);
       pollFailCount++;
+      if(pollFailCount === 2 || pollFailCount === 5) {
+        autoProbeDeviceIp();
+      }
       if(pollFailCount >= 4) {
         document.getElementById('cDot').className = 'dot offline';
         document.getElementById('tState').innerText = 'DISCONNECTED';
@@ -1425,6 +1522,7 @@ function pollStatus(){
 }
 setInterval(pollStatus, 2000);
 pollStatus();
+autoProbeDeviceIp();
 
 // --- Interactive Color Wheel ---
 const wheelCanvas = document.getElementById('colorWheel');
