@@ -197,7 +197,7 @@ static float vibeEnergy() {
 }
 
 // Map the track genre to a dance style:
-// 1 = cool drill/trap nod, 2 = hype rave, 3 = rock headbang,
+// 1 = cool drill/trap nod, 2 = hype party/EDM, 3 = rock headbang,
 // 4 = chill lofi sway, 5 = sad ballad tears, 0 = default pop groove.
 static uint8_t vibeStyleFromGenre() {
   char buf[512] = {0};
@@ -205,48 +205,35 @@ static uint8_t vibeStyleFromGenre() {
            g_spotify.genre, g_pc_stats.music_genre, g_spotify.artist, g_spotify.title);
   for (char* c = buf; *c; ++c) *c = (char)tolower(*c);
 
-  // 5. Emotional / Sad / Ballads / Heartbreak / Acoustic Tears / Sad Lo-Fi (Checked FIRST so Sad songs get tears!)
-  if (strstr(buf, "sad") || strstr(buf, "crying") || strstr(buf, "cry") ||
-      strstr(buf, "heartbreak") || strstr(buf, "emotional") || strstr(buf, "ballad") ||
-      strstr(buf, "alone") || strstr(buf, "hurt") || strstr(buf, "tears") ||
-      strstr(buf, "goodbye") || strstr(buf, "broken") || strstr(buf, "die with a smile") ||
-      strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
-      strstr(buf, "anjan dutt") || strstr(buf, "anjana") || strstr(buf, "agar tum saath") ||
-      strstr(buf, "kabira") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula") ||
-      strstr(buf, "sukoon") || strstr(buf, "maula mere maula") || strstr(buf, "arijit") ||
-      strstr(buf, "tum hi ho") || strstr(buf, "atif aslam") || strstr(buf, "mohit chauhan") ||
-      strstr(buf, "jubin") || strstr(buf, "qismat") || strstr(buf, "filhall") ||
-      strstr(buf, "ranjha") || strstr(buf, "tu jaane na") || strstr(buf, "bekhayali") ||
-      strstr(buf, "judai") || strstr(buf, "pachtaoge") || strstr(buf, "duaa") ||
-      strstr(buf, "alvida") || strstr(buf, "tadap tadap") || strstr(buf, "bhula dena") ||
-      strstr(buf, "phir bhi tumko") || strstr(buf, "hasi") || strstr(buf, "sunn raha hai") ||
-      strstr(buf, "hamari adhuri") || strstr(buf, "o re piya") || strstr(buf, "kaise hua") ||
-      strstr(buf, "ae dil hai mushkil") || strstr(buf, "kho gaye hum") || strstr(buf, "ranjish") ||
-      strstr(buf, "faasle") || strstr(buf, "woh lamhe") || strstr(buf, "kyun main jaagoon") ||
-      strstr(buf, "abhi mujh mein") || strstr(buf, "jeena jeena") || strstr(buf, "tera yaar hoon") ||
-      strstr(buf, "roke na ruke") || strstr(buf, "chithi na koi") || strstr(buf, "jagjit") ||
-      strstr(buf, "mehdi hassan") || strstr(buf, "nusrat") || strstr(buf, "rahat") ||
-      strstr(buf, "ali sethi") || strstr(buf, "kahani suno") || strstr(buf, "kaifi khalil") ||
-      strstr(buf, "iraaday") || strstr(buf, "bulleya") || strstr(buf, "kinna sona") ||
-      strstr(buf, "mann bharryaa") || strstr(buf, "satranga") || strstr(buf, "pehle bhi main") ||
-      strstr(buf, "saari duniya jalaa") || strstr(buf, "o maahi") || strstr(buf, "ve kamleya") ||
-      strstr(buf, "tu hai kahan") || strstr(buf, "faheem abdullah") || strstr(buf, "jhelum") ||
-      strstr(buf, "luka chuppi") || strstr(buf, "shei tumi") || strstr(buf, "ayub bachchu") ||
-      strstr(buf, "amake amar moto") || strstr(buf, "boba tunnel") || strstr(buf, "anupam roy") ||
-      strstr(buf, "adele") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
-      strstr(buf, "lewis capaldi") || strstr(buf, "olivia rodrigo") || strstr(buf, "drivers license") ||
-      strstr(buf, "joji") || strstr(buf, "glimpse of us") || strstr(buf, "billie eilish") ||
-      strstr(buf, "ocean eyes") || strstr(buf, "what was i made for") || strstr(buf, "lana del rey") ||
-      strstr(buf, "mitski") || strstr(buf, "arcade") || strstr(buf, "heather") ||
-      strstr(buf, "conan gray") || strstr(buf, "sorrow") || strstr(buf, "pain") ||
-      strstr(buf, "lonely") || strstr(buf, "melancholy")) return 5;
+  // 1. EDM / Dance / Rave / Party / Club / DJ (Priority 1: Party tracks ALWAYS vibe joyful!)
+  if (strstr(buf, "party") || strstr(buf, "dance") || strstr(buf, "club") ||
+      strstr(buf, "rave") || strstr(buf, "remix") || strstr(buf, "edm") ||
+      strstr(buf, "house") || strstr(buf, "techno") || strstr(buf, "electro") ||
+      strstr(buf, "trance") || strstr(buf, "hardstyle") || strstr(buf, "dj") ||
+      strstr(buf, "bhangra") || strstr(buf, "dhol") || strstr(buf, "garmi") ||
+      strstr(buf, "kala chashma") || strstr(buf, "ghungroo") || strstr(buf, "kar gayi chull") ||
+      strstr(buf, "aankh marey") || strstr(buf, "chogada") || strstr(buf, "saturday saturday") ||
+      strstr(buf, "nashe si chadh gayi") || strstr(buf, "kamariya") || strstr(buf, "jhoome jo") ||
+      strstr(buf, "besharam rang") || strstr(buf, "lungi dance") || strstr(buf, "badtameez dil") ||
+      strstr(buf, "subha hone") || strstr(buf, "high heels") || strstr(buf, "balam pichkari") ||
+      strstr(buf, "baby doll") || strstr(buf, "chammak challo") || strstr(buf, "swag se swagat") ||
+      strstr(buf, "dhoom") || strstr(buf, "mauja hi mauja") || strstr(buf, "tum hi ho bandhu") ||
+      strstr(buf, "gallan goodiyaan") || strstr(buf, "london thumakda") || strstr(buf, "morni banke") ||
+      strstr(buf, "dilliwaali") || strstr(buf, "dilliwali") || strstr(buf, "first class") ||
+      strstr(buf, "sooraj dooba") || strstr(buf, "hookah bar") || strstr(buf, "nacho nacho") ||
+      strstr(buf, "garrix") || strstr(buf, "avicii") || strstr(buf, "marshmello") ||
+      strstr(buf, "skrillex") || strstr(buf, "tiesto") || strstr(buf, "alesso") ||
+      strstr(buf, "guetta") || strstr(buf, "calvin harris") || strstr(buf, "alan walker") ||
+      strstr(buf, "chainsmokers") || strstr(buf, "zedd") || strstr(buf, "nucleya") ||
+      strstr(buf, "ritviz") || strstr(buf, "pitbull") || strstr(buf, "dua lipa")) return 2;
 
-  // 1. Hip-Hop / Rap / Drill / Trap / Urban / R&B / Desi Hip-Hop
+  // 2. Hip-Hop / Rap / Drill / Trap / Urban / R&B / Desi Hip-Hop
   if (strstr(buf, "hip-hop") || strstr(buf, "hip hop") || strstr(buf, "rap") ||
       strstr(buf, "drill") || strstr(buf, "trap") || strstr(buf, "grime") ||
       strstr(buf, "808") || strstr(buf, "r&b") || strstr(buf, "urban") ||
       strstr(buf, "sambata") || strstr(buf, "palti fire") || strstr(buf, "lal ranga") ||
       strstr(buf, "shob choritro") || strstr(buf, "bhooter raja") || strstr(buf, "juta abishkar") ||
+      strstr(buf, "honey singh") || strstr(buf, "yo yo honey") || strstr(buf, "payal") ||
       strstr(buf, "anirudh") || strstr(buf, "hukum") || strstr(buf, "badass") ||
       strstr(buf, "jailer") || strstr(buf, "leo") || strstr(buf, "vikram") ||
       strstr(buf, "rolex") || strstr(buf, "master") || strstr(buf, "vathi") ||
@@ -260,7 +247,7 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "kohinoor") || strstr(buf, "mirchi") || strstr(buf, "chal bombay") ||
       strstr(buf, "3:59") || strstr(buf, "khatta flow") || strstr(buf, "namastute") ||
       strstr(buf, "nanchaku") || strstr(buf, "11k") || strstr(buf, "emiway") ||
-      strstr(buf, "bantai") || strstr(buf, "divine") || strstr(buf, "stan") ||
+      strstr(buf, "bantai") || strstr(buf, "divine") || strstr(buf, "mc stan") ||
       strstr(buf, "krsna") || strstr(buf, "raftaar") || strstr(buf, "seedhe maut") ||
       strstr(buf, "sidhu") || strstr(buf, "shubh") || strstr(buf, "dhillon") ||
       strstr(buf, "drake") || strstr(buf, "travis") || strstr(buf, "future") ||
@@ -283,26 +270,29 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "arctic monkeys") || strstr(buf, "strokes") || strstr(buf, "radiohead") ||
       strstr(buf, "evanescence") || strstr(buf, "avenged sevenfold") || strstr(buf, "bring me the horizon")) return 3;
 
-  // 4. Lo-Fi / Chill / Acoustic / Jazz / Classical / Ambient / Sleep
+  // 4. Lo-Fi / Chill / Acoustic / Jazz / Ambient
   if (strstr(buf, "lofi") || strstr(buf, "lo-fi") || strstr(buf, "acoustic") ||
       strstr(buf, "jazz") || strstr(buf, "classical") || strstr(buf, "ambient") ||
       strstr(buf, "chill") || strstr(buf, "folk") || strstr(buf, "piano") ||
-      strstr(buf, "sleep") || strstr(buf, "relax") || strstr(buf, "meditation") ||
       strstr(buf, "study") || strstr(buf, "instrumental")) return 4;
 
-  // 2. EDM / House / Techno / Dance / Electro / Rave / Club Party
-  if (strstr(buf, "house") || strstr(buf, "techno") || strstr(buf, "electro") ||
-      strstr(buf, "edm") || strstr(buf, "dance") || strstr(buf, "trance") ||
-      strstr(buf, "hardstyle") || strstr(buf, "garrix") || strstr(buf, "avicii") ||
-      strstr(buf, "marshmello") || strstr(buf, "skrillex") || strstr(buf, "dj") ||
-      strstr(buf, "tiesto") || strstr(buf, "alesso") || strstr(buf, "guetta") ||
-      strstr(buf, "calvin harris") || strstr(buf, "club") || strstr(buf, "bass") ||
-      strstr(buf, "ghungroo") || strstr(buf, "kar gayi chull") || strstr(buf, "garmi") ||
-      strstr(buf, "kala chashma") || strstr(buf, "aankh marey") || strstr(buf, "chogada") ||
-      strstr(buf, "saturday saturday") || strstr(buf, "nashe si chadh gayi") ||
-      strstr(buf, "besharam rang") || strstr(buf, "jhoome jo pathaan") ||
-      strstr(buf, "lungi dance") || strstr(buf, "badtameez dil") || strstr(buf, "nucleya") ||
-      strstr(buf, "ritviz") || strstr(buf, "lost stories") || strstr(buf, "remix")) return 2;
+  // 5. Explicit Emotional / Sad Ballads / Heartbreak (Only truly sad songs get tears)
+  if (strstr(buf, "sad version") || strstr(buf, "sad song") || strstr(buf, "heartbreak") ||
+      strstr(buf, "crying") || strstr(buf, "tears") || strstr(buf, "goodbye") ||
+      strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
+      strstr(buf, "agar tum saath") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula diya") ||
+      strstr(buf, "tum hi ho") || strstr(buf, "sunn raha hai") || strstr(buf, "hamari adhuri") ||
+      strstr(buf, "bekhayali") || strstr(buf, "pachtaoge") || strstr(buf, "duaa") ||
+      strstr(buf, "alvida") || strstr(buf, "tadap tadap") || strstr(buf, "bhula dena") ||
+      strstr(buf, "phir bhi tumko") || strstr(buf, "ranjish hi sahi") || strstr(buf, "faasle") ||
+      strstr(buf, "woh lamhe") || strstr(buf, "kyun main jaagoon") || strstr(buf, "chithi na koi") ||
+      strstr(buf, "kahani suno") || strstr(buf, "kaifi khalil") || strstr(buf, "iraaday") ||
+      strstr(buf, "kinna sona") || strstr(buf, "mann bharryaa") || strstr(buf, "shei tumi") ||
+      strstr(buf, "boba tunnel") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
+      strstr(buf, "someone you loved") || strstr(buf, "drivers license") || strstr(buf, "glimpse of us") ||
+      strstr(buf, "slow dancing in the dark") || strstr(buf, "die with a smile")) return 5;
+
+  return 0; // Pop / Commercial / Upbeat Groove
 
   return 0; // Pop / Commercial / Upbeat Groove
 }

@@ -870,7 +870,11 @@ static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_
             slope = -0.42f;
             arch_k = 0.012f;
             break;
-          case 4: // Lo-Fi / Chill: elegant sorrow arch with gentle sway
+          case 4: // Lo-Fi / Chill: calm relaxed brow with gentle sway
+            y_offset = -1.8f;
+            slope = 0.04f;
+            arch_k = 0.024f;
+            break;
           case 5: // Emotional / Ballad: deep sorrow arch with vulnerable tremble
             y_offset = -2.5f + sinf((float)ms * 0.012f) * 0.5f;
             slope = 0.36f; // inner corner high, outer corner drooped
@@ -1229,9 +1233,10 @@ static void drawMinimalLip(LGFX_Sprite& sprite, float center_x, float center_y,
     style = 5; // downturned scowl arc (︵)
   } else if (mood == PET_MOOD_DANCING) {
     if (vibe_style == 1) style = 2; // hip-hop smirk
-    else if (vibe_style == 4 || vibe_style == 5) style = 3; // emotional / lofi sad pout
-    else if (vibe_style == 2 || vibe_style == 0) style = 1; // happy upbeat
-    else style = 0;
+    else if (vibe_style == 5) style = 3; // emotional sad pout (only for heartbreak ballads)
+    else if (vibe_style == 4) style = 4; // peaceful curved resting smile for lofi (‿)
+    else if (vibe_style == 2 || vibe_style == 0) style = 1; // happy upbeat smile (‿)
+    else style = 1;
   } else if (mood == PET_MOOD_SAD || mood == PET_MOOD_CRYING) {
     style = 3;
   }
@@ -1573,16 +1578,22 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
                            -7.0f, -0.42f, -999.0f, 0.0f, -0.25f);
           break;
         }
-        case 4:   // Lo-Fi / Chill: mellow melancholic watering eyes
+        case 4: { // Lo-Fi / Chill: mellow relaxed eyes, peaceful sway (no tears)
+          drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
+                           -4.0f, 0.0f, -999.0f, 0.0f);
+          drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
+                           -4.0f, 0.0f, -999.0f, 0.0f);
+          break;
+        }
         case 5: { // Emotional / Ballads: heavy watering tears with liquid wave & trickle!
           drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
           break;
         }
         default: { // Pop / Upbeat Groove: joyful smiling bounce
           drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
-                           -13.0f, 0.0f, 13.0f, 0.016f);
+                           -15.0f, 0.0f, 13.0f, 0.015f);
           drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
-                           -13.0f, 0.0f, 13.0f, 0.016f);
+                           -15.0f, 0.0f, 13.0f, 0.015f);
           break;
         }
       }

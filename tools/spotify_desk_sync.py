@@ -56,37 +56,28 @@ g_music_energy = 0.5
 def classify_track_genre(artist, title, raw_itunes_genre=""):
     """
     Bulletproof multi-tiered music genre & vibe classifier.
-    Handles Desi Hip-Hop (DHH), Punjabi drill, Bengali rock, Bollywood sad ballads,
-    Western hip-hop/rock/pop, EDM, and Lo-Fi.
+    Priority: Party / EDM / Dance -> Hip-Hop / Drill -> Rock -> Lo-Fi -> Sad Ballads -> Pop.
     """
     combined = f"{artist or ''} {title or ''} {raw_itunes_genre or ''}".lower()
 
-    # 1. Emotional / Sad Ballads / Heartbreak / Acoustic Tears (Vibe 5 - Watering Eyes)
-    sad_keywords = [
-        "sad", "ballad", "heartbreak", "crying", "cry", "tears", "emotional", "alone",
-        "hurt", "broken", "goodbye", "sorrow", "lonely", "melancholy", "unplugged",
-        "kal ho naa ho", "bela bose", "2441139", "anjan dutt", "anjana", "agar tum saath",
-        "kabira", "channa mereya", "tujhe bhula", "sukoon", "maula mere", "tum hi ho",
-        "sunn raha hai", "hamari adhuri", "ae dil hai mushkil", "bekhayali", "pachtaoge",
-        "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko", "hasi", "o re piya",
-        "kaise hua", "kho gaye hum", "ranjish", "faasle", "woh lamhe", "kyun main jaagoon",
-        "abhi mujh mein", "jeena jeena", "tera yaar hoon", "roke na ruke", "chithi na koi",
-        "kahani suno", "kaifi khalil", "iraaday", "bulleya", "kinna sona", "mann bharryaa",
-        "satranga", "pehle bhi main", "saari duniya jalaa", "o maahi", "ve kamleya",
-        "tu hai kahan", "faheem abdullah", "jhelum", "luka chuppi", "shei tumi",
-        "ayub bachchu", "amake amar moto", "boba tunnel", "anupam roy", "baarishein",
-        "alag aasmaan", "husn", "anuv jain", "mishri", "arijit", "atif aslam",
-        "mohit chauhan", "jubin nautiyal", "jagjit singh", "mehdi hassan", "nusrat",
-        "rahat fateh", "pankaj udhas", "b praak", "prateek kuhad", "adele",
-        "someone like you", "easy on me", "lewis capaldi", "someone you loved",
-        "before you go", "olivia rodrigo", "drivers license", "traitor", "joji",
-        "glimpse of us", "slow dancing in the dark", "billie eilish", "ocean eyes",
-        "what was i made for", "lovely", "lana del rey", "mitski", "arcade",
-        "conan gray", "heather", "die with a smile", "let her go", "passenger",
-        "fix you", "the scientist", "sam smith", "dean lewis", "james arthur", "kodaline"
+    # 1. EDM / Dance / Rave / Party / Club / DJ (Priority 1: Party tracks never get classified as sad!)
+    edm_keywords = [
+        "party", "dance", "club", "rave", "remix", "edm", "house", "techno", "electro",
+        "trance", "hardstyle", "dj", "bhangra", "dhol", "garmi", "kala chashma", "ghungroo",
+        "kar gayi chull", "aankh marey", "chogada", "saturday saturday", "nashe si chadh gayi",
+        "kamariya", "jhoome jo pathaan", "jhoome jo", "besharam rang", "lungi dance",
+        "badtameez dil", "subha hone", "high heels", "balam pichkari", "baby doll",
+        "chammak challo", "swag se swagat", "dhoom", "mauja hi mauja", "tum hi ho bandhu",
+        "gallan goodiyaan", "london thumakda", "morni banke", "coca cola tu", "dheeme dheeme",
+        "dilliwaali girlfriend", "dilliwali", "sooraj dooba", "first class", "hookah bar",
+        "lutt putt gaya", "breakup song", "nachde ne saare", "sauda khara", "dil chori",
+        "chote chote peg", "bom diggy", "makhna", "nacho nacho", "naatu naatu",
+        "garrix", "avicii", "marshmello", "skrillex", "dj snake", "tiesto", "alesso",
+        "guetta", "calvin harris", "alan walker", "chainsmokers", "zedd", "kygo", "hardwell",
+        "nucleya", "ritviz", "lost stories", "pitbull", "dua lipa", "levitating"
     ]
-    if any(k in combined for k in sad_keywords):
-        return "Ballad"
+    if any(k in combined for k in edm_keywords):
+        return "EDM"
 
     # 2. Hip-Hop / Drill / Trap / Rap / Desi Hip-Hop (Vibe 1 - Swagger 11px nod)
     hiphop_keywords = [
@@ -99,7 +90,7 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
         "wazir patar", "talha anjum", "talhah yunus", "young stunners", "faris shafi",
         "badshah", "honey singh", "yo yo honey", "king", "mc square", "paradox",
         "gravity", "fotty seven", "bali", "bella", "anirudh", "hukum", "badass",
-        "jailer", "leo", "vikram", "rolex", "master", "vathi", "naa ready",
+        "jailer", "leo", "vikram", "rolex", "master", "vathi", "naa ready", "payal",
         "tauba tauba", "devara", "fear song", "drake", "travis scott", "travis",
         "21 savage", "metro boomin", "playboi carti", "carti", "lil uzi", "uzi",
         "future", "kendrick", "eminem", "kanye", "yeat", "central cee", "pop smoke",
@@ -135,18 +126,19 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
     if any(k in combined for k in lofi_keywords):
         return "Lofi"
 
-    # 5. EDM / Dance / Rave / Party (Vibe 2 - Fast Upward Pump)
-    edm_keywords = [
-        "edm", "dance", "house", "techno", "electro", "trance", "club", "rave",
-        "hardstyle", "remix", "garrix", "avicii", "marshmello", "skrillex",
-        "dj snake", "tiesto", "alesso", "guetta", "calvin harris", "alan walker",
-        "chainsmokers", "zedd", "kygo", "hardwell", "nucleya", "ritviz",
-        "ghungroo", "kar gayi chull", "garmi", "kala chashma", "aankh marey",
-        "chogada", "saturday saturday", "nashe si chadh gayi", "kamariya",
-        "jhoome jo pathaan", "besharam rang"
+    # 5. Explicit Emotional / Sad Ballads / Heartbreak (Vibe 5 - Tears only for truly sad songs)
+    sad_keywords = [
+        "sad version", "sad song", "heartbreak", "crying", "tears", "goodbye", "sorrow",
+        "kal ho naa ho", "bela bose", "2441139", "agar tum saath", "channa mereya",
+        "tujhe bhula diya", "tum hi ho", "sunn raha hai", "hamari adhuri", "bekhayali",
+        "pachtaoge", "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko",
+        "ranjish hi sahi", "faasle", "woh lamhe", "kyun main jaagoon", "chithi na koi",
+        "kahani suno", "kaifi khalil", "iraaday", "kinna sona", "mann bharryaa",
+        "shei tumi", "boba tunnel", "someone like you", "easy on me", "someone you loved",
+        "drivers license", "glimpse of us", "slow dancing in the dark", "die with a smile"
     ]
-    if any(k in combined for k in edm_keywords):
-        return "EDM"
+    if any(k in combined for k in sad_keywords):
+        return "Ballad"
 
     # 6. Fallback based on raw iTunes primaryGenreName
     if raw_itunes_genre:
