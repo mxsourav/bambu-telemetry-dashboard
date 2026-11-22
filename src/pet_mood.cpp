@@ -41,6 +41,7 @@ static uint32_t s_celebrate_until_ms = 0;  // post-overlay-ACK reaction
 static uint8_t  s_celebrate_kind = 0;
 static uint32_t s_forced_until_ms = 0;     // web-forced mood window
 static PetMood  s_forced_mood = PET_MOOD_NEUTRAL;
+static uint8_t  s_forced_vibe_style = 0;   // web-forced vibe style (e.g. 5 for breakup)
 static char     s_last_title[24] = {0};    // track-change detection
 static bool     s_led_applied = false;     // LED mirroring active
 static int      s_auto_sick_done_day = -1; // auto-sick fires once per day
@@ -93,7 +94,7 @@ static void applyMoodVisuals(PetMood mood, float anger_pct, float vibe_energy) {
     case PET_MOOD_DANCING: {
       // Energy + genre decide HOW it dances: drill nods cool with
       // half-lidded eyes, rock headbangs, lofi sways, EDM bounces hard.
-      uint8_t style = vibeStyleFromGenre();
+      uint8_t style = (s_forced_until_ms > millis() && s_forced_vibe_style != 0) ? s_forced_vibe_style : vibeStyleFromGenre();
       deskPetSetVibeStyle(style);
       switch (style) {
         case 1:   // drill / trap: cool purple cheeks, slow deep nod
@@ -551,11 +552,13 @@ void petMoodForce(const char* mood_name, uint32_t seconds) {
   }
   if (!strcmp(mood_name, "neutral") || !strcmp(mood_name, "calm") || !strcmp(mood_name, "idle")) {
     s_forced_until_ms = 0;
+    s_forced_vibe_style = 0;
     s_anger = 0;
     deskPetSetMood(PET_MOOD_NEUTRAL, 0);
     return;
   }
   PetMood m = PET_MOOD_NEUTRAL;
+  s_forced_vibe_style = 0;
   if (!strcmp(mood_name, "happy"))     m = PET_MOOD_HAPPY;
   else if (!strcmp(mood_name, "wink")) m = PET_MOOD_WINK;
   else if (!strcmp(mood_name, "sleepy")) m = PET_MOOD_SLEEPY;
@@ -573,6 +576,11 @@ void petMoodForce(const char* mood_name, uint32_t seconds) {
   else if (!strcmp(mood_name, "hot")) m = PET_MOOD_HOT;
   else if (!strcmp(mood_name, "excited")) m = PET_MOOD_EXCITED;
   else if (!strcmp(mood_name, "dancing")) m = PET_MOOD_DANCING;
+  else if (!strcmp(mood_name, "breakup")) {
+    m = PET_MOOD_DANCING;
+    s_forced_vibe_style = 5;
+    deskPetSetVibeStyle(5);
+  }
   else if (!strcmp(mood_name, "scared")) m = PET_MOOD_SCARED;
   else if (!strcmp(mood_name, "thinking")) m = PET_MOOD_THINKING;
   else return;

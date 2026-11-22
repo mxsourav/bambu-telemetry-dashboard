@@ -526,62 +526,280 @@ static void drawWateringEyes(LGFX_Sprite& sprite, float left_cx, float right_cx,
 }
 
 // ---------------------------------------------------------------------
-// Breakup Phase: Minimalist Booze Bottle & Drinking Sipping Animation
-// Dieter Rams industrial aesthetic: crisp vector silhouette, warm amber liquor,
-// cork stopper, tipping swig motion with drunken hiccup response.
+// Breakup Phase: Dual Mickey Mouse Cartoon Glove Palms, Pouring Bottle,
+// and Big Rocks Glass (Tumbler) Drinking Animation Sequence
 // ---------------------------------------------------------------------
-static void drawBreakupBottle(LGFX_Sprite& sprite, float mouth_x, float mouth_y, uint32_t ms) {
-  float t_sec = (float)ms * 0.001f;
-  float cycle = fmodf(t_sec, 6.0f); // 6-second drinking loop
+static inline void rotPoint(float cx, float cy, float dx, float dy, float cos_a, float sin_a, int& ox, int& oy) {
+  ox = (int)(cx + dx * cos_a - dy * sin_a + 0.5f);
+  oy = (int)(cy + dx * sin_a + dy * cos_a + 0.5f);
+}
 
-  // Resting posture: tilted slightly beside right cheek, strictly inside screen bounds
-  float bx = 136.0f;
-  float by = 82.0f;
-  bool is_sipping = false;
+static inline void fillQuad(LGFX_Sprite& sprite, int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, uint16_t col) {
+  sprite.fillTriangle(x0, y0, x1, y1, x2, y2, col);
+  sprite.fillTriangle(x0, y0, x2, y2, x3, y3, col);
+}
 
-  if (cycle >= 3.5f && cycle < 5.3f) {
-    // Tipping bottle up to mouth for a heartbroken sip
-    is_sipping = true;
-    float sip_phase = 0.0f;
-    if (cycle < 4.1f) {
-      sip_phase = (cycle - 3.5f) / 0.6f; // raising
-    } else if (cycle < 4.7f) {
-      sip_phase = 1.0f; // drinking at mouth
+static inline void drawQuadOutline(LGFX_Sprite& sprite, int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, uint16_t col) {
+  sprite.drawLine(x0, y0, x1, y1, col);
+  sprite.drawLine(x1, y1, x2, y2, col);
+  sprite.drawLine(x2, y2, x3, y3, col);
+  sprite.drawLine(x3, y3, x0, y0, col);
+}
+
+static void drawBoozeBottle(LGFX_Sprite& sprite, float cx, float cy, float angle_deg, int& spout_x, int& spout_y) {
+  const uint16_t col_glass = 0x2104; // Smoked dark glass
+  const uint16_t col_amber = 0xFBE0; // Golden whiskey
+  const uint16_t col_cork  = 0xA345; // Cork stopper
+  const uint16_t col_dark  = 0x18C3; // Dark carbon outline
+
+  float rad = angle_deg * (3.14159265f / 180.0f);
+  float cos_a = cosf(rad);
+  float sin_a = sinf(rad);
+
+  int x0, y0, x1, y1, x2, y2, x3, y3;
+
+  // 1. Bottle Body (12w x 20h centered at cx, cy)
+  rotPoint(cx, cy, -6.0f, -10.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  6.0f, -10.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  6.0f,  10.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -6.0f,  10.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_dark);
+
+  // 2. Amber Booze Window inside bottle
+  rotPoint(cx, cy, -5.0f, -4.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  5.0f, -4.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  5.0f,  9.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -5.0f,  9.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber);
+
+  // 3. Modern white label with center divider
+  rotPoint(cx, cy, -5.0f, -2.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  5.0f, -2.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  5.0f,  4.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -5.0f,  4.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, 0xFFFF);
+  rotPoint(cx, cy, -4.0f, 1.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  4.0f, 1.0f, cos_a, sin_a, x1, y1);
+  sprite.drawLine(x0, y0, x1, y1, col_dark);
+
+  // 4. Bottle Neck (5w x 7h)
+  rotPoint(cx, cy, -2.0f, -17.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  2.0f, -17.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  2.0f, -10.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -2.0f, -10.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass);
+
+  // 5. Cork Stopper (5w x 3h)
+  rotPoint(cx, cy, -2.0f, -20.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  2.0f, -20.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  2.0f, -17.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -2.0f, -17.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_cork);
+
+  // Spout coordinate (tip of bottle opening)
+  rotPoint(cx, cy, 0.0f, -20.0f, cos_a, sin_a, spout_x, spout_y);
+}
+
+static void drawMickeyGlove(LGFX_Sprite& sprite, int cx, int cy, bool is_left, bool grasping_glass, bool grasping_bottle) {
+  const uint16_t col_white = 0xFFFF;
+  const uint16_t col_dark  = 0x18C3; // Crisp carbon dark
+
+  // 1. Wrist Cuff (pill shape below palm)
+  int cuff_x = is_left ? (cx - 4) : (cx - 5);
+  int cuff_y = cy + 6;
+  sprite.fillRoundRect(cuff_x, cuff_y, 9, 4, 2, col_white);
+  sprite.drawRoundRect(cuff_x, cuff_y, 9, 4, 2, col_dark);
+
+  // 2. Main Puffy Palm (rounded circle r=6)
+  sprite.fillCircle(cx, cy, 6, col_white);
+  sprite.drawCircle(cx, cy, 6, col_dark);
+
+  // 3. Three Iconic Mickey Mouse stitched darts on back of glove
+  sprite.drawLine(cx - 2, cy - 3, cx - 2, cy + 2, col_dark);
+  sprite.drawLine(cx,     cy - 4, cx,     cy + 3, col_dark);
+  sprite.drawLine(cx + 2, cy - 3, cx + 2, cy + 2, col_dark);
+
+  // 4. Cute Puffy Thumb wrapping around object
+  if (grasping_glass) {
+    if (is_left) {
+      // Thumb reaches right over glass edge
+      sprite.fillEllipse(cx + 5, cy - 1, 3, 2, col_white);
+      sprite.drawEllipse(cx + 5, cy - 1, 3, 2, col_dark);
     } else {
-      sip_phase = 1.0f - (cycle - 4.7f) / 0.6f; // lowering
+      // Thumb reaches left over glass edge
+      sprite.fillEllipse(cx - 5, cy - 1, 3, 2, col_white);
+      sprite.drawEllipse(cx - 5, cy - 1, 3, 2, col_dark);
     }
-    float ease = 0.5f - 0.5f * cosf(sip_phase * 3.14159f);
-    bx = 136.0f - ease * 46.0f; // moves towards mouth (around x=90)
-    by = 82.0f - ease * 12.0f;  // raises up to lip level (y=70)
+  } else if (grasping_bottle) {
+    if (!is_left) {
+      sprite.fillEllipse(cx - 5, cy, 3, 2, col_white);
+      sprite.drawEllipse(cx - 5, cy, 3, 2, col_dark);
+    } else {
+      sprite.fillEllipse(cx + 5, cy, 3, 2, col_white);
+      sprite.drawEllipse(cx + 5, cy, 3, 2, col_dark);
+    }
+  }
+}
+
+static void drawBigTumblerGlass(LGFX_Sprite& sprite, int gx, int gy, float fill_pct, bool is_dark) {
+  const int gw = 22;
+  const int gh = 26;
+
+  const uint16_t col_glass_edge = is_dark ? 0x632C : 0x2965; // Smoked crystal outline
+  const uint16_t col_glass_body = is_dark ? 0x2104 : 0xEF5D; // Translucent body
+  const uint16_t col_base       = is_dark ? 0x3186 : 0xCE79; // Heavy solid bottom base
+  const uint16_t col_amber_liq  = 0xFBE0;                   // Warm golden whiskey
+  const uint16_t col_amber_top  = 0xFE25;                   // Bright liquid surface
+  const uint16_t col_ice        = 0xE75C;                   // Crisp ice cube
+  const uint16_t col_ice_edge   = 0xAD75;                   // Cold ice edge
+  const uint16_t col_white      = 0xFFFF;
+
+  // 1. Glass body
+  sprite.fillRect(gx, gy, gw, gh, col_glass_body);
+  sprite.drawRect(gx, gy, gw, gh, col_glass_edge);
+
+  // 2. Heavy Solid Glass Bottom (Rocks glass base, 4px thick)
+  sprite.fillRect(gx + 1, gy + gh - 5, gw - 2, 4, col_base);
+
+  // 3. Amber Liquid Fill
+  int base_y = gy + gh - 5;
+  int max_liq_h = gh - 8;
+  if (fill_pct > 0.04f) {
+    int liq_h = (int)((float)max_liq_h * fill_pct);
+    if (liq_h > max_liq_h) liq_h = max_liq_h;
+    int liq_top = base_y - liq_h;
+    sprite.fillRect(gx + 2, liq_top, gw - 4, liq_h, col_amber_liq);
+    // Liquid surface line
+    sprite.drawFastHLine(gx + 2, liq_top, gw - 4, col_amber_top);
+
+    // 4. Floating Ice Cube inside rocks glass
+    if (fill_pct > 0.35f) {
+      int ice_x = gx + 4;
+      int ice_y = liq_top + 2;
+      if (ice_y + 6 < base_y) {
+        sprite.fillRect(ice_x, ice_y, 6, 6, col_ice);
+        sprite.drawRect(ice_x, ice_y, 6, 6, col_ice_edge);
+      }
+    }
   }
 
-  int x0 = (int)bx;
-  int y0 = (int)by;
+  // 5. Crystal specular highlight reflection line down left wall
+  sprite.drawFastVLine(gx + 2, gy + 2, gh - 7, col_white);
+}
 
-  const uint16_t col_glass_out   = 0x2104; // Smoked glass contour
-  const uint16_t col_amber_booze = 0xFBE0; // Warm amber whiskey / rum
-  const uint16_t col_amber_dark  = 0xB3E0; // Deep amber base
-  const uint16_t col_cork        = 0x9A60; // Vintage cork
-  const uint16_t col_label       = 0xFFFF; // Clean white label
+static void drawBreakupDrinkingScene(LGFX_Sprite& sprite, float mouth_x, float mouth_y, uint32_t ms) {
+  float t_sec = (float)ms * 0.001f;
+  float cycle = fmodf(t_sec, 8.0f); // 8-second synchronized breakup loop
+  bool is_dark = (s_bg_r < 60);
 
-  // Bottle Body (11w x 20h, r=2)
-  sprite.fillRoundRect(x0 - 5, y0, 11, 20, 2, col_glass_out);
-  // Amber liquid fill
-  sprite.fillRect(x0 - 4, y0 + 5, 9, 13, col_amber_booze);
-  sprite.fillRect(x0 - 4, y0 + 15, 9, 3, col_amber_dark);
-  // Modern geometric white label with black center divider
-  sprite.fillRect(x0 - 4, y0 + 8, 9, 5, col_label);
-  sprite.drawFastHLine(x0 - 3, y0 + 10, 7, 0x0000);
+  // Base layout coordinates
+  const int gx = 69;
+  const int gy = 94;
+  const int gw = 22;
 
-  // Bottle Neck (5w x 7h)
-  sprite.fillRect(x0 - 2, y0 - 7, 5, 7, col_glass_out);
-  // Cork
-  sprite.fillRect(x0 - 2, y0 - 9, 5, 3, col_cork);
+  float fill_pct = 0.10f;
+  float lift_y = 0.0f;
 
-  // Little drunken tear/amber droplet during the gulp
-  if (is_sipping && cycle >= 4.2f && cycle < 4.7f) {
-    sprite.fillCircle(x0 - 4, y0 - 8, 1, col_amber_booze);
+  float bottle_x = 138.0f;
+  float bottle_y = 106.0f; // center of bottle body
+  float bottle_ang = 0.0f;
+  bool is_pouring = false;
+
+  float lpx = (float)(gx - 6);
+  float lpy = (float)(gy + 13);
+  float rpx = (float)(gx + gw + 6);
+  float rpy = (float)(gy + 13);
+  bool grasping_glass_r = true;
+  bool grasping_bottle_r = false;
+
+  if (cycle < 0.8f) {
+    // Phase 0: Reaching for bottle
+    float reach_p = cycle / 0.8f;
+    rpx = (float)(gx + gw + 6) + reach_p * (138.0f - (float)(gx + gw + 6));
+    rpy = (float)(gy + 13) - reach_p * 5.0f;
+    grasping_glass_r = false;
+    fill_pct = 0.10f;
+  } else if (cycle < 2.4f) {
+    // Phase 1: Pouring bottle into glass
+    float pour_p = (cycle - 0.8f) / 1.6f;
+    fill_pct = 0.10f + pour_p * 0.75f;
+    bottle_x = 118.0f;
+    bottle_y = 100.0f;
+    bottle_ang = -45.0f;
+    is_pouring = true;
+    rpx = 120.0f;
+    rpy = 106.0f;
+    grasping_glass_r = false;
+    grasping_bottle_r = true;
+  } else if (cycle < 3.4f) {
+    // Phase 2: Bottle set back down, right hand moves back to glass
+    float return_p = (cycle - 2.4f) / 1.0f;
+    bottle_x = 138.0f;
+    bottle_y = 106.0f;
+    bottle_ang = 0.0f;
+    rpx = 138.0f - return_p * (138.0f - (float)(gx + gw + 6));
+    rpy = 106.0f - return_p * (106.0f - (float)(gy + 13));
+    grasping_glass_r = (return_p > 0.8f);
+    fill_pct = 0.85f;
+  } else if (cycle < 4.4f) {
+    // Phase 3: Both palms lift heavy glass to mouth
+    float lift_p = (cycle - 3.4f) / 1.0f;
+    float ease = 0.5f - 0.5f * cosf(lift_p * 3.14159265f);
+    lift_y = ease * 16.0f;
+    fill_pct = 0.85f;
+    lpy -= lift_y;
+    rpy -= lift_y;
+    grasping_glass_r = true;
+  } else if (cycle < 5.8f) {
+    // Phase 4: The big swig (drinking at mouth)
+    lift_y = 16.0f;
+    lpy -= lift_y;
+    rpy -= lift_y;
+    float drink_p = (cycle - 4.4f) / 1.4f;
+    fill_pct = 0.85f * (1.0f - drink_p * 0.88f);
+    grasping_glass_r = true;
+    // Drunken gulp tear/amber droplet during peak gulp
+    if (drink_p > 0.35f && drink_p < 0.75f) {
+      sprite.fillCircle(78, (int)(gy - lift_y - 2), 2, 0xFBE0);
+    }
+  } else if (cycle < 6.8f) {
+    // Phase 5: Lowering glass back down to table
+    float low_p = (cycle - 5.8f) / 1.0f;
+    float ease = 0.5f + 0.5f * cosf(low_p * 3.14159265f);
+    lift_y = ease * 16.0f;
+    lpy -= lift_y;
+    rpy -= lift_y;
+    fill_pct = 0.10f;
+    grasping_glass_r = true;
+  } else {
+    // Phase 6: Drunken sorrow slump on table
+    fill_pct = 0.10f;
+    grasping_glass_r = true;
   }
+
+  int eff_gy = (int)((float)gy - lift_y);
+
+  // 1. Draw Bottle (Upright on table or tilted while pouring)
+  int spout_x = 0;
+  int spout_y = 0;
+  drawBoozeBottle(sprite, bottle_x, bottle_y, bottle_ang, spout_x, spout_y);
+
+  // 2. If pouring, draw golden amber stream splashing into glass
+  if (is_pouring) {
+    sprite.drawLine(spout_x, spout_y, gx + 12, eff_gy + 2, 0xFBE0);
+    sprite.drawLine(spout_x + 1, spout_y, gx + 13, eff_gy + 2, 0xFE25);
+    sprite.fillCircle(gx + 12, eff_gy + 2, 2, 0xFE25);
+  }
+
+  // 3. Draw Big Bitter Glass (Rocks glass tumbler with ice cube)
+  drawBigTumblerGlass(sprite, gx, eff_gy, fill_pct, is_dark);
+
+  // 4. Draw Cute Mickey Mouse Glove Palms
+  // Left palm holds left side of tumbler
+  drawMickeyGlove(sprite, (int)lpx, (int)lpy, true, true, false);
+  // Right palm holds bottle while pouring, or right side of tumbler while drinking/resting
+  drawMickeyGlove(sprite, (int)rpx, (int)rpy, false, grasping_glass_r, grasping_bottle_r);
 }
 
 // ---------------------------------------------------------------------
@@ -1609,11 +1827,11 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
         break;
       }
       case 5: { // Breakup Phase / Heartbreak: drunken melancholic sway, sorrowful slump, periodic gulp hiccup
-        float drink_cycle = fmodf(t_sec, 6.0f);
+        float drink_cycle = fmodf(t_sec, 8.0f);
         float hiccup_y = 0.0f;
-        if (drink_cycle >= 4.7f && drink_cycle < 5.1f) {
+        if (drink_cycle >= 4.8f && drink_cycle < 5.3f) {
           // Drunken heartbreak gulp / hiccup!
-          hiccup_y = -sinf((drink_cycle - 4.7f) / 0.4f * 3.14159f) * 4.2f;
+          hiccup_y = -sinf((drink_cycle - 4.8f) / 0.5f * 3.14159f) * 4.2f;
         }
         sway_x = sinf(t_sec * 0.85f) * 3.8f + cosf(t_sec * 0.35f) * 1.5f;
         vibe_y = 5.5f + cosf(t_sec * 1.7f) * 1.6f + hiccup_y; // heavy dejected slump (head hanging low in sorrow)
@@ -1721,11 +1939,9 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
                            -5.0f + lid_flow_right, 0.0f, -999.0f, 0.0f);
           break;
         }
-        case 5: { // Breakup Phase: Crying, Watering Eyes, Drinking Alcohol, Drunken Heartbroken Sway
+        case 5: { // Breakup Phase: Crying, Watering Eyes, Drunken Heartbroken Sway
           // Heavy anime tears streaming down cheeks with shimmering liquid wave
           drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
-          // Sleek minimalist alcohol bottle sipping and resting animation
-          drawBreakupBottle(sprite, 80.0f, center_y + 32.0f, ms);
           break;
         }
         default: { // Pop / Upbeat Groove: joyful smiling bounce
@@ -1855,7 +2071,12 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   // 9. Sleek Minimal Lip (sways cohesively with head and eyes)
   drawMinimalLip(sprite, 80.0f + s_curr_look_x * 0.5f + sway_x, center_y, s_mood, s_vibe_style, ms);
 
-  // 10. Forehead Anger Vein for Angry and Frustrated moods
+  // 10. Breakup Phase: Dual Mickey Mouse cartoon glove palms, pouring bottle, big rocks glass
+  if (s_mood == PET_MOOD_DANCING && s_vibe_style == 5) {
+    drawBreakupDrinkingScene(sprite, 80.0f, center_y + 30.0f, ms);
+  }
+
+  // 11. Forehead Anger Vein for Angry and Frustrated moods
   if (s_mood == PET_MOOD_ANGRY) {
     drawAngerVein(sprite, 124.0f, 24.0f, 0.72f, s_bg_r, s_bg_g, s_bg_b, ms);
   } else if (s_mood == PET_MOOD_FRUSTRATED) {
@@ -1864,7 +2085,7 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     drawAngerVein(sprite, 36.0f, 26.0f, 0.62f, s_bg_r, s_bg_g, s_bg_b, ms + 450);
   }
 
-  // 11. Compact PC Hardware & Weather Pill (if PC stats stream is active AND user has enabled it)
+  // 12. Compact PC Hardware & Weather Pill (if PC stats stream is active AND user has enabled it)
   if (g_settings.pet_show_stats && pcStatsIsActive()) {
     const int pill_x = 12;
     const int pill_y = 106;
