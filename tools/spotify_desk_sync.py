@@ -574,6 +574,13 @@ def pc_telemetry_loop():
                         g_music_genre = g_audio_analyzer.detected_genre
                     g_music_energy = g_audio_analyzer.current_energy
 
+            # Autonomous AI Hardware Sentinel Check
+            if 'g_ai_cortex' in globals() and g_ai_cortex:
+                try:
+                    g_ai_cortex.inspect_pc_telemetry(cpu, gpu_pct, gpu_temp, mem.percent)
+                except Exception:
+                    pass
+
             payload = {
                 "cpu": cpu,
                 "ram": mem.percent,
@@ -631,7 +638,7 @@ def main():
     print("=" * 65)
 
     # Launch background real-time Audio Beat Pattern & Genre Analyzer
-    global g_audio_analyzer
+    global g_audio_analyzer, g_ai_cortex
     try:
         from audio_beat_analyzer import BeatPatternAnalyzer
         g_audio_analyzer = BeatPatternAnalyzer(esp_ip=DEVICE_IP)
@@ -639,6 +646,15 @@ def main():
         print(" Real-Time Audio Beat Pattern Analyzer: Active (WASAPI Loopback)")
     except Exception as e:
         print(f" Real-Time Audio Beat Pattern Analyzer: Inactive ({e})")
+
+    # Launch background Autonomous AI Cognitive Sentinel (NVIDIA NIM)
+    try:
+        from pet_ai_cortex import PetAICortex
+        g_ai_cortex = PetAICortex(esp_ip=DEVICE_IP)
+        threading.Thread(target=g_ai_cortex.run, daemon=True).start()
+        print(" Autonomous AI Cognitive Sentinel: Active (NVIDIA NIM Zero Cold-Start)")
+    except Exception as e:
+        print(f" Autonomous AI Cognitive Sentinel: Inactive ({e})")
 
     # Launch background PC Telemetry & Weather thread
     threading.Thread(target=pc_telemetry_loop, daemon=True).start()
@@ -714,6 +730,18 @@ def main():
                     g_music_energy = track_energy(artist, title) if is_playing else 0.0
                     print(f"\n[MEDIA EVENT] {artist} - {title} (Playing: {is_playing}, Genre: {g_music_genre})")
                     push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
+
+                    # Trigger Autonomous AI Music Critic
+                    if 'g_ai_cortex' in globals() and g_ai_cortex and is_playing:
+                        try:
+                            bpm_val = getattr(g_audio_analyzer, "detected_bpm", 120.0) if g_audio_analyzer else 120.0
+                            threading.Thread(
+                                target=g_ai_cortex.inspect_music_vibe,
+                                args=(title, artist, g_music_genre, bpm_val, g_music_energy),
+                                daemon=True
+                            ).start()
+                        except Exception:
+                            pass
 
                     # Background lookup for online catalog verification
                     threading.Thread(

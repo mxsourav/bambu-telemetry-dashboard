@@ -3,6 +3,10 @@
 
 # Private credentials - NEVER commit (template lives in secrets.h.example)
 src/secrets.h
+.env
+*.env
+tools/nim_config.json
+tools/.env
 
 # Python / OS junk
 __pycache__/

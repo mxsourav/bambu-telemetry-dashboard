@@ -16,6 +16,7 @@ Phase 2 transitions the system from a passive 3D printer monitor into an active,
 | Display Pipeline | Standard Adafruit GFX canvas at 15-20 FPS | LovyanGFX double-buffered vector pipeline at 100 FPS |
 | Desk Pet Engine | Not present | 11 parametric emotional states with Disney eyelid easing |
 | Music Visualization | Not present | WASAPI loopback audio beat analyzer and beat-pattern genre classifier with 100 FPS dance engine |
+| AI Cognition | Not present | NVIDIA NIM Autonomous Cognitive Cortex with zero-cold-start inference and proactive sentinels |
 | PC Telemetry | Not present | Real-time CPU, GPU, RAM, and thermals HUD |
 | Sleep Progression | Fixed screen timeout | Dynamic daytime ladder (5m drowsy, 7m yawn, 8m sleep, 12m deep sleep) |
 | Web Platform | Basic status text endpoint | visionOS-inspired mobile PWA with live RLE display mirror |
@@ -154,6 +155,36 @@ The desk companion features a real-time Audio Beat Pattern Analyzer (`tools/audi
 - Pop / Commercial (Style 0): Detected via balanced rhythmic transients at 95-125 BPM. Companion executes a joyful upbeat bounce.
 
 The audio engine runs automatically inside `tools/spotify_desk_sync.py` or standalone via `python tools/audio_beat_analyzer.py` with an interactive terminal HUD.
+
+---
+
+## Autonomous AI Cognitive Cortex (NVIDIA NIM)
+
+The desk pet incorporates an autonomous cognitive cortex (`tools/pet_ai_cortex.py`) powered by NVIDIA NIM inference microservices. The AI transforms the device from a passive display into an active desktop sentinel that observes hardware telemetry, diagnoses print errors, and responds interactively.
+
+### Zero Cold-Start Architecture
+Serverless LLM endpoints frequently suffer from cold-start latency (2 to 8 seconds) due to weight eviction and TLS handshakes. The cortex eliminates this through:
+- Persistent Connection Pooling: HTTP keep-alive connection reuse eliminates repeated SSL/TLS negotiation overhead.
+- Asynchronous Pre-Warm Ping: On startup, a micro-token is dispatched in a background thread, ensuring container weights are memory-resident before user queries or telemetry events fire.
+- Autonomous Keep-Alive Pulse: A background heartbeat fires every 240 seconds during idle periods to prevent serverless pod shutdown.
+- Dual-Model Cascade: Uses `nvidia/nemotron-3.5-bolt-e4b` for sub-400ms rapid reflexes, with automated fallback to `mistralai/mistral-large-4-1t-a52b` for complex multi-step diagnostics.
+
+### Autonomous Cognitive Sentinels
+The cortex runs three background sentinels that autonomously actuate the physical device:
+1. 3D Print Sentinel:
+   - Thermal Guard: Detects nozzle drops below 190C during active printing. Triggers warning tone, sets alarmed face, and displays diagnosis banner.
+   - Progress Milestones: Evaluates layer completion at 25%, 50%, 75%, and 90%, formulating extrusion and cooling assessments.
+   - Lifecycle Events: Triggers energetic celebration on print start/finish, or failure post-mortem on aborted prints.
+2. PC Hardware Sentinel:
+   - GPU Thermal Throttling Guard: Alerts with angry face if GPU exceeds 82C.
+   - Late-Night Coding Watchdog: Triggers yawns and reminders to rest when intense compute occurs past 1:00 AM.
+3. Music Critic:
+   - Automatically formulates a 1-sentence critique matching the detected beat pattern whenever tracks change.
+
+### Conversational Interface
+Users can interact with the companion directly:
+- Command Line: `python tools/talk_to_pet.py "How is my print doing?"` or double-click `tools/chat_with_stan.bat`.
+- Physical Actuation: The AI morphs the companion face (`/api/pet/mood`), displays a cyan banner on the 160x128 screen (`/api/notify`), and speaks aloud via native Windows speech synthesis.
 
 ---
 
