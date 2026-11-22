@@ -1124,7 +1124,7 @@ static void drawSpotifyLyricsFrame(uint32_t ms) {
   sprite.setFont(&fonts::Font2);
   sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setTextColor(COL_TXT, COL_BLACK);
-  const char* curL = g_spotify.lyric_cur[0] ? g_spotify.lyric_cur : "♫ Music Playing ♫";
+  const char* curL = g_spotify.lyric_cur[0] ? g_spotify.lyric_cur : "Music Playing";
   sprite.drawString(curL, W / 2, 46);
 
   // Next Lyric line (Muted)

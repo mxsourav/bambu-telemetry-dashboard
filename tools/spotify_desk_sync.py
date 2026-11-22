@@ -21,6 +21,16 @@ tools_dir = os.path.dirname(os.path.abspath(__file__))
 if tools_dir not in sys.path:
     sys.path.insert(0, tools_dir)
 
+# Ensure stdout and stderr exist even under pythonw.exe
+LOG_FILE_PATH = os.path.join(tools_dir, "desk_sync.log")
+if sys.stdout is None:
+    try:
+        log_fp = open(LOG_FILE_PATH, "a", encoding="utf-8", buffering=1)
+        sys.stdout = log_fp
+        sys.stderr = log_fp
+    except Exception:
+        pass
+
 import json
 import urllib.request
 import urllib.parse

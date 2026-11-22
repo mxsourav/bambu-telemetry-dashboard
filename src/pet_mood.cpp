@@ -276,9 +276,15 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "chill") || strstr(buf, "folk") || strstr(buf, "piano") ||
       strstr(buf, "study") || strstr(buf, "instrumental")) return 4;
 
-  // 5. Explicit Emotional / Sad Ballads / Heartbreak (Only truly sad songs get tears)
-  if (strstr(buf, "ballad") || strstr(buf, "sad version") || strstr(buf, "sad song") || strstr(buf, "heartbreak") ||
-      strstr(buf, "crying") || strstr(buf, "tears") || strstr(buf, "goodbye") ||
+  // 5. Breakup Phase / Sad Heartbreak / Melancholy (Watering crying eyes + drinking booze)
+  if (strstr(buf, "breakup") || strstr(buf, "break up") || strstr(buf, "broken") ||
+      strstr(buf, "heartbreak") || strstr(buf, "sad") || strstr(buf, "crying") ||
+      strstr(buf, "tears") || strstr(buf, "alone") || strstr(buf, "lonely") ||
+      strstr(buf, "depressed") || strstr(buf, "pain") || strstr(buf, "hurt") ||
+      strstr(buf, "miss you") || strstr(buf, "goodbye") || strstr(buf, "farewell") ||
+      strstr(buf, "sober") || strstr(buf, "drunk") || strstr(buf, "alcohol") ||
+      strstr(buf, "whiskey") || strstr(buf, "beer") || strstr(buf, "wine") ||
+      strstr(buf, "ballad") || strstr(buf, "sad version") || strstr(buf, "sad song") ||
       strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
       strstr(buf, "agar tum saath") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula diya") ||
       strstr(buf, "tum hi ho") || strstr(buf, "sunn raha hai") || strstr(buf, "hamari adhuri") ||

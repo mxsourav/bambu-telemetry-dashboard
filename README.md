@@ -235,11 +235,25 @@ Alternatively, flash the binary directly using esptool:
 python -m esptool --chip esp32 --port COM11 --baud 460800 write-flash 0x10000 .pio/build/esp32dev/firmware.bin
 ```
 
-### 3. Run the PC Companion Daemon
-Install required Python dependencies and start the media bridge:
+### 3. Run the Autonomous Companion Daemon (Zero-Command Master Launch)
+Install required Python dependencies:
 ```bash
-pip install winsdk psutil requests urllib3
-python tools/spotify_desk_sync.py
+pip install winsdk psutil requests urllib3 soundcard numpy scipy
+```
+
+Simply double-click `STAN_AUTONOMOUS_START.bat` in the project root. It executes completely autonomously:
+1. Verifies and activates the Windows Mobile Hotspot for the ESP32.
+2. Registers a silent Windows Startup entry so the companion launches automatically every time your laptop boots or wakes.
+3. Spawns the unified background daemon (WASAPI beat pattern analyzer, media sync, PC telemetry HUD, and NVIDIA/Dahl AI Cortex).
+4. Auto-sleeps the desk pet when you walk away from your desk (>5 min idle), and auto-wakes with a greeting when you return.
+
+To chat with your desk companion at any time, double-click `TALK_TO_STAN.bat` or run:
+```bash
+python tools/talk_to_pet.py "Your question here"
+```
+To stop background execution cleanly:
+```bash
+STAN_STOP.bat
 ```
 
 ### 4. Open the Web PWA

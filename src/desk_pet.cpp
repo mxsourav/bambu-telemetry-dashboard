@@ -286,7 +286,7 @@ static void drawLivingEyeAA(LGFX_Sprite& sprite, float cx, float cy,
 }
 
 // ---------------------------------------------------------------------
-// Stylized Closed Eyelid Seam Line (⌒)
+// Stylized Closed Eyelid Seam Line (curved arc)
 // Renders an elegant anime closed-eye crease when eyelids meet completely
 // ---------------------------------------------------------------------
 static void drawClosedEyeSeam(LGFX_Sprite& sprite, float cx, float cy, float w, float slope = 0.0f) {
@@ -522,6 +522,65 @@ static void drawWateringEyes(LGFX_Sprite& sprite, float left_cx, float right_cx,
 }
 
 // ---------------------------------------------------------------------
+// Breakup Phase: Minimalist Booze Bottle & Drinking Sipping Animation
+// Dieter Rams industrial aesthetic: crisp vector silhouette, warm amber liquor,
+// cork stopper, tipping swig motion with drunken hiccup response.
+// ---------------------------------------------------------------------
+static void drawBreakupBottle(LGFX_Sprite& sprite, float mouth_x, float mouth_y, uint32_t ms) {
+  float t_sec = (float)ms * 0.001f;
+  float cycle = fmodf(t_sec, 6.0f); // 6-second drinking loop
+
+  // Resting posture: tilted slightly beside right cheek
+  float bx = 128.0f;
+  float by = 78.0f;
+  bool is_sipping = false;
+
+  if (cycle >= 3.5f && cycle < 5.3f) {
+    // Tipping bottle up to mouth for a heartbroken sip
+    is_sipping = true;
+    float sip_phase = 0.0f;
+    if (cycle < 4.1f) {
+      sip_phase = (cycle - 3.5f) / 0.6f; // raising
+    } else if (cycle < 4.7f) {
+      sip_phase = 1.0f; // drinking at mouth
+    } else {
+      sip_phase = 1.0f - (cycle - 4.7f) / 0.6f; // lowering
+    }
+    float ease = 0.5f - 0.5f * cosf(sip_phase * 3.14159f);
+    bx = 128.0f - ease * 36.0f; // moves towards mouth (around x=92)
+    by = 78.0f - ease * 14.0f;  // raises up to lip level
+  }
+
+  int x0 = (int)bx;
+  int y0 = (int)by;
+
+  const uint16_t col_glass_out   = 0x2104; // Smoked glass contour
+  const uint16_t col_amber_booze = 0xFBE0; // Warm amber whiskey / rum
+  const uint16_t col_amber_dark  = 0xB3E0; // Deep amber base
+  const uint16_t col_cork        = 0x9A60; // Vintage cork
+  const uint16_t col_label       = 0xFFFF; // Clean white label
+
+  // Bottle Body (11w x 20h, r=2)
+  sprite.fillRoundRect(x0 - 5, y0, 11, 20, 2, col_glass_out);
+  // Amber liquid fill
+  sprite.fillRect(x0 - 4, y0 + 5, 9, 13, col_amber_booze);
+  sprite.fillRect(x0 - 4, y0 + 15, 9, 3, col_amber_dark);
+  // Modern geometric white label with black center divider
+  sprite.fillRect(x0 - 4, y0 + 8, 9, 5, col_label);
+  sprite.drawFastHLine(x0 - 3, y0 + 10, 7, 0x0000);
+
+  // Bottle Neck (5w x 7h)
+  sprite.fillRect(x0 - 2, y0 - 7, 5, 7, col_glass_out);
+  // Cork
+  sprite.fillRect(x0 - 2, y0 - 9, 5, 3, col_cork);
+
+  // Little drunken tear/amber droplet during the gulp
+  if (is_sipping && cycle >= 4.2f && cycle < 4.7f) {
+    sprite.fillCircle(x0 - 4, y0 - 8, 1, col_amber_booze);
+  }
+}
+
+// ---------------------------------------------------------------------
 // Bold Curved Peaceful Sleeping Eyes (︶ ︶) - Normal & Deep Sleep
 // Cute Pixar/Anime aesthetic: curved downward arc with lifted ends and rounded caps
 // ---------------------------------------------------------------------
@@ -570,7 +629,7 @@ static void drawSleepingEyesAA(LGFX_Sprite& sprite, float cx, float cy, float br
 }
 
 // ---------------------------------------------------------------------
-// Anime / Emoji Sleep Bubble (😪 Deep Sleep Mode)
+// Anime Sleep Bubble (Deep Sleep Mode)
 // Organic translucent liquid bubble inflating on inhale, wobbling at peak tension,
 // and deflating smoothly on exhale, complete with white specular catchlight highlight.
 // ---------------------------------------------------------------------
@@ -738,7 +797,7 @@ static void drawFloatingZzz(LGFX_Sprite& sprite, uint32_t ms) {
 }
 
 // ---------------------------------------------------------------------
-// Manga / Emoji Animated Forehead Anger Vein (💢)
+// Manga Animated Forehead Anger Cross Vein
 // Four curved outward-flaring arcs forming a 4-pointed pinched star of negative space.
 // Pulses organically with a cardiac throb rhythm.
 // ---------------------------------------------------------------------
@@ -808,7 +867,7 @@ static void drawAngerVein(LGFX_Sprite& sprite, float cx, float cy, float base_sc
 static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_cx,
                                 float center_y, PetMood mood, uint8_t vibe_style,
                                 uint32_t ms, float blink_progress = 0.0f) {
-  // Pure emoji 😴 / 😪 sleeping face: no eyebrow clutter above curved sleeping crescents
+  // Pure sleeping face: no eyebrow clutter above curved sleeping crescents
   if (mood == PET_MOOD_SLEEPING || mood == PET_MOOD_DEEP_SLEEP) return;
 
   uint16_t* buf = (uint16_t*)sprite.getBuffer();
@@ -1076,7 +1135,7 @@ static void drawMinimalLip(LGFX_Sprite& sprite, float center_x, float center_y,
     return;
   }
 
-  // Clenched gritted teeth grimace for FRUSTRATED / Enraged mood (🤬 / 😬)
+  // Clenched gritted teeth grimace for FRUSTRATED / Enraged mood
   if (mood == PET_MOOD_FRUSTRATED) {
     const float bw = 24.0f;
     const float bh = 11.0f;
@@ -1451,61 +1510,111 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     }
   }
 
-  // 5. Music Beat Groove & Squash-and-Stretch (Dancing) - Half-Time Downbeat Groove
+  // 5. Generative Mathematical Motion and Authentic Music Flow (Non-Repeating Multi-Harmonic Flow)
   float vibe_y = 0.0f;
   float sway_x = 0.0f;
+  float eye_tilt_y = 0.0f;      // Asymmetric eye elevation delta for living human/pet head-tilt
   float squash_w = 0.0f;
   float squash_h = 0.0f;
   float nod = 0.0f;
+  float lid_flow_left = 0.0f;   // Organic eyelid drift (left eye)
+  float lid_flow_right = 0.0f;  // Organic eyelid drift (right eye)
+  float brow_flow = 0.0f;       // Dynamic brow slope modulation
 
   if (is_vibe) {
     if (s_vibe_amp < 1.0f) s_vibe_amp = 2.5f; // Guarantee strong dance groove
     float eff_hz = s_vibe_hz;
-    if (eff_hz > 1.35f) eff_hz *= 0.5f; // half-time downbeat groove (beats 1 & 3)
-    if (eff_hz < 0.90f) eff_hz = 0.90f;
-    if (eff_hz > 1.35f) eff_hz = 1.35f;
+    if (eff_hz > 1.45f) eff_hz *= 0.5f; // half-time downbeat groove (beats 1 & 3)
+    if (eff_hz < 0.85f) eff_hz = 0.85f;
+    if (eff_hz > 1.45f) eff_hz = 1.45f;
+
+    // Incommensurate harmonic periods (Golden Ratio phi = 1.618034, e = 2.718282)
+    // Guarantees authentic, non-repeating continuous flow across minutes of music
+    float t_sec = (float)ms * 0.001f;
+    float w0 = eff_hz * 6.283185f;                  // Primary beat angular frequency
+    float w_phi = (eff_hz / 1.618034f) * 6.283185f; // Golden ratio sub-harmonic (swagger)
+    float w_e   = (eff_hz / 2.718282f) * 6.283185f; // Macro emotional drift
+    float w_fast= (eff_hz * 2.0f)      * 6.283185f; // Double-time upbeat
+    float w_chop= (eff_hz * 4.0f)      * 6.283185f; // 16th-note chopper syncopation pulse
+
+    // Beat phase calculation & organic cosine downbeat cushion
     float beat_dur = 1000.0f / eff_hz;
     float ph = fmodf((float)ms, beat_dur) / beat_dur * 6.283185f;
-    float beat_sin = sinf(ph);
-    nod = powf(0.5f - 0.5f * cosf(ph), 1.35f); // organic cosine downbeat cushion
+
+    // Primary downbeat cushion with multi-harmonic nuance
+    float base_nod = powf(0.5f - 0.5f * cosf(ph), 1.35f);
+    float sync_pulse = powf(0.5f - 0.5f * cosf(ph * 2.0f), 3.0f) * 0.25f;
+    nod = base_nod + sync_pulse;
+
+    // Head tilt asymmetry (cocking head into the musical pocket)
+    eye_tilt_y = sinf(w_phi * t_sec) * 2.4f;
+
+    // Organic eyelid and brow micro-modulations
+    lid_flow_left  = sinf(w_e * t_sec + 0.35f) * 1.8f;
+    lid_flow_right = sinf(w_e * t_sec + 1.95f) * 1.8f;
+    brow_flow      = cosf(w_phi * t_sec) * 0.08f;
+
+    // Energy from pc_stats / beat analyzer (0.35 to 1.20)
+    float energy = (pcStatsIsActive() && g_pc_stats.music_vibe > 0.0f) ? g_pc_stats.music_vibe : 0.65f;
+    if (energy < 0.35f) energy = 0.35f;
+    if (energy > 1.20f) energy = 1.20f;
 
     switch (s_vibe_style) {
-      case 1: { // Hip-Hop / Drill / Trap: heavy punchy 808 head nod & swagger lean
-        vibe_y = nod * 11.0f;            // Deep 11.0px downward head drop on downbeat
-        sway_x = sinf(ph * 0.5f) * 6.0f; // Wide confident swagger lean
-        squash_w = nod * 4.5f;           // Dynamic squash & stretch
-        squash_h = -nod * 7.5f;
+      case 1: { // Hip-Hop / Drill / Chopper Rap: punchy 808 drop, swagger lean & chopper micro-ticks
+        // Base heavy downbeat nod:
+        float heavy_nod = nod * (10.0f + energy * 3.5f);
+        // Fast chopper 16th-note cadence when energy is high (fast flow lock):
+        float chopper_cadence = (energy > 0.60f) ? (powf(0.5f - 0.5f * cosf(ph * 4.0f), 4.0f) * 2.5f) : 0.0f;
+        vibe_y = heavy_nod + chopper_cadence;
+        // Non-repeating multi-harmonic swagger sway:
+        sway_x = (sinf(ph * 0.5f) * 4.8f + sinf(w_phi * t_sec) * 3.2f) * (0.8f + energy * 0.4f);
+        squash_w = (nod * 4.0f + chopper_cadence * 0.6f);
+        squash_h = -(nod * 6.8f + chopper_cadence * 1.2f);
         break;
       }
-      case 2: { // EDM / House: high energy pump with stretch on upbeat
-        vibe_y = -beat_sin * 10.0f;
-        sway_x = sinf(ph * 0.5f) * 5.0f;
-        squash_w = -beat_sin * 3.5f;
-        squash_h = beat_sin * 5.5f;
+      case 2: { // EDM / House / Party: euphoric multi-stage pump, double-bounce & upbeat flight
+        float upbeat_lift = -sinf(ph) * (9.0f + energy * 4.5f);
+        float double_pump = sinf(ph * 2.0f) * (2.8f * energy);
+        vibe_y = upbeat_lift + double_pump;
+        sway_x = (sinf(ph * 0.5f) * 4.2f + cosf(w_phi * t_sec) * 2.8f);
+        squash_w = -sinf(ph) * 3.8f;
+        squash_h = sinf(ph) * 6.0f;
         break;
       }
-      case 3: { // Rock / Metal: hard downward headbang
-        vibe_y = nod * 13.5f;
-        sway_x = sinf(ph * 0.5f) * 4.5f;
+      case 3: { // Rock / Metal: visceral headbang with syncopated double-kick rebound
+        float bang = nod * (12.0f + energy * 4.5f);
+        float kick_rebound = (powf(0.5f - 0.5f * cosf(ph * 2.0f), 3.0f) * 3.2f * energy);
+        vibe_y = bang + kick_rebound;
+        sway_x = sinf(ph * 0.5f) * 4.0f + sinf(w_fast * t_sec) * 1.4f;
         squash_w = nod * 5.0f;
-        squash_h = -nod * 8.5f;
+        squash_h = -nod * 8.2f;
         break;
       }
-      case 4: { // Lo-Fi / Chill: mellow gentle side-to-side sway
-        sway_x = sinf((float)ms * 0.0022f) * 6.0f;
-        vibe_y = sinf((float)ms * 0.0044f) * 2.5f;
+      case 4: { // Lo-Fi / Chill: continuous Lissajous figure-8 flow, serene breath
+        sway_x = sinf(t_sec * 1.8f) * 5.5f + sinf(t_sec * 0.7f) * 2.0f;
+        vibe_y = cosf(t_sec * 3.6f) * 2.2f + sinf(t_sec * 1.1f) * 1.2f;
+        squash_w = sinf(t_sec * 1.8f) * 1.5f;
+        squash_h = -squash_w;
         break;
       }
-      case 5: { // Emotional / Ballads: vulnerable gentle sway with quiver
-        sway_x = sinf((float)ms * 0.0018f) * 4.8f;
-        vibe_y = sinf((float)ms * 0.0036f) * 1.8f;
+      case 5: { // Breakup Phase / Heartbreak: drunken melancholic sway, sorrowful slump, periodic gulp hiccup
+        float drink_cycle = fmodf(t_sec, 6.0f);
+        float hiccup_y = 0.0f;
+        if (drink_cycle >= 4.7f && drink_cycle < 5.1f) {
+          // Drunken heartbreak gulp / hiccup!
+          hiccup_y = -sinf((drink_cycle - 4.7f) / 0.4f * 3.14159f) * 4.2f;
+        }
+        sway_x = sinf(t_sec * 1.2f) * 5.8f + cosf(t_sec * 0.45f) * 2.8f;
+        vibe_y = cosf(t_sec * 2.4f) * 2.6f + 2.5f + hiccup_y; // sorrowful slump + hiccup
+        squash_w = sinf(t_sec * 1.2f) * 2.0f;
+        squash_h = -squash_w;
         break;
       }
-      default: { // Pop / Upbeat Groove: rhythmic bounce and upbeat stretch
-        vibe_y = nod * 8.5f;
-        sway_x = sinf(ph * 0.5f) * 4.5f;
+      default: { // Pop / Upbeat Groove: joyful bounce, organic syncopated downbeat
+        vibe_y = nod * (8.5f + energy * 3.0f);
+        sway_x = sinf(ph * 0.5f) * 4.2f + sinf(w_phi * t_sec) * 2.4f;
         squash_w = nod * 3.5f;
-        squash_h = -nod * 5.0f;
+        squash_h = -nod * 5.2f;
         break;
       }
     }
@@ -1515,6 +1624,8 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   // Base dimensions: 38w x 48h, 14r
   const float left_cx  = 53.0f + s_curr_look_x + sway_x;
   const float right_cx = 107.0f + s_curr_look_x + sway_x;
+  const float left_cy  = 62.0f + s_curr_look_y + bounce_y + vibe_y + eye_tilt_y;
+  const float right_cy = 62.0f + s_curr_look_y + bounce_y + vibe_y - eye_tilt_y;
   const float center_y = 62.0f + s_curr_look_y + bounce_y + vibe_y;
 
   // Eye dimensions with squash-and-stretch:
@@ -1555,44 +1666,53 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     case PET_MOOD_DANCING: {
       // Vibing to the track based on genre!
       switch (s_vibe_style) {
-        case 1: { // Hip-Hop / Drill / Trap: swagger half-lidded nod with attitude
-          // Upper lid angled coolly (outer corner higher, inner corner lowered)
-          // Squints slightly tighter on the 808 kick drop:
-          float drill_lid_y = -11.5f + nod * 1.5f;
-          drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
-                           drill_lid_y, 0.22f, -999.0f, 0.0f, 0.15f);
-          drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
-                           drill_lid_y, -0.22f, -999.0f, 0.0f, -0.15f);
+        case 1: { // Hip-Hop / Drill / Chopper Rap: swagger half-lidded nod with attitude
+          // Organic eyelid and brow micro-modulations:
+          float drill_lid_l = -11.5f + nod * 1.5f + lid_flow_left;
+          float drill_lid_r = -11.5f + nod * 1.5f + lid_flow_right;
+          float slope_l = 0.22f + brow_flow;
+          float slope_r = -0.22f - brow_flow;
+          drawEyeWithBlink(left_cx, left_cy, base_w, base_h, eye_r,
+                           drill_lid_l, slope_l, -999.0f, 0.0f, 0.15f);
+          drawEyeWithBlink(right_cx, right_cy, base_w, base_h, eye_r,
+                           drill_lid_r, slope_r, -999.0f, 0.0f, -0.15f);
           break;
         }
-        case 2: { // EDM / House: alert, wide, high energy
+        case 2: { // EDM / House / Party: alert, wide, high energy joyful vibe
           float edm_h = 52.0f + breath + squash_h;
-          drawEyeWithBlink(left_cx, center_y, base_w + 2.0f, edm_h, 15.0f);
-          drawEyeWithBlink(right_cx, center_y, base_w + 2.0f, edm_h, 15.0f);
+          drawEyeWithBlink(left_cx, left_cy, base_w + 2.0f, edm_h, 15.0f,
+                           -16.0f, 0.0f, 14.0f, 0.015f);
+          drawEyeWithBlink(right_cx, right_cy, base_w + 2.0f, edm_h, 15.0f,
+                           -16.0f, 0.0f, 14.0f, 0.015f);
           break;
         }
         case 3: { // Rock / Metal: sharp determined brow headbang
-          drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
-                           -7.0f, 0.42f, -999.0f, 0.0f, 0.25f);
-          drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
-                           -7.0f, -0.42f, -999.0f, 0.0f, -0.25f);
+          float rock_slope_l = 0.42f + brow_flow;
+          float rock_slope_r = -0.42f - brow_flow;
+          drawEyeWithBlink(left_cx, left_cy, base_w, base_h, eye_r,
+                           -7.0f, rock_slope_l, -999.0f, 0.0f, 0.25f);
+          drawEyeWithBlink(right_cx, right_cy, base_w, base_h, eye_r,
+                           -7.0f, rock_slope_r, -999.0f, 0.0f, -0.25f);
           break;
         }
         case 4: { // Lo-Fi / Chill: mellow relaxed eyes, peaceful sway (no tears)
-          drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
-                           -4.0f, 0.0f, -999.0f, 0.0f);
-          drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
-                           -4.0f, 0.0f, -999.0f, 0.0f);
+          drawEyeWithBlink(left_cx, left_cy, base_w, base_h, eye_r,
+                           -5.0f + lid_flow_left, 0.0f, -999.0f, 0.0f);
+          drawEyeWithBlink(right_cx, right_cy, base_w, base_h, eye_r,
+                           -5.0f + lid_flow_right, 0.0f, -999.0f, 0.0f);
           break;
         }
-        case 5: { // Emotional / Ballads: heavy watering tears with liquid wave & trickle!
-          drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
+        case 5: { // Breakup Phase: Crying, Watering Eyes, Drinking Alcohol, Drunken Heartbroken Sway
+          // Heavy anime tears streaming down cheeks with shimmering liquid wave
+          drawWateringEyes(sprite, left_cx, left_cy, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
+          // Sleek minimalist alcohol bottle sipping & resting animation
+          drawBreakupBottle(sprite, 80.0f, center_y + 32.0f, ms);
           break;
         }
         default: { // Pop / Upbeat Groove: joyful smiling bounce
-          drawEyeWithBlink(left_cx, center_y, base_w, base_h, eye_r,
+          drawEyeWithBlink(left_cx, left_cy, base_w, base_h, eye_r,
                            -15.0f, 0.0f, 13.0f, 0.015f);
-          drawEyeWithBlink(right_cx, center_y, base_w, base_h, eye_r,
+          drawEyeWithBlink(right_cx, right_cy, base_w, base_h, eye_r,
                            -15.0f, 0.0f, 13.0f, 0.015f);
           break;
         }
@@ -1619,7 +1739,7 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     }
 
     case PET_MOOD_SLEEPING: {
-      // Normal sleep 😴: peaceful curved crescents (︶ ︶) + resting smile + diagonal Zzz
+      // Normal sleep: peaceful curved crescents (︶ ︶) + resting smile + diagonal Zzz
       drawSleepingEyesAA(sprite, left_cx, center_y, breath);
       drawSleepingEyesAA(sprite, right_cx, center_y, breath);
       drawFloatingZzz(sprite, ms);
@@ -1627,7 +1747,7 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     }
 
     case PET_MOOD_DEEP_SLEEP: {
-      // Deep sleep 😪: peaceful crescents + parted mouth + animated nose bubble + diagonal Zzz
+      // Deep sleep: peaceful crescents + parted mouth + animated nose bubble + diagonal Zzz
       drawSleepingEyesAA(sprite, left_cx, center_y, breath);
       drawSleepingEyesAA(sprite, right_cx, center_y, breath);
       drawSleepBubble(sprite, 86.5f, center_y + 24.0f, ms);
@@ -1716,7 +1836,7 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   // 9. Sleek Minimal Lip (sways cohesively with head and eyes)
   drawMinimalLip(sprite, 80.0f + s_curr_look_x * 0.5f + sway_x, center_y, s_mood, s_vibe_style, ms);
 
-  // 10. Forehead Anger Vein (💢) for Angry (😡) and Frustrated (🤬) moods
+  // 10. Forehead Anger Vein for Angry and Frustrated moods
   if (s_mood == PET_MOOD_ANGRY) {
     drawAngerVein(sprite, 124.0f, 24.0f, 0.72f, s_bg_r, s_bg_g, s_bg_b, ms);
   } else if (s_mood == PET_MOOD_FRUSTRATED) {

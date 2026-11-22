@@ -20,6 +20,7 @@
 #include <SD.h>
 #include <Update.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 static WebServer server(80);
 static File uploadFile;
@@ -729,6 +730,51 @@ static void handleSettingsSet() {
   server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
+static void handleAiConfigGet() {
+  Preferences prefs;
+  prefs.begin("ai_cortex", true);
+  String nKey = prefs.getString("nim_key", "");
+  String nModel = prefs.getString("nim_model", "nvidia/nemotron-3.5-bolt-e4b");
+  String nBase = prefs.getString("nim_base", "https://integrate.api.nvidia.com/v1");
+  String dKey = prefs.getString("dahl_key", "");
+  String dModel = prefs.getString("dahl_model", "zai-org/GLM-5.3-Flash");
+  String dBase = prefs.getString("dahl_base", "https://inference.dahl.global/v1");
+  prefs.end();
+
+  JsonDocument doc;
+  doc["nvidia_api_key"] = nKey;
+  doc["nvidia_model"]   = nModel;
+  doc["nvidia_base_url"]= nBase;
+  doc["dahl_api_key"]   = dKey;
+  doc["dahl_model"]     = dModel;
+  doc["dahl_base_url"]  = dBase;
+
+  String out;
+  serializeJson(doc, out);
+  sendCorsHeaders();
+  server.send(200, "application/json", out);
+}
+
+static void handleAiConfigSet() {
+  if (server.hasArg("plain")) {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, server.arg("plain"));
+    if (!err) {
+      Preferences prefs;
+      prefs.begin("ai_cortex", false);
+      if (doc["nvidia_api_key"].is<const char*>()) prefs.putString("nim_key", doc["nvidia_api_key"].as<const char*>());
+      if (doc["nvidia_model"].is<const char*>())   prefs.putString("nim_model", doc["nvidia_model"].as<const char*>());
+      if (doc["nvidia_base_url"].is<const char*>())prefs.putString("nim_base", doc["nvidia_base_url"].as<const char*>());
+      if (doc["dahl_api_key"].is<const char*>())   prefs.putString("dahl_key", doc["dahl_api_key"].as<const char*>());
+      if (doc["dahl_model"].is<const char*>())     prefs.putString("dahl_model", doc["dahl_model"].as<const char*>());
+      if (doc["dahl_base_url"].is<const char*>())  prefs.putString("dahl_base", doc["dahl_base_url"].as<const char*>());
+      prefs.end();
+    }
+  }
+  sendCorsHeaders();
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
 static void handlePcStats() {
   if (server.hasArg("plain")) {
     JsonDocument doc;
@@ -1116,6 +1162,8 @@ static void webTask(void* /*param*/) {
   });
   server.on("/api/settings", HTTP_GET, handleSettingsGet);
   server.on("/api/settings", HTTP_POST, handleSettingsSet);
+  server.on("/api/ai/config", HTTP_GET, handleAiConfigGet);
+  server.on("/api/ai/config", HTTP_POST, handleAiConfigSet);
   server.on("/api/pet/mood", HTTP_GET, handlePetMood);
   server.on("/api/pet/mood", HTTP_POST, handlePetMood);
   server.on("/api/spotify/now", HTTP_POST, handleSpotifyNow);

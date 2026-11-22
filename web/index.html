@@ -14,7 +14,7 @@
 <link rel="icon" type="image/svg+xml" href="/icon-delta.svg?v=12">
 <link rel="apple-touch-icon" sizes="192x192" href="/icon-delta-192.png?v=12">
 <link rel="apple-touch-icon" sizes="512x512" href="/icon-delta-512.png?v=12">
-<title>STΔN studio. — Bambu Controller</title>
+<title>STΔN studio. - Bambu Controller</title>
 <style>
 :root{
   --bg:#070708;
@@ -376,6 +376,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     <button onclick="tab('spo')">Spotify</button>
     <button onclick="tab('sto')">Storage</button>
     <button onclick="tab('fir')">Firmware</button>
+    <button onclick="tab('ai')">AI Brain</button>
   </div>
 
   <!-- PANEL 1: REMOTE -->
@@ -707,6 +708,121 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     </div>
   </div>
 
+  <!-- PANEL 6: AI BRAIN & COGNITIVE CORTEX -->
+  <div class="panel" id="p_ai">
+    
+    <!-- Status & Global Action Banner -->
+    <div class="card" style="border-left:3px solid var(--cyan);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem;letter-spacing:0.02em;">Autonomous Cognitive Brain</div>
+          <div style="font-size:0.75rem;color:var(--txt-muted);margin-top:2px;">NVIDIA NIM Reflex + Dahl Global Reasoning Engine</div>
+        </div>
+        <button class="btn-primary" style="padding:6px 14px;font-size:0.75rem;" onclick="testAllAiConnections()">Test All</button>
+      </div>
+      <div id="aiGlobalStatus" style="font-size:0.75rem;margin-top:8px;color:var(--txt-muted);min-height:16px;"></div>
+    </div>
+
+    <!-- Provider 1: NVIDIA NIM -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">NVIDIA NIM (Fast Reflex)</div>
+        <span id="badgeNvidia" class="badge" style="font-size:0.7rem;padding:2px 8px;border-radius:12px;background:rgba(255,255,255,0.06);color:var(--txt-muted);">Ready</span>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">API Key</label>
+        <div style="display:flex;gap:6px;">
+          <input type="password" id="aiNvidiaKey" class="modal-input" style="flex:1;margin:0;font-family:monospace;" placeholder="nvapi-..." autocomplete="off">
+          <button type="button" class="btn-secondary" style="padding:0 10px;" onclick="toggleSecretVisibility('aiNvidiaKey', this)" title="Show/Hide">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">Reflex Model</label>
+        <select id="aiNvidiaModel" class="modal-input" style="margin:0;width:100%;background:rgba(255,255,255,0.05);color:#fff;">
+          <option value="nvidia/nemotron-3.5-bolt-e4b" selected>nvidia/nemotron-3.5-bolt-e4b (Ultra-Fast Reflex 0.4s)</option>
+          <option value="mistralai/mistral-large-4-1t-a52b">mistralai/mistral-large-4-1t-a52b (Deep Analysis)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">Endpoint Base URL</label>
+        <input type="text" id="aiNvidiaBase" class="modal-input" style="margin:0;font-family:monospace;" value="https://integrate.api.nvidia.com/v1">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="btn-secondary" style="font-size:0.75rem;padding:6px 12px;" onclick="testAiProvider('nvidia')">Test Connection</button>
+        <div id="aiNvidiaLatency" style="font-size:0.75rem;color:var(--txt-muted);">Latency: --</div>
+      </div>
+    </div>
+
+    <!-- Provider 2: Dahl Global -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">Dahl Global (Cognitive Reasoning)</div>
+        <span id="badgeDahl" class="badge" style="font-size:0.7rem;padding:2px 8px;border-radius:12px;background:rgba(255,255,255,0.06);color:var(--txt-muted);">Ready</span>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">API Key</label>
+        <div style="display:flex;gap:6px;">
+          <input type="password" id="aiDahlKey" class="modal-input" style="flex:1;margin:0;font-family:monospace;" placeholder="dahl_..." autocomplete="off">
+          <button type="button" class="btn-secondary" style="padding:0 10px;" onclick="toggleSecretVisibility('aiDahlKey', this)" title="Show/Hide">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">Reasoning Model</label>
+        <select id="aiDahlModel" class="modal-input" style="margin:0;width:100%;background:rgba(255,255,255,0.05);color:#fff;">
+          <option value="zai-org/GLM-5.3-Flash" selected>GLM 5.3 (zai-org/GLM-5.3-Flash)</option>
+          <option value="deepseek-ai/DeepSeek-V4-Flash-0731">DeepSeek V4 (deepseek-ai/DeepSeek-V4-Flash-0731)</option>
+          <option value="MiniMaxAI/MiniMax-M2.7">MiniMax M2.7 (MiniMaxAI/MiniMax-M2.7)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.75rem;font-weight:600;margin-bottom:4px;color:var(--txt-muted);">Endpoint Base URL</label>
+        <input type="text" id="aiDahlBase" class="modal-input" style="margin:0;font-family:monospace;" value="https://inference.dahl.global/v1">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="btn-secondary" style="font-size:0.75rem;padding:6px 12px;" onclick="testAiProvider('dahl')">Test Connection</button>
+        <div id="aiDahlLatency" style="font-size:0.75rem;color:var(--txt-muted);">Latency: --</div>
+      </div>
+    </div>
+
+    <!-- Behavior & Autonomous Preferences -->
+    <div class="card">
+      <div class="card-title">Autonomous Behavior</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0;">
+        <label style="display:flex;align-items:center;gap:10px;font-size:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="aiChkThoughts" checked style="accent-color:var(--cyan);">
+          <span>Stream of Consciousness Banners (Spontaneous Thoughts)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="aiChkSleep" checked style="accent-color:var(--cyan);">
+          <span>Auto-Sleep on User Inactivity (>5 Minutes Away)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="aiChkVoice" checked style="accent-color:var(--cyan);">
+          <span>Voice Synthesis (PC Companion Speech)</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn-primary" style="flex:1;" id="btnSaveAi" onclick="saveAiConfig()">Save Configuration</button>
+        <button class="btn-secondary" onclick="loadAiConfig()">Reload</button>
+      </div>
+      <div id="aiSaveStatus" style="font-size:0.75rem;margin-top:8px;text-align:center;font-weight:600;"></div>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- Device IP Settings Modal -->
@@ -861,6 +977,181 @@ function tab(id){
   event.target.classList.add('active');
   document.getElementById('p_'+id).classList.add('active');
   if(id==='sto') loadFs('/');
+  if(id==='ai') loadAiConfig();
+}
+
+function vib(){ if(navigator.vibrate) navigator.vibrate(12); }
+
+// --- AI Brain & Autonomous Cognitive Cortex ---
+function toggleSecretVisibility(inputId, btn) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  if (el.type === 'password') {
+    el.type = 'text';
+    btn.style.borderColor = 'var(--cyan)';
+  } else {
+    el.type = 'password';
+    btn.style.borderColor = '';
+  }
+}
+
+async function loadAiConfig() {
+  const st = document.getElementById('aiSaveStatus');
+  try {
+    let res = null;
+    try {
+      const c = new AbortController();
+      setTimeout(() => c.abort(), 1200);
+      res = await fetch('http://localhost:8765/api/ai/config', { signal: c.signal });
+    } catch(e) {}
+
+    if (!res || !res.ok) {
+      res = await fetch(getApiUrl('/api/ai/config'));
+    }
+
+    if (res && res.ok) {
+      const d = await res.json();
+      if (d.nvidia_api_key) document.getElementById('aiNvidiaKey').value = d.nvidia_api_key;
+      if (d.nvidia_model) document.getElementById('aiNvidiaModel').value = d.nvidia_model;
+      if (d.nvidia_base_url) document.getElementById('aiNvidiaBase').value = d.nvidia_base_url;
+      if (d.dahl_api_key) document.getElementById('aiDahlKey').value = d.dahl_api_key;
+      if (d.dahl_model) document.getElementById('aiDahlModel').value = d.dahl_model;
+      if (d.dahl_base_url) document.getElementById('aiDahlBase').value = d.dahl_base_url;
+      if (typeof d.autonomous_thoughts !== 'undefined') document.getElementById('aiChkThoughts').checked = !!d.autonomous_thoughts;
+      if (typeof d.voice_enabled !== 'undefined') document.getElementById('aiChkVoice').checked = !!d.voice_enabled;
+      if (st) { st.style.color = "var(--green)"; st.innerText = "Config synchronized with AI Cortex"; setTimeout(() => st.innerText = "", 2500); }
+      return;
+    }
+  } catch(e) {}
+
+  try {
+    const sn = localStorage.getItem('stan_nim_key');
+    const sd = localStorage.getItem('stan_dahl_key');
+    if (sn && !document.getElementById('aiNvidiaKey').value) document.getElementById('aiNvidiaKey').value = sn;
+    if (sd && !document.getElementById('aiDahlKey').value) document.getElementById('aiDahlKey').value = sd;
+  } catch(e) {}
+}
+
+async function saveAiConfig() {
+  const st = document.getElementById('aiSaveStatus');
+  const btn = document.getElementById('btnSaveAi');
+  if (btn) btn.disabled = true;
+  if (st) { st.style.color = "var(--cyan)"; st.innerText = "Saving configuration..."; }
+
+  const payload = {
+    nvidia_api_key: document.getElementById('aiNvidiaKey').value.trim(),
+    nvidia_model: document.getElementById('aiNvidiaModel').value,
+    nvidia_base_url: document.getElementById('aiNvidiaBase').value.trim(),
+    dahl_api_key: document.getElementById('aiDahlKey').value.trim(),
+    dahl_model: document.getElementById('aiDahlModel').value,
+    dahl_base_url: document.getElementById('aiDahlBase').value.trim(),
+    autonomous_thoughts: document.getElementById('aiChkThoughts').checked,
+    voice_enabled: document.getElementById('aiChkVoice').checked
+  };
+
+  try {
+    localStorage.setItem('stan_nim_key', payload.nvidia_api_key);
+    localStorage.setItem('stan_dahl_key', payload.dahl_api_key);
+  } catch(e) {}
+
+  let saved = false;
+  try {
+    const c1 = new AbortController();
+    setTimeout(() => c1.abort(), 2000);
+    const r1 = await fetch('http://localhost:8765/api/ai/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      signal: c1.signal
+    });
+    if (r1.ok) saved = true;
+  } catch(e) {}
+
+  try {
+    const c2 = new AbortController();
+    setTimeout(() => c2.abort(), 2000);
+    const r2 = await fetch(getApiUrl('/api/ai/config'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      signal: c2.signal
+    });
+    if (r2.ok) saved = true;
+  } catch(e) {}
+
+  if (btn) btn.disabled = false;
+  if (st) {
+    st.style.color = saved ? "var(--green)" : "var(--amber)";
+    st.innerText = saved ? "Configuration saved successfully!" : "Saved locally (companion cortex offline)";
+    setTimeout(() => st.innerText = "", 3000);
+  }
+}
+
+async function testAiProvider(provider) {
+  const isNvidia = (provider === 'nvidia');
+  const badge = document.getElementById(isNvidia ? 'badgeNvidia' : 'badgeDahl');
+  const latEl = document.getElementById(isNvidia ? 'aiNvidiaLatency' : 'aiDahlLatency');
+
+  if (badge) {
+    badge.innerText = "Testing...";
+    badge.style.color = "var(--cyan)";
+    badge.style.background = "rgba(0,242,254,0.12)";
+  }
+  if (latEl) latEl.innerText = "Pinging endpoint...";
+
+  const payload = {
+    provider: provider,
+    nvidia_api_key: document.getElementById('aiNvidiaKey').value.trim(),
+    nvidia_model: document.getElementById('aiNvidiaModel').value,
+    nvidia_base_url: document.getElementById('aiNvidiaBase').value.trim(),
+    dahl_api_key: document.getElementById('aiDahlKey').value.trim(),
+    dahl_model: document.getElementById('aiDahlModel').value,
+    dahl_base_url: document.getElementById('aiDahlBase').value.trim()
+  };
+
+  try {
+    const c = new AbortController();
+    setTimeout(() => c.abort(), 16000);
+    const res = await fetch('http://localhost:8765/api/ai/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      signal: c.signal
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const result = data[provider];
+    if (result && result.status === 'ok') {
+      if (badge) {
+        badge.innerText = "Active (" + result.latency_ms + "ms)";
+        badge.style.color = "var(--green)";
+        badge.style.background = "rgba(16,185,129,0.15)";
+      }
+      if (latEl) latEl.innerText = "Latency: " + result.latency_ms + "ms | Model: " + (result.model || "");
+    } else {
+      const err = (result && result.error) ? result.error : "Test failed";
+      if (badge) {
+        badge.innerText = "Error";
+        badge.style.color = "#F87171";
+        badge.style.background = "rgba(248,113,113,0.15)";
+      }
+      if (latEl) latEl.innerText = err.length > 36 ? err.substring(0, 36) + "..." : err;
+    }
+  } catch(e) {
+    if (badge) {
+      badge.innerText = "Offline";
+      badge.style.color = "var(--amber)";
+      badge.style.background = "rgba(245,158,11,0.15)";
+    }
+    if (latEl) latEl.innerText = "Companion daemon not responding on 8765";
+  }
+}
+
+async function testAllAiConnections() {
+  const gSt = document.getElementById('aiGlobalStatus');
+  if (gSt) gSt.innerText = "Testing NVIDIA NIM and Dahl Global cognitive connections...";
+  await Promise.all([testAiProvider('nvidia'), testAiProvider('dahl')]);
+  if (gSt) gSt.innerText = "AI provider health check complete.";
 }
 
 function vib(){ if(navigator.vibrate) navigator.vibrate(12); }

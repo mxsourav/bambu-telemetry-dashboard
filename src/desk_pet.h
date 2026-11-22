@@ -20,7 +20,7 @@ enum PetMood : uint8_t {
   PET_MOOD_WINK,        // Playful wink (; ^)
   PET_MOOD_SLEEPY,      // Heavy drowsy eyelids
   PET_MOOD_SLEEPING,    // Normal sleep: peaceful curved crescents (︶ ︶) + resting smile + Zzz
-  PET_MOOD_DEEP_SLEEP,  // Deep sleep: peaceful crescents + parted mouth + nose bubble (😪) + Zzz
+  PET_MOOD_DEEP_SLEEP,  // Deep sleep: peaceful crescents + parted mouth + nose bubble + Zzz
   PET_MOOD_SURPRISED,   // Alert wide eyes (O O)
   // ---- v2 emotions (driven by pet_mood.cpp / web API) ----
   PET_MOOD_ANGRY,       // Slanted brows, narrowed eyes, red blush ramp
