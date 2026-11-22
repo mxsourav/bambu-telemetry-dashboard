@@ -24,29 +24,52 @@ import psutil
 from PIL import Image, ImageOps, ImageFilter
 
 def find_device_ip():
-    for ip in ["192.168.137.171", "192.168.0.154"]:
+    global DEVICE_IP
+    if 'DEVICE_IP' in globals() and DEVICE_IP:
         try:
-            with urllib.request.urlopen(f"http://{ip}/api/status", timeout=0.6) as r:
-                if r.status == 200: return ip
+            with urllib.request.urlopen(f"http://{DEVICE_IP}/api/status", timeout=0.4) as r:
+                if r.status == 200:
+                    return DEVICE_IP
         except Exception:
             pass
+
+    # Check ARP table for ESP32 MAC address
     try:
         out = subprocess.check_output("arp -a", shell=True).decode()
         for line in out.splitlines():
             if "b0-cb-d8-0a-a9-54" in line.lower():
                 parts = line.split()
-                if parts: return parts[0]
+                if parts:
+                    cand = parts[0]
+                    try:
+                        with urllib.request.urlopen(f"http://{cand}/api/status", timeout=0.5) as r:
+                            if r.status == 200:
+                                DEVICE_IP = cand
+                                return cand
+                    except Exception:
+                        DEVICE_IP = cand
+                        return cand
     except Exception:
         pass
-    return "192.168.137.171"
 
-DEVICE_IP = os.environ.get("DEVICE_IP", find_device_ip())
-SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
-SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
-SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
-FS_UPLOAD_URL = f"http://{DEVICE_IP}/api/fs/upload?path=/art.jpg"
-LED_SET_URL = f"http://{DEVICE_IP}/api/led/set"
-PC_STATS_URL = f"http://{DEVICE_IP}/api/pc/stats"
+    for ip in ["192.168.137.35", "192.168.137.171", "192.168.0.154"]:
+        try:
+            with urllib.request.urlopen(f"http://{ip}/api/status", timeout=0.5) as r:
+                if r.status == 200:
+                    DEVICE_IP = ip
+                    return ip
+        except Exception:
+            pass
+
+    if 'DEVICE_IP' not in globals() or not DEVICE_IP:
+        DEVICE_IP = "192.168.137.35"
+    return DEVICE_IP
+
+DEVICE_IP = os.environ.get("DEVICE_IP", "") or find_device_ip()
+
+def get_url(path):
+    global DEVICE_IP
+    return f"http://{DEVICE_IP}{path}"
 
 # Music "vibe" energy (0..1) shared with the PC telemetry thread: the desk
 # pet bounces harder to energetic tracks. Derived deterministically from the
@@ -348,7 +371,7 @@ def extract_vibrant_rgb(im):
 
 def push_ambient_led(r, g, b):
     try:
-        http_session.post(LED_SET_URL, json={"r": int(r), "g": int(g), "b": int(b)}, timeout=1.5)
+        http_session.post(get_url("/api/led/set"), json={"r": int(r), "g": int(g), "b": int(b)}, timeout=1.5)
     except Exception:
         pass
 
@@ -384,7 +407,7 @@ def upload_album_art(source_path_or_url):
 
             try:
                 files = {"file": ("cover.jpg", jpeg_bytes, "image/jpeg")}
-                r = http_session.post(SPOTIFY_COVER_URL, files=files, timeout=2)
+                r = http_session.post(get_url("/api/spotify/cover"), files=files, timeout=2)
                 if r.status_code == 200:
                     print("  [ART] Cover art sent to Desk Monitor!")
                     return True
@@ -393,9 +416,9 @@ def upload_album_art(source_path_or_url):
 
             try:
                 files = {"file": ("/art.jpg", jpeg_bytes, "image/jpeg")}
-                r = http_session.post(FS_UPLOAD_URL, files=files, timeout=2)
+                r = http_session.post(get_url("/api/fs/upload?path=/art.jpg"), files=files, timeout=2)
                 if r.status_code == 200:
-                    http_session.get(SPOTIFY_ART_TRIGGER, timeout=2)
+                    http_session.get(get_url("/api/spotify/testart?url=/art.jpg"), timeout=2)
                     print("  [ART] Cover art sent via FS fallback!")
                     return True
             except Exception:
@@ -416,9 +439,11 @@ def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True, genre="
     }
     for attempt in range(2):
         try:
-            resp = http_session.post(SPOTIFY_NOW_URL, json=payload, timeout=1.8)
-            return resp.status_code == 200
+            resp = http_session.post(get_url("/api/spotify/now"), json=payload, timeout=1.8)
+            if resp.status_code == 200:
+                return True
         except Exception:
+            find_device_ip()
             try:
                 http_session = requests.Session()
                 http_session.mount("http://", requests.adapters.HTTPAdapter(pool_connections=5, pool_maxsize=10, max_retries=1))
@@ -543,7 +568,7 @@ def pc_telemetry_loop():
                 "vibe": g_music_energy,
                 "genre": g_music_genre
             }
-            http_session.post(PC_STATS_URL, json=payload, timeout=1.5)
+            http_session.post(get_url("/api/pc/stats"), json=payload, timeout=1.5)
         except Exception:
             pass
         time.sleep(2.0)
