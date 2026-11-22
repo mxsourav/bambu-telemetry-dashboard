@@ -15,6 +15,12 @@ import requests
 import subprocess
 import os
 import sys
+
+# Ensure tools directory is on sys.path
+tools_dir = os.path.dirname(os.path.abspath(__file__))
+if tools_dir not in sys.path:
+    sys.path.insert(0, tools_dir)
+
 import json
 import urllib.request
 import urllib.parse
