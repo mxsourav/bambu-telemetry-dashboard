@@ -530,9 +530,9 @@ static void drawBreakupBottle(LGFX_Sprite& sprite, float mouth_x, float mouth_y,
   float t_sec = (float)ms * 0.001f;
   float cycle = fmodf(t_sec, 6.0f); // 6-second drinking loop
 
-  // Resting posture: tilted slightly beside right cheek
-  float bx = 128.0f;
-  float by = 78.0f;
+  // Resting posture: tilted slightly beside right cheek, strictly inside screen bounds
+  float bx = 136.0f;
+  float by = 82.0f;
   bool is_sipping = false;
 
   if (cycle >= 3.5f && cycle < 5.3f) {
@@ -547,8 +547,8 @@ static void drawBreakupBottle(LGFX_Sprite& sprite, float mouth_x, float mouth_y,
       sip_phase = 1.0f - (cycle - 4.7f) / 0.6f; // lowering
     }
     float ease = 0.5f - 0.5f * cosf(sip_phase * 3.14159f);
-    bx = 128.0f - ease * 36.0f; // moves towards mouth (around x=92)
-    by = 78.0f - ease * 14.0f;  // raises up to lip level
+    bx = 136.0f - ease * 46.0f; // moves towards mouth (around x=90)
+    by = 82.0f - ease * 12.0f;  // raises up to lip level (y=70)
   }
 
   int x0 = (int)bx;
@@ -934,10 +934,10 @@ static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_
             slope = 0.04f;
             arch_k = 0.024f;
             break;
-          case 5: // Emotional / Ballad: deep sorrow arch with vulnerable tremble
-            y_offset = -2.5f + sinf((float)ms * 0.012f) * 0.5f;
-            slope = 0.36f; // inner corner high, outer corner drooped
-            arch_k = 0.022f;
+          case 5: // Emotional / Heartbreak Ballad: deep weeping sorrow arch, vulnerable tremble
+            y_offset = 2.4f + sinf((float)ms * 0.012f) * 0.6f;
+            slope = 0.56f; // dramatic heartbroken slant (inner corners lifted high in grief, outer ends drooped low)
+            arch_k = 0.018f;
             break;
           default: // Pop / Upbeat Groove: rhythmic bounce
             y_offset = -3.0f - fmaxf(0.0f, beat_sin) * 2.8f;
@@ -949,9 +949,9 @@ static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_
 
       case PET_MOOD_SAD:
       case PET_MOOD_CRYING:
-        y_offset = -2.5f + sinf((float)ms * 0.012f) * 0.5f;
-        slope = 0.36f; // inner corner lifted high, outer drooped (matching reference art)
-        arch_k = 0.022f;
+        y_offset = 2.4f + sinf((float)ms * 0.012f) * 0.6f;
+        slope = 0.56f; // inner corner lifted high, outer drooped low (authentic crying sadness)
+        arch_k = 0.018f;
         break;
 
       case PET_MOOD_ANGRY:
@@ -1004,6 +1004,9 @@ static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_
 
     // Eyelids naturally pull eyebrows down slightly during biological blinks
     float cy = brow_base_cy + y_offset + blink_progress * 2.5f;
+    // Strict boundary clamps: ensure eyebrows never clip the top or bottom of the screen
+    if (cy < 14.0f) cy = 14.0f;
+    if (cy > 46.0f) cy = 46.0f;
     const int x_min = (int)fmaxf(0.0f, cx - brow_w * 0.5f - 2.0f);
     const int x_max = (int)fminf(159.0f, cx + brow_w * 0.5f + 2.0f);
     const int y_min = (int)fmaxf(0.0f, cy - 8.0f);
@@ -1358,15 +1361,18 @@ static void drawMinimalLip(LGFX_Sprite& sprite, float center_x, float center_y,
 // Primary Desk Pet Frame Drawing (100 FPS)
 // ---------------------------------------------------------------------
 void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
-  // Dynamic progressive background (Pure Paper White -> Progressive Fiery Red)
-  float target_bg_r = 255.0f;
-  float target_bg_g = 255.0f;
-  float target_bg_b = 255.0f;
+  // Dynamic progressive background (Warm Kindle Paper Cream RGB 246, 242, 234 -> Progressive Fiery Red)
+  const float base_bg_r = 246.0f;
+  const float base_bg_g = 242.0f;
+  const float base_bg_b = 234.0f;
+  float target_bg_r = base_bg_r;
+  float target_bg_g = base_bg_g;
+  float target_bg_b = base_bg_b;
   if ((s_mood == PET_MOOD_ANGRY || s_mood == PET_MOOD_FRUSTRATED) && s_tint_amount > 0) {
     float a = (float)s_tint_amount / 255.0f;
-    target_bg_r = 255.0f - a * (255.0f - (float)s_tint_r);
-    target_bg_g = 255.0f - a * (255.0f - (float)s_tint_g);
-    target_bg_b = 255.0f - a * (255.0f - (float)s_tint_b);
+    target_bg_r = base_bg_r - a * (base_bg_r - (float)s_tint_r);
+    target_bg_g = base_bg_g - a * (base_bg_g - (float)s_tint_g);
+    target_bg_b = base_bg_b - a * (base_bg_b - (float)s_tint_b);
   }
   // Smooth exponential glide (butter-smooth 100 FPS interpolation)
   s_curr_tint_r += (target_bg_r - s_curr_tint_r) * 0.035f;
@@ -1427,30 +1433,31 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   bool is_sleeping = (s_mood == PET_MOOD_SLEEPING || s_mood == PET_MOOD_DEEP_SLEEP);
   if (!is_vibe) s_vibe_amp *= 0.92f; // smooth decay out of music bounce
 
-  // 1. Saccadic Glance State Machine
-  if (!is_vibe && !is_sleeping && ms >= s_next_glance_ms) {
-    s_next_glance_ms = ms + 3200 + (esp_random() % 3600);
-    uint32_t pick = esp_random() % 7;
-    switch (pick) {
-      case 0: s_target_look_x =   0.0f; s_target_look_y =   0.0f; break; // Center
-      case 1: s_target_look_x = -13.0f; s_target_look_y =   0.0f; break; // Left
-      case 2: s_target_look_x =  13.0f; s_target_look_y =   0.0f; break; // Right
-      case 3: s_target_look_x =  -9.0f; s_target_look_y =  -7.0f; break; // Up-Left curious
-      case 4: s_target_look_x =   9.0f; s_target_look_y =  -7.0f; break; // Up-Right curious
-      case 5: s_target_look_x =   0.0f; s_target_look_y =  -8.0f; break; // Up attentive
-      default:s_target_look_x =   0.0f; s_target_look_y =   5.0f; break; // Down modest
-    }
-  }
-  if (is_sleeping) {
+  // 1. Calm, Natural Biological Gaze (subtle, non-twitchy, serene)
+  if (is_vibe || is_sleeping) {
     s_target_look_x = 0.0f;
     s_target_look_y = 0.0f;
+  } else if (ms >= s_next_glance_ms) {
+    // Hold calm gaze for 8 to 15 seconds before gentle micro-shift
+    s_next_glance_ms = ms + 8000 + (esp_random() % 7000);
+    uint32_t pick = esp_random() % 8;
+    switch (pick) {
+      case 0:
+      case 1:
+      case 2: s_target_look_x =  0.0f; s_target_look_y =  0.0f; break; // Calm Center (most common)
+      case 3: s_target_look_x = -3.5f; s_target_look_y =  0.0f; break; // Gentle Left
+      case 4: s_target_look_x =  3.5f; s_target_look_y =  0.0f; break; // Gentle Right
+      case 5: s_target_look_x = -2.5f; s_target_look_y = -2.0f; break; // Soft Up-Left
+      case 6: s_target_look_x =  2.5f; s_target_look_y = -2.0f; break; // Soft Up-Right
+      default:s_target_look_x =  0.0f; s_target_look_y =  1.5f; break; // Soft Down
+    }
   } else if (s_mood == PET_MOOD_THINKING) {
-    s_target_look_x = -9.0f;
-    s_target_look_y = -8.0f;
+    s_target_look_x = -3.5f;
+    s_target_look_y = -2.0f;
   }
 
-  // Smooth biological glide to glance target (gentle ease-out deceleration)
-  float glide = (s_mood == PET_MOOD_THINKING) ? 0.035f : 0.045f;
+  // Smooth, calm biological glide (eliminates any rapid eye twitching)
+  float glide = 0.022f;
   s_curr_look_x += (s_target_look_x - s_curr_look_x) * glide;
   s_curr_look_y += (s_target_look_y - s_curr_look_y) * glide;
 
@@ -1604,10 +1611,11 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
           // Drunken heartbreak gulp / hiccup!
           hiccup_y = -sinf((drink_cycle - 4.7f) / 0.4f * 3.14159f) * 4.2f;
         }
-        sway_x = sinf(t_sec * 1.2f) * 5.8f + cosf(t_sec * 0.45f) * 2.8f;
-        vibe_y = cosf(t_sec * 2.4f) * 2.6f + 2.5f + hiccup_y; // sorrowful slump + hiccup
-        squash_w = sinf(t_sec * 1.2f) * 2.0f;
+        sway_x = sinf(t_sec * 0.85f) * 3.8f + cosf(t_sec * 0.35f) * 1.5f;
+        vibe_y = 5.5f + cosf(t_sec * 1.7f) * 1.6f + hiccup_y; // heavy dejected slump (head hanging low in sorrow)
+        squash_w = -sinf(t_sec * 0.85f) * 1.5f;
         squash_h = -squash_w;
+        eye_tilt_y = sinf(t_sec * 0.85f) * 0.5f; // feeble drunken wobble, NO swagger tilt!
         break;
       }
       default: { // Pop / Upbeat Groove: joyful bounce, organic syncopated downbeat
@@ -1620,13 +1628,20 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     }
   }
 
-  // 6. Eye Coordinates (Centered on 160x128 display)
+  // 6. Eye Coordinates (Centered on 160x128 display with strict screen clamping)
   // Base dimensions: 38w x 48h, 14r
-  const float left_cx  = 53.0f + s_curr_look_x + sway_x;
-  const float right_cx = 107.0f + s_curr_look_x + sway_x;
-  const float left_cy  = 62.0f + s_curr_look_y + bounce_y + vibe_y + eye_tilt_y;
-  const float right_cy = 62.0f + s_curr_look_y + bounce_y + vibe_y - eye_tilt_y;
-  const float center_y = 62.0f + s_curr_look_y + bounce_y + vibe_y;
+  float raw_left_cx  = 53.0f + s_curr_look_x + sway_x;
+  float raw_right_cx = 107.0f + s_curr_look_x + sway_x;
+  float raw_left_cy  = 62.0f + s_curr_look_y + bounce_y + vibe_y + eye_tilt_y;
+  float raw_right_cy = 62.0f + s_curr_look_y + bounce_y + vibe_y - eye_tilt_y;
+  float raw_center_y = 62.0f + s_curr_look_y + bounce_y + vibe_y;
+
+  // Strict boundary clamps: prevent eyebrows, eyes, or lips from ever leaving the screen (0..159, 0..127)
+  const float center_y = fmaxf(52.0f, fminf(68.0f, raw_center_y));
+  const float left_cx  = fmaxf(32.0f, fminf(64.0f, raw_left_cx));
+  const float right_cx = fmaxf(96.0f, fminf(128.0f, raw_right_cx));
+  const float left_cy  = fmaxf(48.0f, fminf(72.0f, raw_left_cy));
+  const float right_cy = fmaxf(48.0f, fminf(72.0f, raw_right_cy));
 
   // Eye dimensions with squash-and-stretch:
   float base_w = 38.0f + squash_w;
@@ -1704,8 +1719,8 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
         }
         case 5: { // Breakup Phase: Crying, Watering Eyes, Drinking Alcohol, Drunken Heartbroken Sway
           // Heavy anime tears streaming down cheeks with shimmering liquid wave
-          drawWateringEyes(sprite, left_cx, left_cy, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
-          // Sleek minimalist alcohol bottle sipping & resting animation
+          drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
+          // Sleek minimalist alcohol bottle sipping and resting animation
           drawBreakupBottle(sprite, 80.0f, center_y + 32.0f, ms);
           break;
         }
@@ -1853,8 +1868,8 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
     const int pill_h = 17;
     const int pill_r = 8;
 
-    // Subtle off-white / light-gray capsule on paper white
-    sprite.fillRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xF7BE);
+    // Subtle warm paper capsule with carbon ink typography
+    sprite.fillRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xEF59);
     sprite.drawRoundRect(pill_x, pill_y, pill_w, pill_h, pill_r, 0xD69A);
 
     char pill_str[36];
@@ -1868,7 +1883,7 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
 
     sprite.setFont(&fonts::Font0);
     sprite.setTextDatum(textdatum_t::middle_center);
-    sprite.setTextColor(0x0000, 0xF7BE);
+    sprite.setTextColor(0x1082, 0xEF59);
     sprite.drawString(pill_str, 80, pill_y + pill_h / 2);
   }
 }

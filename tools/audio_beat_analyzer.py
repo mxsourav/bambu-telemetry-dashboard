@@ -52,8 +52,9 @@ SILENCE_HOLD_SEC = 1.8       # Require silence for 1.8s before going idle
 
 
 class BeatPatternAnalyzer:
-    def __init__(self, esp_ip=None):
+    def __init__(self, esp_ip=None, standalone=False):
         self.esp_ip = esp_ip
+        self.standalone = standalone
         self.running = False
         self.lock = threading.Lock()
 
@@ -326,22 +327,20 @@ class BeatPatternAnalyzer:
                 break
 
     def send_to_esp32(self):
-        """Push real-time beat pattern analysis directly to ESP32."""
-        if not self.esp_ip:
+        """Push real-time beat pattern analysis directly to ESP32 only in standalone mode."""
+        if not self.standalone or not self.esp_ip:
             return
 
         with self.lock:
             genre = self.detected_genre
-            vibe_style = self.vibe_style
             energy = self.current_energy
             bpm = self.detected_bpm
-            is_playing = self.is_playing
 
-        # 1. Update /api/pc/stats with live music energy, bpm, and genre
+        # Standalone mode only: update /api/pc/stats without overwriting title or hardware telemetry
         try:
             stats_payload = json.dumps({
-                "music_genre": genre,
-                "music_vibe": round(energy, 2),
+                "genre": genre,
+                "vibe": round(energy, 2),
                 "music_bpm": int(bpm)
             }).encode("utf-8")
             req = urllib.request.Request(
@@ -350,23 +349,6 @@ class BeatPatternAnalyzer:
                 headers={"Content-Type": "application/json", "User-Agent": "BeatAnalyzer"}
             )
             with urllib.request.urlopen(req, timeout=1.0) as resp:
-                pass
-        except Exception:
-            pass
-
-        # 2. Update /api/spotify/now to ensure mood engine immediately locks onto the genre
-        try:
-            now_payload = json.dumps({
-                "genre": genre,
-                "is_playing": is_playing,
-                "energy": round(energy, 2)
-            }).encode("utf-8")
-            req2 = urllib.request.Request(
-                f"http://{self.esp_ip}/api/spotify/now",
-                data=now_payload,
-                headers={"Content-Type": "application/json", "User-Agent": "BeatAnalyzer"}
-            )
-            with urllib.request.urlopen(req2, timeout=1.0) as resp2:
                 pass
         except Exception:
             pass
@@ -448,5 +430,5 @@ class BeatPatternAnalyzer:
 # =====================================================================
 if __name__ == "__main__":
     target_ip = sys.argv[1] if len(sys.argv) > 1 else None
-    analyzer = BeatPatternAnalyzer(esp_ip=target_ip)
+    analyzer = BeatPatternAnalyzer(esp_ip=target_ip, standalone=True)
     analyzer.run(print_dashboard=True)

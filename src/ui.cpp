@@ -104,19 +104,21 @@ void uiSetClock12h(bool is12h) {
   settingsSave();
 }
 
-#define COL_BLACK     (uint16_t)(uiGetThemeLight() ? 0xFFFF : 0x0000)
-#define COL_CARD      (uint16_t)(uiGetThemeLight() ? 0xEF7D : 0x18E3)
-#define COL_SEP       (uint16_t)(uiGetThemeLight() ? 0xCE59 : 0x1082)
-#define COL_TXT       (uint16_t)(uiGetThemeLight() ? 0x0000 : 0xFFFF)
-#define COL_TXT_BLACK (uint16_t)(uiGetThemeLight() ? 0xFFFF : 0x0000)
-#define COL_MUTED     (uint16_t)(uiGetThemeLight() ? 0x738E : 0x6B4D)
+// Paper Ink E-Paper Palette for Light Mode (Kindle / Remarkable warm cream paper & carbon ink)
+// Dark Mode stays as it is (OLED carbon black & vibrant HUD elements)
+#define COL_BLACK     (uint16_t)(uiGetThemeLight() ? 0xF77D : 0x0000) // 0xF77D = RGB(246, 242, 234) Kindle Carta paper
+#define COL_CARD      (uint16_t)(uiGetThemeLight() ? 0xEF59 : 0x18E3) // 0xEF59 = RGB(238, 234, 226) textured paper card
+#define COL_SEP       (uint16_t)(uiGetThemeLight() ? 0xD69A : 0x1082) // 0xD69A = RGB(216, 212, 204) paper fiber border
+#define COL_TXT       (uint16_t)(uiGetThemeLight() ? 0x1082 : 0xFFFF) // 0x1082 = RGB(16, 16, 18) matte carbon ink
+#define COL_TXT_BLACK (uint16_t)(uiGetThemeLight() ? 0xF77D : 0x0000)
+#define COL_MUTED     (uint16_t)(uiGetThemeLight() ? 0x632C : 0x6B4D) // 0x632C = charcoal pencil ink
 #define COL_ONLINE    (uint16_t)0x07E0
 #define COL_OFFLINE   (uint16_t)0xF800
 #define COL_CONNECT   (uint16_t)0xFFE0
-#define COL_CYAN      (uint16_t)(uiGetThemeLight() ? 0x03B7 : 0x04FF)
-#define COL_AMBER     (uint16_t)(uiGetThemeLight() ? 0xD380 : 0xFD20)
-#define COL_SALMON    (uint16_t)(uiGetThemeLight() ? 0xD1E2 : 0xFB68)
-#define COL_LBLUE     (uint16_t)(uiGetThemeLight() ? 0x3377 : 0x7DDF)
+#define COL_CYAN      (uint16_t)(uiGetThemeLight() ? 0x11B3 : 0x04FF) // deep midnight navy ink in light mode
+#define COL_AMBER     (uint16_t)(uiGetThemeLight() ? 0xB340 : 0xFD20) // warm terracotta ink in light mode
+#define COL_SALMON    (uint16_t)(uiGetThemeLight() ? 0xB1E2 : 0xFB68)
+#define COL_LBLUE     (uint16_t)(uiGetThemeLight() ? 0x2213 : 0x7DDF)
 #define COL_YELLOW    (uint16_t)0xFF00   // paused overlay
 #define COL_RED       (uint16_t)0xF800
 #define COL_SPOTIFY_GREEN (uint16_t)0x1DCA
@@ -1715,7 +1717,7 @@ static void uiTask(void* /*param*/) {
     }
     s_had_notif = has_notif;
 
-    if (has_notif) {
+    if (has_notif && view != VIEW_DESK_PET) {
       sprite.fillRoundRect(4, 4, W - 8, 38, 6, COL_CARD);
       sprite.drawRoundRect(4, 4, W - 8, 38, 6, COL_CYAN);
       sprite.fillCircle(14, 15, 3, COL_AMBER);

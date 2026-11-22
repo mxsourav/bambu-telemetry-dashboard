@@ -165,16 +165,24 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
     if any(k in combined for k in lofi_keywords):
         return "Lofi"
 
-    # 5. Explicit Emotional / Sad Ballads / Heartbreak (Vibe 5 - Tears only for truly sad songs)
+    # 5. Explicit Emotional / Sad Ballads / Heartbreak (Vibe 5 - Tears, heartbreak, alcohol)
     sad_keywords = [
-        "sad version", "sad song", "heartbreak", "crying", "tears", "goodbye", "sorrow",
+        "breakup", "break up", "broken", "heartbreak", "crying", "tears", "goodbye", "sorrow",
+        "alone", "lonely", "depressed", "pain", "hurt", "miss you", "farewell", "alcohol",
+        "drunk", "whiskey", "beer", "wine", "sober", "sad version", "sad song", "ballad",
+        "die with a smile", "someone like you", "easy on me", "set fire to the rain",
+        "hello", "rolling in the deep", "someone you loved", "before you go", "drivers license",
+        "traitor", "deja vu", "vampire", "happier than ever", "when the party's over",
+        "glimpse of us", "slow dancing in the dark", "sanctuary", "lose you to love me",
+        "all too well", "cardigan", "exile", "champagne problems", "stay with me",
+        "i'm not the only one", "too good at goodbyes", "adele", "lewis capaldi",
+        "joji", "olivia rodrigo", "conan gray",
         "kal ho naa ho", "bela bose", "2441139", "agar tum saath", "channa mereya",
         "tujhe bhula diya", "tum hi ho", "sunn raha hai", "hamari adhuri", "bekhayali",
         "pachtaoge", "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko",
         "ranjish hi sahi", "faasle", "woh lamhe", "kyun main jaagoon", "chithi na koi",
         "kahani suno", "kaifi khalil", "iraaday", "kinna sona", "mann bharryaa",
-        "shei tumi", "boba tunnel", "someone like you", "easy on me", "someone you loved",
-        "drivers license", "glimpse of us", "slow dancing in the dark", "die with a smile"
+        "shei tumi", "boba tunnel"
     ]
     if any(k in combined for k in sad_keywords):
         return "Ballad"
@@ -188,8 +196,17 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
             return "Rock"
         if "dance" in low_it or "electronic" in low_it or "house" in low_it:
             return "EDM"
-        if "singer" in low_it or "acoustic" in low_it:
+        if "singer" in low_it or "acoustic" in low_it or "blues" in low_it:
             return "Ballad"
+
+    # 7. Instant LLM Query (sub-0.5s) if AI cortex is active
+    if 'g_ai_cortex' in globals() and g_ai_cortex:
+        try:
+            ai_genre = g_ai_cortex.classify_song_genre(artist, title)
+            if ai_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi", "Ballad"]:
+                return ai_genre
+        except Exception:
+            pass
 
     return "Pop"
 
@@ -450,22 +467,22 @@ def upload_album_art(source_path_or_url):
 
 def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True, genre=""):
     global http_session, g_music_genre, g_music_energy, g_audio_analyzer
-    # If live audio beat pattern analyzer is active, prioritize verified beat pattern
+    # If live audio beat pattern analyzer is active, update energy dynamics
     if g_audio_analyzer and g_audio_analyzer.is_playing:
         with g_audio_analyzer.lock:
-            a_genre = g_audio_analyzer.detected_genre
             g_music_energy = g_audio_analyzer.current_energy
-        if a_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi"]:
-            genre = a_genre
-            g_music_genre = a_genre
+            # Only fall back to audio analyzer genre if metadata genre is completely unknown
+            if not g_music_genre and g_audio_analyzer.detected_genre:
+                g_music_genre = g_audio_analyzer.detected_genre
 
+    resolved_genre = genre or g_music_genre or "Pop"
     payload = {
         "title": title,
         "artist": artist,
         "progress_ms": int(pos_ms),
         "duration_ms": int(dur_ms) if dur_ms > 0 else 180000,
         "is_playing": is_playing,
-        "genre": genre or g_music_genre
+        "genre": resolved_genre
     }
     for attempt in range(2):
         try:
@@ -583,11 +600,9 @@ def pc_telemetry_loop():
             last_net_bytes = (net.bytes_recv, net.bytes_sent)
             last_net_time = now
 
-            # Sync live audio beat pattern telemetry if active
+            # Sync live audio beat pattern telemetry if active (energy only; never overwrite locked track genre)
             if g_audio_analyzer and g_audio_analyzer.is_playing:
                 with g_audio_analyzer.lock:
-                    if g_audio_analyzer.detected_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi"]:
-                        g_music_genre = g_audio_analyzer.detected_genre
                     g_music_energy = g_audio_analyzer.current_energy
 
             # Autonomous AI Hardware Sentinel Check
@@ -634,12 +649,15 @@ def spawn_ps_stream():
 def async_lookup_genre(artist, title, current_track_id, track_lock, pos_ms=0, dur_ms=0, is_playing=True):
     """Background genre lookup so the timeline loop never blocks."""
     global g_music_genre
+    # If genre is already identified with confidence, do not disrupt the playing track
+    if g_music_genre and g_music_genre != "Pop":
+        return
     try:
         raw_genre = lookup_genre(artist, title)
         refined = classify_track_genre(artist, title, raw_genre)
-        if track_lock["id"] == current_track_id and refined and refined != g_music_genre:
+        if track_lock["id"] == current_track_id and refined and refined != g_music_genre and refined != "Pop":
             g_music_genre = refined
-            print(f"  [GENRE REFINED] -> {refined} (via iTunes: {raw_genre})")
+            print(f"  [GENRE REFINED] -> {refined} (via catalog: {raw_genre})")
             push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
     except Exception:
         pass

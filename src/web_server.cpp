@@ -780,24 +780,54 @@ static void handlePcStats() {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, server.arg("plain"));
     if (!err) {
-      g_pc_stats.cpu_percent    = !doc["cpu"].isNull() ? doc["cpu"].as<float>() : (!doc["cpu_percent"].isNull() ? doc["cpu_percent"].as<float>() : 0.0f);
-      g_pc_stats.ram_percent    = !doc["ram"].isNull() ? doc["ram"].as<float>() : (!doc["ram_percent"].isNull() ? doc["ram_percent"].as<float>() : 0.0f);
-      g_pc_stats.ram_used_gb    = !doc["ram_used"].isNull() ? doc["ram_used"].as<float>() : (!doc["ram_used_gb"].isNull() ? doc["ram_used_gb"].as<float>() : 0.0f);
-      g_pc_stats.ram_total_gb   = !doc["ram_total"].isNull() ? doc["ram_total"].as<float>() : (!doc["ram_total_gb"].isNull() ? doc["ram_total_gb"].as<float>() : 0.0f);
-      g_pc_stats.gpu_percent    = !doc["gpu"].isNull() ? doc["gpu"].as<float>() : (!doc["gpu_percent"].isNull() ? doc["gpu_percent"].as<float>() : 0.0f);
-      g_pc_stats.gpu_temp_c     = !doc["gpu_temp"].isNull() ? doc["gpu_temp"].as<float>() : (!doc["gpu_temp_c"].isNull() ? doc["gpu_temp_c"].as<float>() : 0.0f);
-      g_pc_stats.net_down_kbs   = !doc["net_down"].isNull() ? doc["net_down"].as<float>() : (!doc["net_down_kbs"].isNull() ? doc["net_down_kbs"].as<float>() : 0.0f);
-      g_pc_stats.net_up_kbs     = !doc["net_up"].isNull() ? doc["net_up"].as<float>() : (!doc["net_up_kbs"].isNull() ? doc["net_up_kbs"].as<float>() : 0.0f);
-      g_pc_stats.weather_temp_c = !doc["temp"].isNull() ? doc["temp"].as<float>() : (!doc["weather_temp_c"].isNull() ? doc["weather_temp_c"].as<float>() : 0.0f);
-      const char* w = !doc["weather"].isNull() ? doc["weather"].as<const char*>() : (!doc["weather_desc"].isNull() ? doc["weather_desc"].as<const char*>() : "");
-      const char* c = doc["city"] | "";
-      strncpy(g_pc_stats.weather_desc, w, sizeof(g_pc_stats.weather_desc) - 1);
-      strncpy(g_pc_stats.city, c, sizeof(g_pc_stats.city) - 1);
-      g_pc_stats.music_vibe = doc["vibe"] | g_pc_stats.music_vibe;  // 0..1 energy
-      if (g_pc_stats.music_vibe < 0.0f || g_pc_stats.music_vibe > 1.0f) g_pc_stats.music_vibe = 0.5f;
-      const char* gn = doc["genre"] | "";
-      if (gn[0]) strncpy(g_pc_stats.music_genre, gn, sizeof(g_pc_stats.music_genre) - 1);
-      g_pc_stats.music_genre[sizeof(g_pc_stats.music_genre) - 1] = 0;
+      if (!doc["cpu"].isNull())              g_pc_stats.cpu_percent    = doc["cpu"].as<float>();
+      else if (!doc["cpu_percent"].isNull())  g_pc_stats.cpu_percent    = doc["cpu_percent"].as<float>();
+
+      if (!doc["ram"].isNull())              g_pc_stats.ram_percent    = doc["ram"].as<float>();
+      else if (!doc["ram_percent"].isNull())  g_pc_stats.ram_percent    = doc["ram_percent"].as<float>();
+
+      if (!doc["ram_used"].isNull())         g_pc_stats.ram_used_gb    = doc["ram_used"].as<float>();
+      else if (!doc["ram_used_gb"].isNull()) g_pc_stats.ram_used_gb   = doc["ram_used_gb"].as<float>();
+
+      if (!doc["ram_total"].isNull())        g_pc_stats.ram_total_gb   = doc["ram_total"].as<float>();
+      else if (!doc["ram_total_gb"].isNull())g_pc_stats.ram_total_gb  = doc["ram_total_gb"].as<float>();
+
+      if (!doc["gpu"].isNull())              g_pc_stats.gpu_percent    = doc["gpu"].as<float>();
+      else if (!doc["gpu_percent"].isNull())  g_pc_stats.gpu_percent    = doc["gpu_percent"].as<float>();
+
+      if (!doc["gpu_temp"].isNull())         g_pc_stats.gpu_temp_c     = doc["gpu_temp"].as<float>();
+      else if (!doc["gpu_temp_c"].isNull())  g_pc_stats.gpu_temp_c     = doc["gpu_temp_c"].as<float>();
+
+      if (!doc["net_down"].isNull())         g_pc_stats.net_down_kbs   = doc["net_down"].as<float>();
+      else if (!doc["net_down_kbs"].isNull())g_pc_stats.net_down_kbs  = doc["net_down_kbs"].as<float>();
+
+      if (!doc["net_up"].isNull())           g_pc_stats.net_up_kbs     = doc["net_up"].as<float>();
+      else if (!doc["net_up_kbs"].isNull())  g_pc_stats.net_up_kbs     = doc["net_up_kbs"].as<float>();
+
+      if (!doc["temp"].isNull())             g_pc_stats.weather_temp_c = doc["temp"].as<float>();
+      else if (!doc["weather_temp_c"].isNull()) g_pc_stats.weather_temp_c = doc["weather_temp_c"].as<float>();
+
+      if (!doc["weather"].isNull()) {
+        const char* w = doc["weather"].as<const char*>();
+        if (w) strncpy(g_pc_stats.weather_desc, w, sizeof(g_pc_stats.weather_desc) - 1);
+        g_pc_stats.weather_desc[sizeof(g_pc_stats.weather_desc) - 1] = 0;
+      }
+      if (!doc["city"].isNull()) {
+        const char* c = doc["city"].as<const char*>();
+        if (c) strncpy(g_pc_stats.city, c, sizeof(g_pc_stats.city) - 1);
+        g_pc_stats.city[sizeof(g_pc_stats.city) - 1] = 0;
+      }
+      if (!doc["vibe"].isNull()) {
+        g_pc_stats.music_vibe = doc["vibe"].as<float>();
+        if (g_pc_stats.music_vibe < 0.0f || g_pc_stats.music_vibe > 1.0f) g_pc_stats.music_vibe = 0.5f;
+      }
+      if (!doc["genre"].isNull()) {
+        const char* gn = doc["genre"].as<const char*>();
+        if (gn && gn[0]) {
+          strncpy(g_pc_stats.music_genre, gn, sizeof(g_pc_stats.music_genre) - 1);
+          g_pc_stats.music_genre[sizeof(g_pc_stats.music_genre) - 1] = 0;
+        }
+      }
       g_pc_stats.last_update_ms = millis();
     }
   }

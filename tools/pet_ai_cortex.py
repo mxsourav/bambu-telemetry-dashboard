@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
     "dahl_flash_model": "zai-org/GLM-5.3-Flash",
     "dahl_reasoning_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
     "fallback_model": "mistralai/mistral-large-4-1t-a52b",
-    "voice_enabled": True,
+    "voice_enabled": False,
     "autonomous_stream_of_consciousness": True,
     "thought_interval_seconds": 180,
     "idle_sleep_seconds": 300,
@@ -326,20 +326,26 @@ class PetAICortex:
         if ai_output.get("reply"):
             print(f"[STAN]: {ai_output.get('reply')}")
 
-        # 1. Morph physical face
+        # 1. Morph physical face (only if music is not active)
         if mood and self.esp_ip:
             self._set_device_mood(mood, duration_s=12)
 
-        # 2. Display on-screen thought banner
-        if display_msg and self.esp_ip:
-            self._show_device_notification(title, display_msg, duration_ms=5500)
-
-        # 3. Voice synthesis
-        if self.cfg.get("voice_enabled", True) and speech:
+        # Note: On-screen notification popups and unprompted voice announcements
+        # are completely disabled per user preference (clean, uninterrupted pet face).
+        if self.cfg.get("voice_enabled", False) and speech:
             self._speak(speech)
 
     def _set_device_mood(self, mood, duration_s=10):
         try:
+            # If pet is currently dancing to music, do not interrupt the groove
+            try:
+                with urllib.request.urlopen(f"http://{self.esp_ip}/api/pet/mood", timeout=0.8) as chk:
+                    st = json.loads(chk.read().decode())
+                    if st.get("music", False):
+                        return
+            except Exception:
+                pass
+
             payload = json.dumps({"mood": mood, "seconds": duration_s}).encode("utf-8")
             req = urllib.request.Request(
                 f"http://{self.esp_ip}/api/pet/mood",
@@ -352,24 +358,16 @@ class PetAICortex:
             pass
 
     def _show_device_notification(self, title, msg, duration_ms=4500):
-        try:
-            payload = json.dumps({"title": title, "msg": msg, "duration": duration_ms}).encode("utf-8")
-            req = urllib.request.Request(
-                f"http://{self.esp_ip}/api/notify",
-                data=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=1.0) as _:
-                pass
-        except Exception:
-            pass
+        # Fully suppressed to keep pet face clean
+        pass
 
     def _speak(self, text):
         def _tts():
             try:
                 clean = text.replace("'", "").replace('"', "")
                 ps = f"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak('{clean}')"
-                subprocess.run(["powershell", "-NoProfile", "-Command", ps], timeout=6.0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                flags = 0x08000000 if sys.platform == "win32" else 0
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps], timeout=6.0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
             except Exception:
                 pass
         threading.Thread(target=_tts, daemon=True).start()
@@ -569,6 +567,54 @@ class PetAICortex:
                 results["dahl"] = {"status": "error", "latency_ms": dt, "error": str(e)}
 
         return results
+
+    def classify_song_genre(self, artist, title):
+        """Ultra-fast (sub-0.5s) LLM classification of musical genre using NVIDIA NIM."""
+        if not artist and not title:
+            return "Pop"
+        cache_key = f"{artist} - {title}".strip().lower()
+        if not hasattr(self, "_genre_cache"):
+            self._genre_cache = {}
+        if cache_key in self._genre_cache:
+            return self._genre_cache[cache_key]
+
+        prompt = (
+            f"Classify music genre of: \"{title}\" by \"{artist}\".\n"
+            "Return ONLY JSON: {\"genre\": \"Hip-Hop/Rap\"|\"Rock\"|\"EDM\"|\"Lofi\"|\"Ballad\"|\"Pop\"}\n"
+            "Rules:\n"
+            "- Sad, breakup, heartbreak, crying, emotional slow ballad -> \"Ballad\"\n"
+            "- Rap, drill, trap, 808, hip hop -> \"Hip-Hop/Rap\"\n"
+            "- House, electro, dance, techno, edm -> \"EDM\"\n"
+            "- Rock, metal, heavy guitar, punk -> \"Rock\"\n"
+            "- Lofi, chillhop, ambient, study beats -> \"Lofi\"\n"
+            "- Commercial upbeat -> \"Pop\""
+        )
+        try:
+            url = f"{self.cfg.get('nvidia_base_url', 'https://integrate.api.nvidia.com/v1')}/chat/completions"
+            key = self.cfg.get("nvidia_api_key", "")
+            payload = {
+                "model": self.cfg.get("primary_reflex_model", "nvidia/nemotron-3.5-bolt-e4b"),
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 30,
+                "temperature": 0.1
+            }
+            resp = self.session.post(
+                url,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=3.5
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                content = data["choices"][0]["message"].get("content", "")
+                parsed = self._extract_json(content)
+                if parsed and parsed.get("genre"):
+                    g = parsed["genre"]
+                    self._genre_cache[cache_key] = g
+                    return g
+        except Exception:
+            pass
+        return "Pop"
 
     def inspect_music_vibe(self, title, artist, genre, bpm, energy):
         if not title or title == self.last_music_title:

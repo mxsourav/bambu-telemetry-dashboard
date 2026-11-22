@@ -200,9 +200,25 @@ static float vibeEnergy() {
 // 1 = cool drill/trap nod, 2 = hype party/EDM, 3 = rock headbang,
 // 4 = chill lofi sway, 5 = sad ballad tears, 0 = default pop groove.
 static uint8_t vibeStyleFromGenre() {
+  // 1. Direct explicit track genre classification takes absolute priority
+  if (g_spotify.genre[0]) {
+    char g[64] = {0};
+    strncpy(g, g_spotify.genre, sizeof(g) - 1);
+    for (char* c = g; *c; ++c) *c = (char)tolower(*c);
+    if (strstr(g, "ballad") || strstr(g, "breakup") || strstr(g, "heartbreak")) return 5;
+    if (strstr(g, "drill") || strstr(g, "trap") || strstr(g, "hip-hop") || strstr(g, "hip hop") || strstr(g, "rap")) return 1;
+    if (strstr(g, "edm") || strstr(g, "dance") || strstr(g, "house") || strstr(g, "techno") || strstr(g, "electro") || strstr(g, "party") || strstr(g, "club")) return 2;
+    if (strstr(g, "rock") || strstr(g, "metal") || strstr(g, "punk") || strstr(g, "grunge")) return 3;
+    if (strstr(g, "lofi") || strstr(g, "lo-fi") || strstr(g, "chill") || strstr(g, "ambient") || strstr(g, "acoustic")) return 4;
+    if (strstr(g, "pop")) return 0;
+  }
+
   char buf[512] = {0};
-  snprintf(buf, sizeof(buf), "%s %s %s %s",
-           g_spotify.genre, g_pc_stats.music_genre, g_spotify.artist, g_spotify.title);
+  if (g_spotify.title[0] || g_spotify.artist[0]) {
+    snprintf(buf, sizeof(buf), "%s %s %s", g_spotify.genre, g_spotify.artist, g_spotify.title);
+  } else if (g_pc_stats.music_genre[0]) {
+    strncpy(buf, g_pc_stats.music_genre, sizeof(buf) - 1);
+  }
   for (char* c = buf; *c; ++c) *c = (char)tolower(*c);
 
   // 1. EDM / Dance / Rave / Party / Club / DJ (Priority 1: Party tracks ALWAYS vibe joyful!)
