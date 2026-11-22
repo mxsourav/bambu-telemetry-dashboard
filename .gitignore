@@ -18,6 +18,13 @@ scratch*
 graphify-out/
 tools/current_thumb.jpg
 
+# Allow documentation assets and web app icons
+!docs/images/*.png
+!docs/images/*.jpg
+!docs/images/*.svg
+!web/*.png
+!web/*.svg
+
 tools/.sync.lock
 tools/desk_sync.log
 tools/current_thumb_raw.dat

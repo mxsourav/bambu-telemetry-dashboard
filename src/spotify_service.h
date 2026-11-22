@@ -8,8 +8,7 @@ struct SpotifyTrackInfo {
   uint32_t progress_ms      = 0;
   uint32_t duration_ms      = 0;
   char     image_url[128]   = {0};
-  char     genre[16]        = {0};   // artist genre from Spotify API ("drill",
-                                      // "hip hop"...) -> desk pet dance style
+  char     genre[32]        = {0};   // artist genre ("drill", "hip-hop", "ballad", "lofi", "rock", "edm", "pop")
   char     lyric_cur[80]    = {0};
   char     lyric_next[80]   = {0};
   uint32_t last_update_ms   = 0;

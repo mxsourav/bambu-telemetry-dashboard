@@ -23,7 +23,24 @@ import threading
 import psutil
 from PIL import Image, ImageOps, ImageFilter
 
-DEVICE_IP = "192.168.0.154"
+def find_device_ip():
+    for ip in ["192.168.137.171", "192.168.0.154"]:
+        try:
+            with urllib.request.urlopen(f"http://{ip}/api/status", timeout=0.6) as r:
+                if r.status == 200: return ip
+        except Exception:
+            pass
+    try:
+        out = subprocess.check_output("arp -a", shell=True).decode()
+        for line in out.splitlines():
+            if "b0-cb-d8-0a-a9-54" in line.lower():
+                parts = line.split()
+                if parts: return parts[0]
+    except Exception:
+        pass
+    return "192.168.137.171"
+
+DEVICE_IP = os.environ.get("DEVICE_IP", find_device_ip())
 SPOTIFY_NOW_URL = f"http://{DEVICE_IP}/api/spotify/now"
 SPOTIFY_ART_TRIGGER = f"http://{DEVICE_IP}/api/spotify/testart?url=/art.jpg"
 SPOTIFY_COVER_URL = f"http://{DEVICE_IP}/api/spotify/cover"
@@ -36,13 +53,171 @@ PC_STATS_URL = f"http://{DEVICE_IP}/api/pc/stats"
 # track name (no extra API calls); 0 = nothing playing.
 g_music_energy = 0.5
 
+def classify_track_genre(artist, title, raw_itunes_genre=""):
+    """
+    Bulletproof multi-tiered music genre & vibe classifier.
+    Handles Desi Hip-Hop (DHH), Punjabi drill, Bengali rock, Bollywood sad ballads,
+    Western hip-hop/rock/pop, EDM, and Lo-Fi.
+    """
+    combined = f"{artist or ''} {title or ''} {raw_itunes_genre or ''}".lower()
+
+    # 1. Emotional / Sad Ballads / Heartbreak / Acoustic Tears (Vibe 5 - Watering Eyes)
+    sad_keywords = [
+        "sad", "ballad", "heartbreak", "crying", "cry", "tears", "emotional", "alone",
+        "hurt", "broken", "goodbye", "sorrow", "lonely", "melancholy", "unplugged",
+        "kal ho naa ho", "bela bose", "2441139", "anjan dutt", "anjana", "agar tum saath",
+        "kabira", "channa mereya", "tujhe bhula", "sukoon", "maula mere", "tum hi ho",
+        "sunn raha hai", "hamari adhuri", "ae dil hai mushkil", "bekhayali", "pachtaoge",
+        "duaa", "alvida", "tadap tadap", "bhula dena", "phir bhi tumko", "hasi", "o re piya",
+        "kaise hua", "kho gaye hum", "ranjish", "faasle", "woh lamhe", "kyun main jaagoon",
+        "abhi mujh mein", "jeena jeena", "tera yaar hoon", "roke na ruke", "chithi na koi",
+        "kahani suno", "kaifi khalil", "iraaday", "bulleya", "kinna sona", "mann bharryaa",
+        "satranga", "pehle bhi main", "saari duniya jalaa", "o maahi", "ve kamleya",
+        "tu hai kahan", "faheem abdullah", "jhelum", "luka chuppi", "shei tumi",
+        "ayub bachchu", "amake amar moto", "boba tunnel", "anupam roy", "baarishein",
+        "alag aasmaan", "husn", "anuv jain", "mishri", "arijit", "atif aslam",
+        "mohit chauhan", "jubin nautiyal", "jagjit singh", "mehdi hassan", "nusrat",
+        "rahat fateh", "pankaj udhas", "b praak", "prateek kuhad", "adele",
+        "someone like you", "easy on me", "lewis capaldi", "someone you loved",
+        "before you go", "olivia rodrigo", "drivers license", "traitor", "joji",
+        "glimpse of us", "slow dancing in the dark", "billie eilish", "ocean eyes",
+        "what was i made for", "lovely", "lana del rey", "mitski", "arcade",
+        "conan gray", "heather", "die with a smile", "let her go", "passenger",
+        "fix you", "the scientist", "sam smith", "dean lewis", "james arthur", "kodaline"
+    ]
+    if any(k in combined for k in sad_keywords):
+        return "Ballad"
+
+    # 2. Hip-Hop / Drill / Trap / Rap / Desi Hip-Hop (Vibe 1 - Swagger 11px nod)
+    hiphop_keywords = [
+        "hip-hop", "hip hop", "rap", "drill", "trap", "808", "grime", "urban", "r&b",
+        "boom bap", "freestyle", "cypher", "sambata", "palti fire", "lal ranga",
+        "shob choritro", "bhooter raja", "juta abishkar", "yeda yung", "yung dsa",
+        "shaggy dushing", "blood tears", "rehmani keeda", "emiway", "bantai", "divine",
+        "mc stan", "krsna", "kr$na", "raftaar", "seedhe maut", "calm", "encore abj",
+        "karan aujla", "aujla", "sidhu moose", "moosewala", "shubh", "ap dhillon",
+        "wazir patar", "talha anjum", "talhah yunus", "young stunners", "faris shafi",
+        "badshah", "honey singh", "yo yo honey", "king", "mc square", "paradox",
+        "gravity", "fotty seven", "bali", "bella", "anirudh", "hukum", "badass",
+        "jailer", "leo", "vikram", "rolex", "master", "vathi", "naa ready",
+        "tauba tauba", "devara", "fear song", "drake", "travis scott", "travis",
+        "21 savage", "metro boomin", "playboi carti", "carti", "lil uzi", "uzi",
+        "future", "kendrick", "eminem", "kanye", "yeat", "central cee", "pop smoke",
+        "fivio", "stormzy", "50 cent", "snoop", "j. cole", "weeknd", "post malone",
+        "juice wrld", "xxxtentacion", "lil baby", "gunna", "don toliver", "asap rocky"
+    ]
+    if any(k in combined for k in hiphop_keywords):
+        return "Hip-Hop/Rap"
+
+    # 3. Rock / Metal / Punk / Bengali Rock (Vibe 3 - 12px Hard Headbang)
+    rock_keywords = [
+        "rock", "metal", "punk", "grunge", "hard rock", "heavy metal", "metalcore",
+        "fossils", "rupam islam", "rupam", "cactus", "krosswindz", "moheener ghoraguli",
+        "lakkhichhara", "aaro ekbar", "hasnuhana", "the local train", "indian ocean",
+        "parikrama", "agnee", "euphoria", "linkin park", "linkin", "nirvana",
+        "metallica", "queen", "ac/dc", "slipknot", "system of a down", "soad",
+        "green day", "foo fighters", "rammstein", "arctic monkeys", "strokes",
+        "radiohead", "evanescence", "avenged sevenfold", "bring me the horizon",
+        "guns n' roses", "bon jovi", "led zeppelin", "pink floyd",
+        "red hot chili peppers", "rhcp", "muse", "iron maiden", "black sabbath",
+        "disturbed", "korn", "limp bizkit", "papa roach", "three days grace",
+        "breaking benjamin", "skillet", "my chemical romance", "paramore"
+    ]
+    if any(k in combined for k in rock_keywords):
+        return "Rock"
+
+    # 4. Lo-Fi / Chill / Acoustic (Vibe 4 - Gentle Mellow Sway)
+    lofi_keywords = [
+        "lofi", "lo-fi", "chillhop", "sleep beats", "rain beats", "slowed + reverb",
+        "slowed and reverb", "chilledcow", "lofi girl", "study beats", "ambient",
+        "meditation", "piano solo", "chill beats"
+    ]
+    if any(k in combined for k in lofi_keywords):
+        return "Lofi"
+
+    # 5. EDM / Dance / Rave / Party (Vibe 2 - Fast Upward Pump)
+    edm_keywords = [
+        "edm", "dance", "house", "techno", "electro", "trance", "club", "rave",
+        "hardstyle", "remix", "garrix", "avicii", "marshmello", "skrillex",
+        "dj snake", "tiesto", "alesso", "guetta", "calvin harris", "alan walker",
+        "chainsmokers", "zedd", "kygo", "hardwell", "nucleya", "ritviz",
+        "ghungroo", "kar gayi chull", "garmi", "kala chashma", "aankh marey",
+        "chogada", "saturday saturday", "nashe si chadh gayi", "kamariya",
+        "jhoome jo pathaan", "besharam rang"
+    ]
+    if any(k in combined for k in edm_keywords):
+        return "EDM"
+
+    # 6. Fallback based on raw iTunes primaryGenreName
+    if raw_itunes_genre:
+        low_it = raw_itunes_genre.lower()
+        if "hip-hop" in low_it or "rap" in low_it or "r&b" in low_it:
+            return "Hip-Hop/Rap"
+        if "rock" in low_it or "metal" in low_it or "alternative" in low_it:
+            return "Rock"
+        if "dance" in low_it or "electronic" in low_it or "house" in low_it:
+            return "EDM"
+        if "singer" in low_it or "acoustic" in low_it:
+            return "Ballad"
+
+    return "Pop"
+
+def clean_music_meta(artist, title):
+    if not title:
+        return artist or "", "", ""
+
+    # Filter out dummy stream noise
+    if title in ["Spotify - Unknown", "Unknown", "Waiting for music..."]:
+        return "", "", ""
+
+    # 1. Detect genre using the comprehensive classifier
+    detected_genre = classify_track_genre(artist, title, "")
+
+    # 2. Extract best title segment from '|' separated YouTube titles
+    segments = [s.strip() for s in title.split("|") if s.strip()]
+    chosen_title = title
+    if len(segments) > 1:
+        def seg_score(s):
+            ascii_chars = sum(1 for c in s if 32 <= ord(c) <= 126)
+            total = max(1, len(s))
+            ratio = ascii_chars / total
+            low = s.lower()
+            if any(t in low for t in ["official video", "lyric video", "full song", "bangla new song", "hindi song", "video 202", "audio 202", "@"]):
+                return -10.0
+            return ratio * 10.0 + min(len(s), 25)
+
+        best = max(segments, key=seg_score)
+        if seg_score(best) > 0:
+            chosen_title = best
+
+    # If title has "Artist - Song", separate them if artist is generic
+    if " - " in chosen_title and (not artist or artist.lower() in ["youtube", "unknown", "spotify"]):
+        parts = chosen_title.split(" - ", 1)
+        artist = parts[0].strip()
+        chosen_title = parts[1].strip()
+
+    # Remove [Official Video], (Audio), (Full Song), etc.
+    chosen_title = re.sub(r'[\(\[\{].*?(?:video|official|audio|remake|song|remix|hd|4k|8k|prod\.).*?[\)\]\}]', '', chosen_title, flags=re.IGNORECASE).strip()
+    
+    # Remove non-ASCII characters if mostly ASCII
+    ascii_title = "".join(c for c in chosen_title if 32 <= ord(c) <= 126).strip(" -|:")
+    if len(ascii_title) >= 3:
+        chosen_title = ascii_title
+
+    # Clean artist
+    clean_artist = "".join(c for c in (artist or "") if 32 <= ord(c) <= 126).strip(" -|:")
+    if not clean_artist:
+        clean_artist = "Music"
+
+    return clean_artist, chosen_title, detected_genre
+
 def track_energy(artist, title):
     h = sum(ord(c) for c in (artist or "") + (title or ""))
     return round(0.3 + (h % 7) / 10.0, 2)  # 0.3 .. 0.9
 
 def lookup_genre(artist, title):
     """Genre via the same iTunes search used for artwork (no auth needed).
-    Returns e.g. 'Drill', 'Hip-Hop/Rap', 'Metal' or ''."""
+    Returns e.g. 'Hip-Hop/Rap', 'Rock', 'Bollywood' or ''."""
     try:
         clean_title = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title or '').replace('|', ' ').strip()
         clean_artist = (artist or '').split(',')[0].split('&')[0].replace('Music', '').strip()
@@ -237,19 +412,27 @@ def upload_album_art(source_path_or_url):
         print(f"  [ART ERROR] {e}")
     return False
 
-def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True):
-    try:
-        payload = {
-            "title": title,
-            "artist": artist,
-            "progress_ms": int(pos_ms),
-            "duration_ms": int(dur_ms) if dur_ms > 0 else 180000,
-            "is_playing": is_playing
-        }
-        resp = http_session.post(SPOTIFY_NOW_URL, json=payload, timeout=1.5)
-        return resp.status_code == 200
-    except Exception:
-        return False
+def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True, genre=""):
+    global http_session
+    payload = {
+        "title": title,
+        "artist": artist,
+        "progress_ms": int(pos_ms),
+        "duration_ms": int(dur_ms) if dur_ms > 0 else 180000,
+        "is_playing": is_playing,
+        "genre": genre or g_music_genre
+    }
+    for attempt in range(2):
+        try:
+            resp = http_session.post(SPOTIFY_NOW_URL, json=payload, timeout=1.8)
+            return resp.status_code == 200
+        except Exception:
+            try:
+                http_session = requests.Session()
+                http_session.mount("http://", requests.adapters.HTTPAdapter(pool_connections=5, pool_maxsize=10, max_retries=1))
+            except Exception:
+                pass
+    return False
 
 def async_fetch_hd_art(artist, title, current_track_id, track_lock):
     """Background worker: searches iTunes / YouTube for Ultra-HD art without blocking the timeline loop."""
@@ -387,12 +570,18 @@ def spawn_ps_stream():
         creationflags=creationflags
     )
 
-def async_lookup_genre(artist, title):
+def async_lookup_genre(artist, title, current_track_id, track_lock, pos_ms=0, dur_ms=0, is_playing=True):
     """Background genre lookup so the timeline loop never blocks."""
     global g_music_genre
-    genre = lookup_genre(artist, title)
-    if genre:
-        g_music_genre = genre
+    try:
+        raw_genre = lookup_genre(artist, title)
+        refined = classify_track_genre(artist, title, raw_genre)
+        if track_lock["id"] == current_track_id and refined and refined != g_music_genre:
+            g_music_genre = refined
+            print(f"  [GENRE REFINED] -> {refined} (via iTunes: {raw_genre})")
+            push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
+    except Exception:
+        pass
 
 def main():
     global g_music_energy, g_music_genre
@@ -408,7 +597,10 @@ def main():
 
     last_track_id = ""
     last_art_track = ""
+    last_is_playing = None
     track_lock = {"id": ""}
+    idle_count = 0
+    last_push_time = 0.0
     ps_proc = None
 
     while True:
@@ -426,21 +618,24 @@ def main():
                 continue
 
             if line == "IDLE":
-                if last_track_id:
-                    push_spotify_now("", "", 0, 0, False)
+                idle_count += 1
+                if idle_count >= 5 and last_track_id:
+                    push_spotify_now("", "", 0, 0, False, "")
                     last_track_id = ""
+                    last_is_playing = False
                     track_lock["id"] = ""
                     g_music_energy = 0.0
                     g_music_genre = ""
                 continue
+            idle_count = 0
 
             parts = line.split("::::")
             if len(parts) >= 2:
                 prefix_parts = parts[0].split("::")
                 has_thumb = prefix_parts[0] == "THUMB"
                 is_playing = prefix_parts[1] == "PLAY" if len(prefix_parts) >= 2 else True
-                artist = prefix_parts[2].strip() if len(prefix_parts) >= 3 else prefix_parts[-1].strip()
-                title = parts[1].strip()
+                raw_artist = prefix_parts[2].strip() if len(prefix_parts) >= 3 else prefix_parts[-1].strip()
+                raw_title = parts[1].strip()
 
                 try:
                     pos_ms = int(float(parts[2])) if len(parts) >= 3 else 0
@@ -452,26 +647,38 @@ def main():
                 except Exception:
                     dur_ms = 0
 
+                artist, title, genre_hint = clean_music_meta(raw_artist, raw_title)
+                if not title:
+                    continue
+
                 track_id = f"{artist} - {title}"
                 track_lock["id"] = track_id
-                g_music_energy = track_energy(artist, title) if is_playing else 0.0
-                threading.Thread(
-                    target=async_lookup_genre,
-                    args=(artist, title),
-                    daemon=True
-                ).start()
+                now_ts = time.time()
+                play_state_changed = (is_playing != last_is_playing)
 
-                if track_id != last_track_id:
+                # Instant push on track transition OR Play/Pause state change!
+                if track_id != last_track_id or play_state_changed:
                     last_track_id = track_id
-                    print(f"\n[NOW PLAYING] {artist} - {title} (Playing: {is_playing})")
-                    push_spotify_now(title, artist, pos_ms, dur_ms, is_playing)
+                    last_is_playing = is_playing
+                    last_push_time = now_ts
+                    # Reset and immediately classify genre for the new track
+                    g_music_genre = genre_hint or "Pop"
+                    g_music_energy = track_energy(artist, title) if is_playing else 0.0
+                    print(f"\n[MEDIA EVENT] {artist} - {title} (Playing: {is_playing}, Genre: {g_music_genre})")
+                    push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
 
-                    if track_id != last_art_track:
+                    # Background lookup for online catalog verification
+                    threading.Thread(
+                        target=async_lookup_genre,
+                        args=(artist, title, track_id, track_lock, pos_ms, dur_ms, is_playing),
+                        daemon=True
+                    ).start()
+
+                    if track_id != last_art_track and is_playing:
                         last_art_track = track_id
-                        # 1. ONLY upload local thumbnail if this song actually HAS a fresh thumbnail!
+                        # Non-blocking background art upload so the timeline stream never hangs
                         if has_thumb and os.path.exists(THUMB_RAW_PATH):
-                            upload_album_art(THUMB_RAW_PATH)
-                            # Background HD upgrade in case local thumbnail is low-res
+                            threading.Thread(target=upload_album_art, args=(THUMB_RAW_PATH,), daemon=True).start()
                             t = threading.Thread(
                                 target=async_fetch_hd_art,
                                 args=(artist, title, track_id, track_lock),
@@ -479,8 +686,6 @@ def main():
                             )
                             t.start()
                         else:
-                            # 2. No local thumbnail (e.g. YouTube in Brave): fetch online HD art directly!
-                            # NEVER upload stale leftover thumb from previous track!
                             t = threading.Thread(
                                 target=async_fetch_hd_art,
                                 args=(artist, title, track_id, track_lock),
@@ -488,8 +693,10 @@ def main():
                             )
                             t.start()
                 else:
-                    # Update live progress bar and play/pause state
-                    push_spotify_now(title, artist, pos_ms, dur_ms, is_playing)
+                    # Update live progress bar and play/pause state regularly so ESP32 keepalive stays active
+                    if is_playing and (now_ts - last_push_time >= 1.8):
+                        last_push_time = now_ts
+                        push_spotify_now(title, artist, pos_ms, dur_ms, is_playing, g_music_genre)
 
         except KeyboardInterrupt:
             print("\nExiting Desk Sync.")

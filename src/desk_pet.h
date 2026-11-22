@@ -19,7 +19,8 @@ enum PetMood : uint8_t {
   PET_MOOD_HAPPY,       // Cheerful squint (^ ^)
   PET_MOOD_WINK,        // Playful wink (; ^)
   PET_MOOD_SLEEPY,      // Heavy drowsy eyelids
-  PET_MOOD_SLEEPING,    // Resting horizontal lines (- -)
+  PET_MOOD_SLEEPING,    // Normal sleep: peaceful curved crescents (︶ ︶) + resting smile + Zzz
+  PET_MOOD_DEEP_SLEEP,  // Deep sleep: peaceful crescents + parted mouth + nose bubble (😪) + Zzz
   PET_MOOD_SURPRISED,   // Alert wide eyes (O O)
   // ---- v2 emotions (driven by pet_mood.cpp / web API) ----
   PET_MOOD_ANGRY,       // Slanted brows, narrowed eyes, red blush ramp
@@ -29,17 +30,19 @@ enum PetMood : uint8_t {
   PET_MOOD_SICK,        // Wavy mouth, greenish blush, droopy lids
   PET_MOOD_FEVER,       // Sick + deep red blush + forehead sweat
   PET_MOOD_COLD,        // Shivering jitter, blue blush, squinted eyes
-  PET_MOOD_HOT,         // Panting, orange blush, sweat drop
+  PET_MOOD_HOT,         // Overheating: panting, orange blush, sweat drop
   PET_MOOD_EXCITED,     // Big bouncy happy arcs + pink blush
   PET_MOOD_DANCING,     // Music vibe: bounce to the beat + happy arcs
   PET_MOOD_SCARED,      // Tiny wide eyes + tremble + small "o" mouth
-  PET_MOOD_THINKING     // Eyes drift up-left, slow thoughtful breathing
+  PET_MOOD_THINKING,    // Eyes drift up-left, slow thoughtful breathing
+  PET_MOOD_YAWN         // Drowsy stretch, mouth opens wide in cute yawn
 };
 
 void deskPetInit();
 void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms);
 void deskPetReactClick();
 void deskPetSetMood(PetMood mood, uint32_t duration_ms = 0);
+void deskPetYawn();
 PetMood deskPetGetMood();
 
 // ---- v2 mood-engine hooks ----

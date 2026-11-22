@@ -54,11 +54,11 @@ static uint8_t vibeStyleFromGenre();   // fwd: defined below (helpers)
 static void applyMoodVisuals(PetMood mood, float anger_pct, float vibe_energy) {
   switch (mood) {
     case PET_MOOD_ANGRY:
-      deskPetSetTint(235, 40, 40, (uint8_t)(70 + anger_pct * 1.8f));
+      deskPetSetTint(240, 32, 45, (uint8_t)(55 + anger_pct * 1.9f));
       deskPetSetBounce(0, 0);
       break;
     case PET_MOOD_FRUSTRATED:
-      deskPetSetTint(220, 30, 30, (uint8_t)(80 + anger_pct * 1.7f));
+      deskPetSetTint(235, 25, 40, (uint8_t)(95 + anger_pct * 1.6f));
       deskPetSetBounce(0, 0);
       break;
     case PET_MOOD_CRYING:
@@ -112,6 +112,10 @@ static void applyMoodVisuals(PetMood mood, float anger_pct, float vibe_energy) {
           deskPetSetTint(140, 170, 255, 80);
           deskPetSetBounce(1.5f, 0.9f);
           break;
+        case 5:   // emotional / ballad: deep cyan-blue cheeks, gentle slow sway
+          deskPetSetTint(90, 140, 240, 110);
+          deskPetSetBounce(1.5f, 0.8f);
+          break;
         default:  // hip-hop / pop: standard groove scaled by energy
           deskPetSetTint(255, 110, 170, 100);
           deskPetSetBounce(3.0f + vibe_energy * 4.0f, 2.0f + vibe_energy * 1.2f);
@@ -135,24 +139,12 @@ static void applyMoodVisuals(PetMood mood, float anger_pct, float vibe_energy) {
 }
 
 // ---------------------------------------------------------------------
-// Mood-entry sound effects (rate limited; respects sound settings)
+// Mood-entry sound effects: Muted per user requirement (no random beeps!).
+// Buzzer is strictly reserved for boot chirp and deliberate button clicks.
 // ---------------------------------------------------------------------
 static void moodSoundEdge(PetMood prev, PetMood now) {
-  if (prev == now) return;
-  if (!g_settings.pet_sounds || getBuzzerMode() == 2) return;
-  uint32_t ms = millis();
-  if (ms - s_last_sound_ms < 3000) return;
-  s_last_sound_ms = ms;
-
-  switch (now) {
-    case PET_MOOD_EXCITED: startBeepPattern(2); break;           // fanfare
-    case PET_MOOD_ANGRY:     playHardwareBeep(BUZZER_FREQ_LO, 90); break;
-    case PET_MOOD_FRUSTRATED: playHardwareBeep(900, 110); break;
-    case PET_MOOD_CRYING:    playHardwareBeep(1400, 110); break; // sad low tone
-    case PET_MOOD_SCARED:    playHardwareBeep(2500, 60); break;  // startled squeak
-    case PET_MOOD_DANCING:   beepPet(); break;                   // happy chirp
-    default: break;
-  }
+  (void)prev;
+  (void)now;
 }
 
 // ---------------------------------------------------------------------
@@ -206,31 +198,113 @@ static float vibeEnergy() {
 
 // Map the track genre to a dance style:
 // 1 = cool drill/trap nod, 2 = hype rave, 3 = rock headbang,
-// 4 = chill lofi sway, 0 = default groove.
-// Genre source: Spotify artist API on-device (primary); the PC sync
-// script's lookup is the fallback while playing YouTube/media outside
-// Spotify (where Spotify has no metadata).
+// 4 = chill lofi sway, 5 = sad ballad tears, 0 = default pop groove.
 static uint8_t vibeStyleFromGenre() {
-  const char* g = g_spotify.genre[0] ? g_spotify.genre
-                                     : g_pc_stats.music_genre;
-  if (!g[0]) return 0;
-  if (g == g_pc_stats.music_genre && !pcStatsIsActive()) return 0;
-  char buf[24];
-  strncpy(buf, g, sizeof(buf) - 1);
-  buf[sizeof(buf) - 1] = 0;
+  char buf[512] = {0};
+  snprintf(buf, sizeof(buf), "%s %s %s %s",
+           g_spotify.genre, g_pc_stats.music_genre, g_spotify.artist, g_spotify.title);
   for (char* c = buf; *c; ++c) *c = (char)tolower(*c);
-  if (strstr(buf, "drill") || strstr(buf, "trap") || strstr(buf, "grime") ||
-      strstr(buf, "dubstep") || strstr(buf, "getto") || strstr(buf, "ghetto")) return 1;
+
+  // 5. Emotional / Sad / Ballads / Heartbreak / Acoustic Tears / Sad Lo-Fi (Checked FIRST so Sad songs get tears!)
+  if (strstr(buf, "sad") || strstr(buf, "crying") || strstr(buf, "cry") ||
+      strstr(buf, "heartbreak") || strstr(buf, "emotional") || strstr(buf, "ballad") ||
+      strstr(buf, "alone") || strstr(buf, "hurt") || strstr(buf, "tears") ||
+      strstr(buf, "goodbye") || strstr(buf, "broken") || strstr(buf, "die with a smile") ||
+      strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
+      strstr(buf, "anjan dutt") || strstr(buf, "anjana") || strstr(buf, "agar tum saath") ||
+      strstr(buf, "kabira") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula") ||
+      strstr(buf, "sukoon") || strstr(buf, "maula mere maula") || strstr(buf, "arijit") ||
+      strstr(buf, "tum hi ho") || strstr(buf, "atif aslam") || strstr(buf, "mohit chauhan") ||
+      strstr(buf, "jubin") || strstr(buf, "qismat") || strstr(buf, "filhall") ||
+      strstr(buf, "ranjha") || strstr(buf, "tu jaane na") || strstr(buf, "bekhayali") ||
+      strstr(buf, "judai") || strstr(buf, "pachtaoge") || strstr(buf, "duaa") ||
+      strstr(buf, "alvida") || strstr(buf, "tadap tadap") || strstr(buf, "bhula dena") ||
+      strstr(buf, "phir bhi tumko") || strstr(buf, "hasi") || strstr(buf, "sunn raha hai") ||
+      strstr(buf, "hamari adhuri") || strstr(buf, "o re piya") || strstr(buf, "kaise hua") ||
+      strstr(buf, "ae dil hai mushkil") || strstr(buf, "kho gaye hum") || strstr(buf, "ranjish") ||
+      strstr(buf, "faasle") || strstr(buf, "woh lamhe") || strstr(buf, "kyun main jaagoon") ||
+      strstr(buf, "abhi mujh mein") || strstr(buf, "jeena jeena") || strstr(buf, "tera yaar hoon") ||
+      strstr(buf, "roke na ruke") || strstr(buf, "chithi na koi") || strstr(buf, "jagjit") ||
+      strstr(buf, "mehdi hassan") || strstr(buf, "nusrat") || strstr(buf, "rahat") ||
+      strstr(buf, "ali sethi") || strstr(buf, "kahani suno") || strstr(buf, "kaifi khalil") ||
+      strstr(buf, "iraaday") || strstr(buf, "bulleya") || strstr(buf, "kinna sona") ||
+      strstr(buf, "mann bharryaa") || strstr(buf, "satranga") || strstr(buf, "pehle bhi main") ||
+      strstr(buf, "saari duniya jalaa") || strstr(buf, "o maahi") || strstr(buf, "ve kamleya") ||
+      strstr(buf, "tu hai kahan") || strstr(buf, "faheem abdullah") || strstr(buf, "jhelum") ||
+      strstr(buf, "luka chuppi") || strstr(buf, "shei tumi") || strstr(buf, "ayub bachchu") ||
+      strstr(buf, "amake amar moto") || strstr(buf, "boba tunnel") || strstr(buf, "anupam roy") ||
+      strstr(buf, "adele") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
+      strstr(buf, "lewis capaldi") || strstr(buf, "olivia rodrigo") || strstr(buf, "drivers license") ||
+      strstr(buf, "joji") || strstr(buf, "glimpse of us") || strstr(buf, "billie eilish") ||
+      strstr(buf, "ocean eyes") || strstr(buf, "what was i made for") || strstr(buf, "lana del rey") ||
+      strstr(buf, "mitski") || strstr(buf, "arcade") || strstr(buf, "heather") ||
+      strstr(buf, "conan gray") || strstr(buf, "sorrow") || strstr(buf, "pain") ||
+      strstr(buf, "lonely") || strstr(buf, "melancholy")) return 5;
+
+  // 1. Hip-Hop / Rap / Drill / Trap / Urban / R&B / Desi Hip-Hop
+  if (strstr(buf, "hip-hop") || strstr(buf, "hip hop") || strstr(buf, "rap") ||
+      strstr(buf, "drill") || strstr(buf, "trap") || strstr(buf, "grime") ||
+      strstr(buf, "808") || strstr(buf, "r&b") || strstr(buf, "urban") ||
+      strstr(buf, "sambata") || strstr(buf, "palti fire") || strstr(buf, "lal ranga") ||
+      strstr(buf, "shob choritro") || strstr(buf, "bhooter raja") || strstr(buf, "juta abishkar") ||
+      strstr(buf, "anirudh") || strstr(buf, "hukum") || strstr(buf, "badass") ||
+      strstr(buf, "jailer") || strstr(buf, "leo") || strstr(buf, "vikram") ||
+      strstr(buf, "rolex") || strstr(buf, "master") || strstr(buf, "vathi") ||
+      strstr(buf, "tauba tauba") || strstr(buf, "karan aujla") || strstr(buf, "aujla") ||
+      strstr(buf, "cheques") || strstr(buf, "elevated") || strstr(buf, "we rollin") ||
+      strstr(buf, "no love") || strstr(buf, "brown munde") || strstr(buf, "insane") ||
+      strstr(buf, "winning speech") || strstr(buf, "antidote") || strstr(buf, "yeda yung") ||
+      strstr(buf, "yung dsa") || strstr(buf, "shaggy dushing") || strstr(buf, "blood tears") ||
+      strstr(buf, "rehmani keeda") || strstr(buf, "tadipaar") || strstr(buf, "insaan") ||
+      strstr(buf, "basti ka hasti") || strstr(buf, "haath varthi") || strstr(buf, "snake") ||
+      strstr(buf, "kohinoor") || strstr(buf, "mirchi") || strstr(buf, "chal bombay") ||
+      strstr(buf, "3:59") || strstr(buf, "khatta flow") || strstr(buf, "namastute") ||
+      strstr(buf, "nanchaku") || strstr(buf, "11k") || strstr(buf, "emiway") ||
+      strstr(buf, "bantai") || strstr(buf, "divine") || strstr(buf, "stan") ||
+      strstr(buf, "krsna") || strstr(buf, "raftaar") || strstr(buf, "seedhe maut") ||
+      strstr(buf, "sidhu") || strstr(buf, "shubh") || strstr(buf, "dhillon") ||
+      strstr(buf, "drake") || strstr(buf, "travis") || strstr(buf, "future") ||
+      strstr(buf, "metro boomin") || strstr(buf, "21 savage") || strstr(buf, "savage") ||
+      strstr(buf, "uzi") || strstr(buf, "carti") || strstr(buf, "eminem") ||
+      strstr(buf, "kendrick") || strstr(buf, "kanye") || strstr(buf, "yeat") ||
+      strstr(buf, "central cee") || strstr(buf, "pop smoke") || strstr(buf, "fivio") ||
+      strstr(buf, "stormzy") || strstr(buf, "50 cent") || strstr(buf, "snoop") ||
+      strstr(buf, "j. cole") || strstr(buf, "weeknd") || strstr(buf, "post malone")) return 1;
+
+  // 3. Rock / Metal / Punk / Grunge / Bengali Rock
   if (strstr(buf, "rock") || strstr(buf, "metal") || strstr(buf, "punk") ||
-      strstr(buf, "grunge")) return 3;
+      strstr(buf, "grunge") || strstr(buf, "fossils") || strstr(buf, "rupam islam") ||
+      strstr(buf, "rupam") || strstr(buf, "cactus") || strstr(buf, "krosswindz") ||
+      strstr(buf, "aaro ekbar") || strstr(buf, "hasnuhana") || strstr(buf, "lakkhichhara") ||
+      strstr(buf, "moheener ghoraguli") || strstr(buf, "linkin") || strstr(buf, "nirvana") ||
+      strstr(buf, "metallica") || strstr(buf, "queen") || strstr(buf, "ac/dc") ||
+      strstr(buf, "slipknot") || strstr(buf, "system of a down") || strstr(buf, "greenday") ||
+      strstr(buf, "green day") || strstr(buf, "foo fighters") || strstr(buf, "rammstein") ||
+      strstr(buf, "arctic monkeys") || strstr(buf, "strokes") || strstr(buf, "radiohead") ||
+      strstr(buf, "evanescence") || strstr(buf, "avenged sevenfold") || strstr(buf, "bring me the horizon")) return 3;
+
+  // 4. Lo-Fi / Chill / Acoustic / Jazz / Classical / Ambient / Sleep
   if (strstr(buf, "lofi") || strstr(buf, "lo-fi") || strstr(buf, "acoustic") ||
       strstr(buf, "jazz") || strstr(buf, "classical") || strstr(buf, "ambient") ||
-      strstr(buf, "chill") || strstr(buf, "folk") || strstr(buf, "indie") ||
-      strstr(buf, "piano")) return 4;
+      strstr(buf, "chill") || strstr(buf, "folk") || strstr(buf, "piano") ||
+      strstr(buf, "sleep") || strstr(buf, "relax") || strstr(buf, "meditation") ||
+      strstr(buf, "study") || strstr(buf, "instrumental")) return 4;
+
+  // 2. EDM / House / Techno / Dance / Electro / Rave / Club Party
   if (strstr(buf, "house") || strstr(buf, "techno") || strstr(buf, "electro") ||
-      strstr(buf, "edm") || strstr(buf, "dance") || strstr(buf, "drum") ||
-      strstr(buf, "trance") || strstr(buf, "hardstyle")) return 2;
-  return 0;   // hip-hop / rap / pop / everything else: standard groove
+      strstr(buf, "edm") || strstr(buf, "dance") || strstr(buf, "trance") ||
+      strstr(buf, "hardstyle") || strstr(buf, "garrix") || strstr(buf, "avicii") ||
+      strstr(buf, "marshmello") || strstr(buf, "skrillex") || strstr(buf, "dj") ||
+      strstr(buf, "tiesto") || strstr(buf, "alesso") || strstr(buf, "guetta") ||
+      strstr(buf, "calvin harris") || strstr(buf, "club") || strstr(buf, "bass") ||
+      strstr(buf, "ghungroo") || strstr(buf, "kar gayi chull") || strstr(buf, "garmi") ||
+      strstr(buf, "kala chashma") || strstr(buf, "aankh marey") || strstr(buf, "chogada") ||
+      strstr(buf, "saturday saturday") || strstr(buf, "nashe si chadh gayi") ||
+      strstr(buf, "besharam rang") || strstr(buf, "jhoome jo pathaan") ||
+      strstr(buf, "lungi dance") || strstr(buf, "badtameez dil") || strstr(buf, "nucleya") ||
+      strstr(buf, "ritviz") || strstr(buf, "lost stories") || strstr(buf, "remix")) return 2;
+
+  return 0; // Pop / Commercial / Upbeat Groove
 }
 
 static bool weatherDescHas(const char* keys) {
@@ -259,7 +333,16 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
 
   // ---- forced web mood has top priority while its window is open ----
   if (s_forced_until_ms > ms) {
-    applyMoodVisuals(s_forced_mood, 0, vibeEnergy());
+    if (s_forced_mood == PET_MOOD_ANGRY || s_forced_mood == PET_MOOD_FRUSTRATED) {
+      s_anger += 4.5f * 0.05f; // progressive red over ~22 seconds
+      if (s_anger > 100.0f) s_anger = 100.0f;
+    } else {
+      if (s_anger > 0.0f) {
+        s_anger -= 3.0f * 0.05f;
+        if (s_anger < 0.0f) s_anger = 0.0f;
+      }
+    }
+    applyMoodVisuals(s_forced_mood, s_anger, vibeEnergy());
     deskPetSetMood(s_forced_mood, (s_forced_until_ms - ms) + 200);
     ledMirrorEdge(s_forced_mood);
     moodSoundEdge(s_current, s_forced_mood);
@@ -283,16 +366,16 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
   if (failing && s_failed_since_ms == 0) s_failed_since_ms = ms;
   if (!failing) s_failed_since_ms = 0;
 
-  // anger: +2%/s while the failure is unacknowledged, -1%/s decaying
+  // anger: +4.5%/s while angry, -3%/s decaying when calm
   static uint32_t s_last_ramp_ms = 0;
   uint32_t dt = (s_last_ramp_ms && ms > s_last_ramp_ms) ? (ms - s_last_ramp_ms) : 16;
   if (dt > 200) dt = 200;
   s_last_ramp_ms = ms;
-  if (failing) {
-    s_anger += 2.0f * (float)dt / 1000.0f;
+  if (failing || s_current == PET_MOOD_ANGRY || s_current == PET_MOOD_FRUSTRATED) {
+    s_anger += 4.5f * (float)dt / 1000.0f;
     if (s_anger > 100.0f) s_anger = 100.0f;
   } else if (s_anger > 0.0f) {
-    s_anger -= 1.0f * (float)dt / 1000.0f;
+    s_anger -= 3.0f * (float)dt / 1000.0f;
     if (s_anger < 0.0f) s_anger = 0.0f;
   }
 
@@ -335,15 +418,18 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
     if (held > 60000)     want = PET_MOOD_CRYING;
     else if (held > 30000) want = PET_MOOD_FRUSTRATED;
     else                   want = PET_MOOD_ANGRY;
-  } else if (finished) {
-    // 8: completion party, then lingering happiness until OK
-    want = (ms - s_finish_since_ms < 4000) ? PET_MOOD_EXCITED : PET_MOOD_HAPPY;
   } else if (overtemp) {
     // 7b: dangerous over-temp
     want = PET_MOOD_SCARED;
   } else if (temp_anom && (ms - s_temp_anom_since_ms > 45000)) {
     // 7: heating is stuck far below target
     want = PET_MOOD_SAD;
+  } else if (music && g_settings.pet_music_vibe) {
+    // 6: active music playback: high priority dance groove!
+    want = PET_MOOD_DANCING;
+  } else if (finished) {
+    // 8: completion party, then lingering happiness until OK
+    want = (ms - s_finish_since_ms < 4000) ? PET_MOOD_EXCITED : PET_MOOD_HAPPY;
   } else if (weather_ok && wtemp < 10.0f) {
     want = PET_MOOD_COLD;
   } else if (weather_ok && wtemp > 32.0f) {
@@ -363,9 +449,7 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
   }
 
   if (want == PET_MOOD_NEUTRAL) {
-    if (music && g_settings.pet_music_vibe) {
-      want = PET_MOOD_DANCING;                       // 4: vibe to the music
-    } else if (night) {
+    if (night) {
       want = PET_MOOD_SLEEPING;                      // 3: bed time
     } else if (raining) {
       want = PET_MOOD_SAD;                           // 6b: gloomy rain
@@ -379,9 +463,10 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
 
   // ---- apply / yield ----
   if (want == PET_MOOD_NEUTRAL) {
-    // Hand control back to the desk_pet idle chain (sleepy/sleeping)
+    // Hand control back to the desk_pet idle chain (sleepy/sleeping/deep_sleep)
     if (s_current != PET_MOOD_NEUTRAL && s_current != PET_MOOD_SLEEPY &&
-        s_current != PET_MOOD_SLEEPING) {
+        s_current != PET_MOOD_SLEEPING && s_current != PET_MOOD_DEEP_SLEEP &&
+        s_current != PET_MOOD_YAWN) {
       deskPetSetMood(PET_MOOD_NEUTRAL, 0);
       moodSoundEdge(s_current, PET_MOOD_NEUTRAL);
     }
@@ -405,7 +490,7 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
   }
 
   applyMoodVisuals(want, anger_for_visual, vibeEnergy());
-  deskPetSetMood(want, 1200);   // continuous refresh keeps engine in charge
+  deskPetSetMood(want, 0);   // persistent mood! Never times out unexpectedly to pop eyes open
   moodSoundEdge(s_current, want);
   ledMirrorEdge(want);
   s_current = want;
@@ -425,11 +510,19 @@ void petMoodForce(const char* mood_name, uint32_t seconds) {
     s_surprise_until_ms = millis() + 2600;
     return;
   }
+  if (!strcmp(mood_name, "neutral") || !strcmp(mood_name, "calm") || !strcmp(mood_name, "idle")) {
+    s_forced_until_ms = 0;
+    s_anger = 0;
+    deskPetSetMood(PET_MOOD_NEUTRAL, 0);
+    return;
+  }
   PetMood m = PET_MOOD_NEUTRAL;
   if (!strcmp(mood_name, "happy"))     m = PET_MOOD_HAPPY;
   else if (!strcmp(mood_name, "wink")) m = PET_MOOD_WINK;
   else if (!strcmp(mood_name, "sleepy")) m = PET_MOOD_SLEEPY;
   else if (!strcmp(mood_name, "sleeping")) m = PET_MOOD_SLEEPING;
+  else if (!strcmp(mood_name, "deep_sleep")) m = PET_MOOD_DEEP_SLEEP;
+  else if (!strcmp(mood_name, "yawn")) m = PET_MOOD_YAWN;
   else if (!strcmp(mood_name, "surprised")) m = PET_MOOD_SURPRISED;
   else if (!strcmp(mood_name, "angry")) m = PET_MOOD_ANGRY;
   else if (!strcmp(mood_name, "frustrated")) m = PET_MOOD_FRUSTRATED;
@@ -444,9 +537,12 @@ void petMoodForce(const char* mood_name, uint32_t seconds) {
   else if (!strcmp(mood_name, "scared")) m = PET_MOOD_SCARED;
   else if (!strcmp(mood_name, "thinking")) m = PET_MOOD_THINKING;
   else return;
-  if (seconds < 1 || seconds > 600) seconds = 10;
+  if (seconds < 1) seconds = 10;
+  if (seconds > 86400) seconds = 86400;
+  uiActivateDeskPet(); // switch display to desk pet so user sees the reaction immediately
   s_forced_mood = m;
   s_forced_until_ms = millis() + seconds * 1000UL;
+  deskPetSetMood(m, seconds * 1000UL);
 }
 
 void petMoodOnLeave() {
@@ -469,12 +565,15 @@ void petMoodStatusJson(char* out, size_t len) {
   bool have_time = getLocalTime(&t, 0);
   snprintf(out, len,
            "{\"mood\":\"%s\",\"anger\":%d,\"music\":%s,\"vibe\":%d,"
+           "\"genre\":\"%s\",\"vibe_style\":%d,"
            "\"sounds\":%d,\"night\":%s,\"weather_c\":%.1f,\"sick\":%d,"
            "\"hour\":\"%02d:%02d\"}",
            deskPetMoodName(deskPetGetMood()),
            (int)s_anger,
            spotifyIsActive() ? "true" : "false",
            g_settings.pet_music_vibe,
+           g_spotify.genre[0] ? g_spotify.genre : "Auto",
+           vibeStyleFromGenre(),
            g_settings.pet_sounds,
            (have_time && (t.tm_hour >= 22 || t.tm_hour < 7)) ? "true" : "false",
            pcStatsIsActive() ? (double)g_pc_stats.weather_temp_c : -99.0,

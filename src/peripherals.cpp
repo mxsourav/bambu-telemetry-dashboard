@@ -476,8 +476,7 @@ static void peripheralsTask(void* /*param*/) {
           }
         }
       }
-      else if (d.state == PST_RUNNING && prev_state != PST_RUNNING)
-        startBeepPattern(1);              // single ack
+      // (Print running start chime disabled to prevent random beeps)
       else if (d.state == PST_FAILED) {
         if (had_active_print_sound) {
           had_active_print_sound = false;

@@ -138,6 +138,7 @@ enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
 static UiView view = VIEW_BOOT;
 
 static uint32_t s_last_user_activity_ms = 0;
+static bool s_pet_print_woken = false;  // pet->HOME wake fired once per print
 
 bool uiIsPetMode() {
   return (view == VIEW_DESK_PET);
@@ -145,6 +146,7 @@ bool uiIsPetMode() {
 
 void uiActivateDeskPet() {
   view = VIEW_DESK_PET;
+  s_pet_print_woken = true; // User explicitly summoned the pet: lock wake-to-home
   deskPetSetMood(PET_MOOD_NEUTRAL);
   s_last_user_activity_ms = millis();
 }
@@ -165,7 +167,6 @@ static bool      s_custom_jpeg_dirty = false;
 static bool custom_image_active = false;
 static bool custom_image_rendered = false;
 static bool s_had_active_print = false;
-static bool s_pet_print_woken = false;  // pet->HOME wake fired once per print
 
 // Live Notification Overlay state
 static char notif_title[24] = {0};
@@ -179,6 +180,17 @@ void uiShowNotification(const char* title, const char* msg, uint32_t duration_ms
   else notif_msg[0] = 0;
   notif_until_ms = millis() + (duration_ms > 0 ? duration_ms : 4000);
   startBeepPattern(1); // pleasant notification chime
+}
+
+static SemaphoreHandle_t s_fb_mutex = NULL;
+
+void uiLockFramebuffer() {
+  if (!s_fb_mutex) s_fb_mutex = xSemaphoreCreateMutex();
+  xSemaphoreTake(s_fb_mutex, pdMS_TO_TICKS(100));
+}
+
+void uiUnlockFramebuffer() {
+  if (s_fb_mutex) xSemaphoreGive(s_fb_mutex);
 }
 
 const uint16_t* uiGetFramebuffer() {
@@ -291,12 +303,13 @@ static bool     timer_fired = false;
 
 // ---------------- Button dispatch helpers -----------------------------
 // list row counts
-#define MENU_ROWS      13
+#define MENU_ROWS      14
 #define LEDLIST_ROWS   9
 
 static const char* MENU_LABELS[MENU_ROWS] = {
-  "Spotify Mode", "Desk Pet", "PC Vitals", "LED Control", "Sound", "Siren", "Brightness", "Clock",
-  "Theme", "Clock Fmt", "About", "Timer", "Back" };
+  "Desk Pet", "Pet Stats", "Pet Music", "Spotify Mode", "PC Vitals",
+  "Brightness", "LED Control", "Sound", "Siren", "Clock",
+  "Timer", "Theme", "About", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
   "Auto-Sync", "OFF", "RAINBOW", "RED", "GREEN", "BLUE", "WHITE",
@@ -394,22 +407,23 @@ static bool timerRunning() { return timer_end_ms != 0; }
 static const char* menuValue(int i) {
   static char buf[16];
   switch (i) {
-    case 0: {
-      return (s_app_mode == MODE_SPOTIFY) ? "Active" : "Switch ->";
-    }
-    case 1: return "100 FPS";
-    case 2: return pcStatsIsActive() ? "Live" : "Ready";
-    case 4: {
-      uint8_t m = getBuzzerMode();
-      return (m == 0) ? "Passive" : (m == 1) ? "Active" : "Off";
-    }
-    case 5:  // siren policy
-      return g_settings.siren_mode ? "Till OK" : "Auto";
-    case 6: {
+    case 0: return "100 FPS";
+    case 1: return g_settings.pet_show_stats ? "ON" : "OFF";
+    case 2: return g_settings.pet_show_music ? "ON" : "OFF";
+    case 3: return (s_app_mode == MODE_SPOTIFY) ? "Active" : "Switch ->";
+    case 4: return pcStatsIsActive() ? "Live" : "Ready";
+    case 5: {
       snprintf(buf, sizeof(buf), "%d%%", uiGetBacklight());
       return buf;
     }
-    case 7: {  // clock preview
+    case 6: return ">";
+    case 7: {
+      uint8_t m = getBuzzerMode();
+      return (m == 0) ? "Passive" : (m == 1) ? "Active" : "Off";
+    }
+    case 8:  // siren policy
+      return g_settings.siren_mode ? "Till OK" : "Auto";
+    case 9: {  // clock preview
       struct tm t;
       if (getLocalTime(&t, 0)) {
         if (uiGetClock12h()) {
@@ -423,26 +437,30 @@ static const char* menuValue(int i) {
       }
       return "--:--";
     }
-    case 8: return uiGetThemeLight() ? "Light" : "Dark";
-    case 9: return uiGetClock12h() ? "12H" : "24H";
-    case 10: return ">";
-    case 11: {  // timer status
+    case 10: {  // timer status
       if (!timerRunning()) return "Off";
       int left = (timer_end_ms - millis()) / 1000;
       snprintf(buf, sizeof(buf), "%dm%02ds", left / 60, left % 60);
       return buf;
     }
+    case 11: return uiGetThemeLight() ? "Light" : "Dark";
+    case 12: return ">";
+    case 13: return "Exit";
     default: return nullptr;
   }
 }
 
 static bool menuActive(int i) {
   switch (i) {
-    case 4: return options_sound_on();
-    case 5: return g_settings.siren_mode != 0;   // highlighted = till-OK
-    case 8: return uiGetThemeLight();
-    case 9: return uiGetClock12h();
-    case 11: return timerRunning();
+    case 0: return (view == VIEW_DESK_PET);
+    case 1: return g_settings.pet_show_stats != 0;
+    case 2: return g_settings.pet_show_music != 0;
+    case 3: return (s_app_mode == MODE_SPOTIFY);
+    case 4: return pcStatsIsActive();
+    case 7: return options_sound_on();
+    case 8: return g_settings.siren_mode != 0;   // highlighted = till-OK
+    case 10: return timerRunning();
+    case 11: return uiGetThemeLight();
     default: return false;
   }
 }
@@ -1212,7 +1230,18 @@ static void dispatchButtons(uint8_t ev) {
       } else if (ev == 2 || ev == 5 || ev == 9) { // OK / RIGHT / LONG-SELECT
         startBeepPattern(1); // confirmation beep
         switch (menu_focus) {
-          case 0: {
+          case 0: uiActivateDeskPet(); break;
+          case 1: { // Pet Stats toggle
+            g_settings.pet_show_stats = !g_settings.pet_show_stats;
+            settingsSave();
+            break;
+          }
+          case 2: { // Pet Music toggle
+            g_settings.pet_show_music = !g_settings.pet_show_music;
+            settingsSave();
+            break;
+          }
+          case 3: { // Mode toggle
             if (s_app_mode == MODE_PRINTER) {
               uiSetAppMode(MODE_SPOTIFY);
             } else {
@@ -1220,16 +1249,8 @@ static void dispatchButtons(uint8_t ev) {
             }
             break;
           }
-          case 1: uiActivateDeskPet(); break;
-          case 2: uiActivatePcHud(); break;
-          case 3: view = VIEW_LEDLIST; menu_focus = 0; break;
-          case 4: applySoundToggle(); break;
-          case 5: {  // siren policy: Auto-Mute <-> Until OK
-            g_settings.siren_mode = g_settings.siren_mode ? 0 : 1;
-            settingsSave();
-            break;
-          }
-          case 6: {  // brightness cycle
+          case 4: uiActivatePcHud(); break;
+          case 5: {  // brightness cycle
             uint8_t b = uiGetBacklight();
             b = (b >= 100) ? 40 : b + 30;
             uiSetBacklight(b);
@@ -1237,18 +1258,21 @@ static void dispatchButtons(uint8_t ev) {
             settingsSave();
             break;
           }
-          case 7: view = VIEW_CLOCK; break;
-          case 8: { // Theme Dark/Light
+          case 6: view = VIEW_LEDLIST; menu_focus = 0; break;
+          case 7: applySoundToggle(); break;
+          case 8: {  // siren policy: Auto-Mute <-> Until OK
+            g_settings.siren_mode = g_settings.siren_mode ? 0 : 1;
+            settingsSave();
+            break;
+          }
+          case 9: view = VIEW_CLOCK; break;
+          case 10: view = VIEW_TIMER; timer_sel = 0; break;
+          case 11: { // Theme Dark/Light
             uiSetThemeLight(!uiGetThemeLight());
             break;
           }
-          case 9: { // Clock Fmt 12H/24H
-            uiSetClock12h(!uiGetClock12h());
-            break;
-          }
-          case 10: view = VIEW_ABOUT; break;
-          case 11: view = VIEW_TIMER; timer_sel = 0; break;
-          case 12: {
+          case 12: view = VIEW_ABOUT; break;
+          case 13: {
             view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
             menu_focus = 0;
             break;
@@ -1264,7 +1288,7 @@ static void dispatchButtons(uint8_t ev) {
         menu_focus = (menu_focus + 1) % LEDLIST_ROWS;
       } else if (ev == 2 || ev == 5 || ev == 9) { // OK / RIGHT
         startBeepPattern(1); // confirmation beep
-        if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 2; }
+        if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 6; }
         else {
           ledSetOverride(menu_focus);   // 0..7 map directly
           g_settings.led_override = menu_focus;
@@ -1422,10 +1446,25 @@ void uiSetBacklight(uint8_t pct) {
 // keeps the spotlight while a slim chip shows title + progress.
 // ------------------------------------------------------------
 static void drawPetVibeStrip(uint32_t ms) {
-  // Check active playback with 12-second hysteresis grace period to eliminate any flapping/flicker
-  bool is_active = g_spotify.is_playing && (g_spotify.title[0] != '\0') &&
-                   (g_spotify.last_update_ms > 0) && (ms - g_spotify.last_update_ms < 12000);
-  if (!is_active || !g_settings.pet_music_vibe) return;
+  if (!g_settings.pet_show_music || !g_settings.pet_music_vibe) return;
+
+  static char s_last_title[32] = {0};
+  static uint32_t s_last_active_ms = 0;
+  static float s_last_frac = 0.0f;
+
+  bool fresh = (g_spotify.last_update_ms > 0) && (ms - g_spotify.last_update_ms < 6000);
+  if (g_spotify.is_playing && fresh && g_spotify.title[0] != '\0') {
+    strncpy(s_last_title, g_spotify.title, sizeof(s_last_title) - 1);
+    s_last_title[sizeof(s_last_title) - 1] = 0;
+    s_last_active_ms = ms;
+    if (g_spotify.duration_ms > 0) {
+      s_last_frac = (float)g_spotify.progress_ms / (float)g_spotify.duration_ms;
+    }
+  }
+
+  // Grace period latch: keep card visible during brief track-change gaps to eliminate flicker
+  bool is_active = (s_last_title[0] != '\0') && (s_last_active_ms > 0) && (ms - s_last_active_ms < 4000);
+  if (!is_active) return;
 
   const int pill_x = 4;
   const int pill_y = 3;
@@ -1440,11 +1479,10 @@ static void drawPetVibeStrip(uint32_t ms) {
   sprite.setTextColor(0x0000, 0xF7BE);
 
   char line[32];
-  snprintf(line, sizeof(line), "%.24s", g_spotify.title);
+  snprintf(line, sizeof(line), "%.24s", s_last_title);
   sprite.drawString(line, pill_x + 6, pill_y + 7);
 
-  float frac = (g_spotify.duration_ms > 0)
-               ? (float)g_spotify.progress_ms / (float)g_spotify.duration_ms : 0.0f;
+  float frac = s_last_frac;
   if (frac > 1.0f) frac = 1.0f;
   if (frac < 0.0f) frac = 0.0f;
   sprite.fillRect(pill_x + 6, pill_y + 15, pill_w - 12, 2, 0xD69A);                  // track base
@@ -1544,7 +1582,7 @@ static void uiTask(void* /*param*/) {
     if (view == VIEW_DESK_PET) {
       // Wake up on incoming music playback. In vibe mode (pet_music_vibe)
       // the pet STAYS and dances to the beat with a mini progress strip.
-      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500)) {
+      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000)) {
         if (!g_settings.pet_music_vibe) {
           Serial.println(F("[UI] Music playing -> wake from Desk Pet to SPOTIFY"));
           view = VIEW_SPOTIFY;
@@ -1566,9 +1604,9 @@ static void uiTask(void* /*param*/) {
       // With vibe mode on, PLAYING MUSIC also summons the pet (it comes up
       // to dance; the cover-art view stays reachable via the menu).
       uint32_t timeout_ms = (view == VIEW_MENU) ? 15000 : 8000;
-      bool music_vibe_entry = (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500) &&
+      bool music_vibe_entry = (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000) &&
                                g_settings.pet_music_vibe && view != VIEW_SPOTIFY);
-      if (printer_idle && (spotify_idle || music_vibe_entry) &&
+      if ((printer_idle || music_vibe_entry) && (spotify_idle || music_vibe_entry) &&
           (ms - s_last_user_activity_ms >= timeout_ms)) {
         view = VIEW_DESK_PET;
         deskPetSetMood(PET_MOOD_NEUTRAL);
@@ -1579,7 +1617,7 @@ static void uiTask(void* /*param*/) {
       if (ms - s_last_user_activity_ms >= 20000) {
         view = VIEW_DESK_PET;
       }
-      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 3500)) {
+      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000)) {
         view = VIEW_SPOTIFY;
         s_last_user_activity_ms = ms;
       } else if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
@@ -1607,7 +1645,7 @@ static void uiTask(void* /*param*/) {
       }
       uint32_t delta = ms - s_prog_frame_ms;
       s_prog_frame_ms = ms;
-      bool fresh = (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms < 3500));
+      bool fresh = (g_spotify.last_update_ms > 0 && (ms - g_spotify.last_update_ms < 10000));
       if (g_spotify.is_playing && fresh && delta > 0 && delta <= 100) {
         g_spotify.progress_ms += delta;
         if (g_spotify.duration_ms > 0 && g_spotify.progress_ms > g_spotify.duration_ms) {
@@ -1623,11 +1661,14 @@ static void uiTask(void* /*param*/) {
     if (view != VIEW_SPOTIFY) s_art_in_frame = false;
 
     // --- render ---
+    if (!s_fb_mutex) s_fb_mutex = xSemaphoreCreateMutex();
+    xSemaphoreTake(s_fb_mutex, portMAX_DELAY);
+
     switch (view) {
       case VIEW_BOOT:    drawBootFrame(ms - boot_start_ms); break;
       case VIEW_HOME:    drawHomeFrame(d, ms); break;
       case VIEW_MENU:
-        MENU_LABELS[0] = (s_app_mode == MODE_SPOTIFY) ? "Printer Mode" : "Spotify Mode";
+        MENU_LABELS[3] = (s_app_mode == MODE_SPOTIFY) ? "Printer Mode" : "Spotify Mode";
         drawList("SETTINGS", MENU_LABELS, MENU_ROWS,
                  menu_focus, menuValue, menuActive); break;
       case VIEW_LEDLIST: drawList("LED CONTROL", LEDLIST_LABELS, LEDLIST_ROWS,
@@ -1690,6 +1731,7 @@ static void uiTask(void* /*param*/) {
     g_tft_spi_busy = true;
     sprite.pushSprite(0, 0);
     g_tft_spi_busy = false;
+    xSemaphoreGive(s_fb_mutex);
 
     vTaskDelayUntil(&last_wake, current_frame_ticks);
   }

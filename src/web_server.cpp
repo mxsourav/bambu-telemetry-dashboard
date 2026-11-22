@@ -3,6 +3,7 @@
  * ===================================================================== */
 #include "web_server.h"
 #include "web_ui.h"
+#include "pwa_assets.h"
 #include "config.h"
 #include "telemetry.h"
 #include "ui.h"
@@ -126,17 +127,19 @@ static void handleStatus() {
 }
 
 static void handleScreenRle() {
-  const uint16_t* fb = uiGetFramebuffer();
-  if (!fb) {
-    sendCorsHeaders();
-    server.send(503, "text/plain", "Frame unavailable");
-    return;
-  }
-
   // When custom image or full Spotify artwork is showing, avoid streaming photo data
   if (uiIsCustomImageActive() || (spotifyIsActive() && !uiIsPetMode())) {
     sendCorsHeaders();
     server.send(204, "text/plain", "");
+    return;
+  }
+
+  uiLockFramebuffer();
+  const uint16_t* fb = uiGetFramebuffer();
+  if (!fb) {
+    uiUnlockFramebuffer();
+    sendCorsHeaders();
+    server.send(503, "text/plain", "Frame unavailable");
     return;
   }
 
@@ -162,6 +165,8 @@ static void handleScreenRle() {
     i += run;
   }
 
+  uiUnlockFramebuffer();
+
   if (overflow) {
     sendCorsHeaders();
     server.send(204, "text/plain", "");
@@ -170,9 +175,8 @@ static void handleScreenRle() {
 
   sendCorsHeaders();
   server.sendHeader("Connection", "close");
-  server.setContentLength(rle_len);
-  server.send(200, "application/octet-stream", "");
-  server.sendContent((const char*)s_rle_buf, rle_len);
+  server.send_P(200, "application/octet-stream", (const char*)s_rle_buf, rle_len);
+  server.client().stop();
 }
 
 static void handleBuzzerTest() {
@@ -210,8 +214,10 @@ static void handleBuzzerMode() {
 }
 
 static void handleScreen() {
+  uiLockFramebuffer();
   const uint16_t* fb = uiGetFramebuffer();
   if (!fb) {
+    uiUnlockFramebuffer();
     server.send(503, "text/plain", "Frame unavailable");
     return;
   }
@@ -240,7 +246,6 @@ static void handleScreen() {
   server.send(200, "image/bmp", "");
   server.sendContent((const char*)&hdr, sizeof(hdr));
 
-  const uint16_t* p = fb;
   size_t totalPixels = 160 * 128;
   size_t offset = 0;
   static uint16_t s_bmp_chunk[256];
@@ -248,13 +253,14 @@ static void handleScreen() {
     if (!server.client().connected()) break;
     size_t n = (totalPixels - offset < 256) ? (totalPixels - offset) : 256;
     for (size_t i = 0; i < n; i++) {
-      uint16_t w = p[offset + i];
-      s_bmp_chunk[i] = (w << 8) | (w >> 8); // Convert big-endian swap565 to standard little-endian BMP
+      uint16_t w = fb[offset + i];
+      s_bmp_chunk[i] = (w << 8) | (w >> 8);
     }
     server.sendContent((const char*)s_bmp_chunk, n * 2);
     offset += n;
-    vTaskDelay(pdMS_TO_TICKS(2));
   }
+  uiUnlockFramebuffer();
+  server.client().stop();
 }
 
 static void handleButton() {
@@ -662,6 +668,8 @@ static void handleSettingsGet() {
   doc["pet_sounds"]     = g_settings.pet_sounds;      // pet mood chirps
   doc["pet_music_vibe"] = g_settings.pet_music_vibe;  // dance while music plays
   doc["pet_sick"]       = g_settings.pet_sick;        // 0=ok 1=sick 2=fever
+  doc["pet_show_stats"] = g_settings.pet_show_stats;  // 1=show PC stats pill, 0=hide
+  doc["pet_show_music"] = g_settings.pet_show_music;  // 1=show music card, 0=hide
   String out;
   serializeJson(doc, out);
   sendCorsHeaders();
@@ -706,6 +714,14 @@ static void handleSettingsSet() {
     if (!doc["pet_sick"].isNull()) {
       g_settings.pet_sick = doc["pet_sick"] | 0;
       if (g_settings.pet_sick > 2) g_settings.pet_sick = 2;
+    }
+    if (!doc["pet_show_stats"].isNull()) {
+      g_settings.pet_show_stats = doc["pet_show_stats"] | 0;
+      if (g_settings.pet_show_stats > 1) g_settings.pet_show_stats = 1;
+    }
+    if (!doc["pet_show_music"].isNull()) {
+      g_settings.pet_show_music = doc["pet_show_music"] | 0;
+      if (g_settings.pet_show_music > 1) g_settings.pet_show_music = 1;
     }
     settingsSave();
   }
@@ -783,6 +799,9 @@ static void handleSpotifyNow() {
     const char* lyric_cur = doc["lyric_cur"] | nullptr;
     const char* lyric_next = doc["lyric_next"] | nullptr;
     spotifySetTrackInfo(title, artist, prog, dur, playing, img_url, lyric_cur, lyric_next);
+    const char* genre = doc["genre"] | "";
+    strncpy(g_spotify.genre, genre, sizeof(g_spotify.genre) - 1);
+    g_spotify.genre[sizeof(g_spotify.genre) - 1] = 0;
     // Note: Do NOT automatically hijack app mode or current view on incoming track updates.
     // App mode switching is strictly manual (via physical buttons or /api/mode).
   }
@@ -980,6 +999,8 @@ static void handleMode() {
         uiSetAppMode(MODE_SPOTIFY);
       } else if (!strcmp(m, "printer")) {
         uiSetAppMode(MODE_PRINTER);
+      } else if (!strcmp(m, "pet")) {
+        uiActivateDeskPet();
       }
     } else if (server.hasArg("mode")) {
       String m = server.arg("mode");
@@ -987,6 +1008,8 @@ static void handleMode() {
         uiSetAppMode(MODE_SPOTIFY);
       } else if (m == "printer") {
         uiSetAppMode(MODE_PRINTER);
+      } else if (m == "pet") {
+        uiActivateDeskPet();
       }
     }
   }
@@ -1010,6 +1033,47 @@ static void webTask(void* /*param*/) {
   Serial.printf("[WEB] WiFi ready! IP=%s. Registering routes...\n", WiFi.localIP().toString().c_str());
   WiFi.setSleep(false);
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/manifest.json", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(200, "application/manifest+json", FPSTR(PWA_MANIFEST));
+  });
+  server.on("/sw.js", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Service-Worker-Allowed", "/");
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(200, "application/javascript", FPSTR(PWA_SW));
+  });
+  server.on("/icon.svg", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(200, "image/svg+xml", FPSTR(PWA_ICON_SVG));
+  });
+  server.on("/icon-delta.svg", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(200, "image/svg+xml", FPSTR(PWA_ICON_SVG));
+  });
+  server.on("/icon-192.png", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send_P(200, "image/png", (PGM_P)PWA_ICON_192, PWA_ICON_192_LEN);
+  });
+  server.on("/icon-delta-192.png", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send_P(200, "image/png", (PGM_P)PWA_ICON_192, PWA_ICON_192_LEN);
+  });
+  server.on("/icon-512.png", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send_P(200, "image/png", (PGM_P)PWA_ICON_512, PWA_ICON_512_LEN);
+  });
+  server.on("/icon-delta-512.png", HTTP_GET, []() {
+    sendCorsHeaders();
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send_P(200, "image/png", (PGM_P)PWA_ICON_512, PWA_ICON_512_LEN);
+  });
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/mode", HTTP_GET, handleMode);
   server.on("/api/mode", HTTP_POST, handleMode);

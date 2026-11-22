@@ -18,6 +18,8 @@ struct SystemSettings {
   uint8_t  pet_sounds      = 1;  // 1 = pet chirps/growls on mood changes
   uint8_t  pet_music_vibe  = 1;  // 1 = pet dances on screen while music plays
   uint8_t  pet_sick        = 0;  // 0 = healthy, 1 = sick, 2 = fever (manual)
+  uint8_t  pet_show_stats  = 1;  // 1 = show bottom PC stats pill on pet, 0 = hide
+  uint8_t  pet_show_music  = 1;  // 1 = show top now playing card on pet, 0 = hide
   char     spotify_refresh_token[160] = {0};
 };
 

@@ -28,6 +28,8 @@ void     uiSetBacklight(uint8_t pct);   // 40..100
 // Framebuffer access for web screen mirroring (160x128 RGB565)
 const uint16_t* uiGetFramebuffer();
 void uiGetFrameSize(int& w, int& h);
+void uiLockFramebuffer();
+void uiUnlockFramebuffer();
 
 // Custom image display (160x128 RGB565 and Direct-to-RAM JPEG)
 uint16_t* uiGetCustomImageBuffer();

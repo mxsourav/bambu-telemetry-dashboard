@@ -2,7 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#08080a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="STΔN studio.">
+<link rel="manifest" href="/manifest.json?v=12">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-delta-192.png?v=12">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-delta-512.png?v=12">
+<link rel="icon" type="image/svg+xml" href="/icon-delta.svg?v=12">
+<link rel="apple-touch-icon" sizes="192x192" href="/icon-delta-192.png?v=12">
+<link rel="apple-touch-icon" sizes="512x512" href="/icon-delta-512.png?v=12">
 <title>STΔN studio. — Bambu Controller</title>
 <style>
 :root{
@@ -27,12 +38,30 @@ body{
   display:flex;
   flex-direction:column;
   align-items:center;
-  padding:12px 10px 48px;
+  padding:14px 12px calc(48px + env(safe-area-inset-bottom));
+  margin:0;
 }
-.app{width:100%;max-width:440px;display:flex;flex-direction:column;gap:14px;}
+.app{width:100%;max-width:440px;display:flex;flex-direction:column;gap:12px;}
+.tele-val{font-variant-numeric:tabular-nums;}
+.pwa-btn{
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius:999px;
+  padding:4px 10px;
+  font-size:0.68rem;
+  font-weight:600;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.pwa-btn:hover{background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.25);}
+.pwa-btn:active{transform:scale(0.96);}
 .header{display:flex;align-items:center;justify-content:space-between;padding:4px 6px;}
 .brand{font-size:1.15rem;font-weight:800;letter-spacing:-0.02em;color:#fff;}
-.brand span{color:var(--red);}
+.brand .brand-dot{color:#E6182E;font-weight:900;}
 .badge{
   font-size:0.68rem;
   letter-spacing:0.03em;
@@ -311,10 +340,16 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
 
   <!-- Header -->
   <div class="header">
-    <div class="brand">STΔN <span>studio.</span></div>
-    <div class="badge" onclick="openIpModal()">
-      <div class="dot" id="cDot"></div>
-      <span id="cIp">192.168.0.154</span>
+    <div class="brand">STΔN studio<span class="brand-dot">.</span></div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button id="pwaInstallBtn" class="pwa-btn" style="display:none;" onclick="installPwa()" title="Install as Web App">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+        <span>Install App</span>
+      </button>
+      <div class="badge" onclick="openIpModal()">
+        <div class="dot" id="cDot"></div>
+        <span id="cIp">192.168.0.154</span>
+      </div>
     </div>
   </div>
 
@@ -322,15 +357,15 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
   <div id="httpsWarningBanner" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:14px;padding:12px 14px;margin-bottom:12px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
       <div style="font-weight:700;color:#F87171;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
-        <span>⚠️ Browser HTTPS Restriction</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="#F87171"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>Browser HTTPS Restriction</span>
       </div>
-      <button onclick="document.getElementById('httpsWarningBanner').style.display='none'" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;font-size:0.9rem;">✕</button>
+      <button onclick="document.getElementById('httpsWarningBanner').style.display='none'" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;display:flex;align-items:center;padding:4px;"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
     <div style="font-size:0.75rem;color:var(--txt-muted);margin:4px 0 8px 0;line-height:1.4;">
       Web browsers block HTTPS sites from contacting local devices (<span class="bannerDirectIp">192.168.0.154</span>). To control your desk monitor without browser blocks, open the monitor's local address directly:
     </div>
     <a id="httpsDirectDeviceLink" href="http://192.168.0.154/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;font-weight:700;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
-      👉 Open Local Monitor (http://<span class="bannerDirectIp">192.168.0.154</span>)
+      <span>Open Local Monitor (http://<span class="bannerDirectIp">192.168.0.154</span>)</span><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
     </a>
   </div>
 
@@ -369,11 +404,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
         <div class="dpad-track-h"></div>
         <div class="dpad-grid">
           <!-- UP -->
-          <button class="dpad-key dpad-key-up" onclick="sendBtn('up')" title="Up (▲)">
+          <button class="dpad-key dpad-key-up" onclick="sendBtn('up')" title="Up">
             <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="6 15 12 9 18 15"/></svg>
           </button>
           <!-- LEFT -->
-          <button class="dpad-key dpad-key-left" onclick="sendBtn('left')" title="Left (◀)">
+          <button class="dpad-key dpad-key-left" onclick="sendBtn('left')" title="Left">
             <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <!-- OK / SELECT -->
@@ -381,11 +416,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
             <span class="nav-label-ok">OK</span>
           </button>
           <!-- RIGHT -->
-          <button class="dpad-key dpad-key-right" onclick="sendBtn('right')" title="Right (▶)">
+          <button class="dpad-key dpad-key-right" onclick="sendBtn('right')" title="Right">
             <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <!-- DOWN -->
-          <button class="dpad-key dpad-key-down" onclick="sendBtn('down')" title="Down (▼)">
+          <button class="dpad-key dpad-key-down" onclick="sendBtn('down')" title="Down">
             <svg viewBox="0 0 24 24" class="nav-chevron"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <!-- BACK -->
@@ -423,7 +458,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
         <div style="display:flex;gap:6px;justify-content:flex-end;">
           <button class="btn-act" onclick="testBuzzer('click')" style="padding:4px 8px;font-size:0.65rem;">Click (Soft)</button>
           <button class="btn-act" onclick="testBuzzer('1')" style="padding:4px 8px;font-size:0.65rem;border-color:var(--cyan);color:var(--cyan);">Chime</button>
-          <button class="btn-act" onclick="testBuzzer('alarm')" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">🚨 Siren</button>
+          <button class="btn-act" onclick="testBuzzer('alarm')" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">Siren</button>
         </div>
       </div>
     </div>
@@ -483,17 +518,21 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
           <div style="font-size:0.7rem;font-weight:600;color:var(--txt-muted);">Health</div>
           <div style="display:flex;gap:6px;">
             <button class="led-chip active" id="petHlth0" onclick="setPetSetting('pet_sick',0)">Healthy</button>
-            <button class="led-chip" id="petHlth1" onclick="setPetSetting('pet_sick',1)">🤒 Sick</button>
-            <button class="led-chip" id="petHlth2" onclick="setPetSetting('pet_sick',2)">🌡️ Fever</button>
+            <button class="led-chip" id="petHlth1" onclick="setPetSetting('pet_sick',1)">Sick</button>
+            <button class="led-chip" id="petHlth2" onclick="setPetSetting('pet_sick',2)">Fever</button>
           </div>
         </div>
         <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-          <button class="btn-act" onclick="petMood('angry',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">😤 Angry</button>
-          <button class="btn-act" onclick="petMood('sad',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">😢 Sad</button>
-          <button class="btn-act" onclick="petMood('crying',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">😭 Cry</button>
-          <button class="btn-act" onclick="petMood('dancing',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#A78BFA;color:#A78BFA;">🕺 Dance</button>
-          <button class="btn-act" onclick="petMood('excited',10)" style="padding:4px 8px;font-size:0.65rem;border-color:var(--cyan);color:var(--cyan);">🎉 Party</button>
-          <button class="btn-act" onclick="petMood('treat')" style="padding:4px 8px;font-size:0.65rem;">💊 Treat</button>
+          <button class="btn-act" onclick="petMood('yawn',6)" style="padding:4px 8px;font-size:0.65rem;border-color:#F59E0B;color:#F59E0B;">Yawn</button>
+          <button class="btn-act" onclick="petMood('sleeping',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#94A3B8;color:#94A3B8;">Sleep</button>
+          <button class="btn-act" onclick="petMood('deep_sleep',25)" style="padding:4px 8px;font-size:0.65rem;border-color:#38BDF8;color:#38BDF8;">Deep Sleep</button>
+          <button class="btn-act" onclick="petMood('angry',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">Angry</button>
+          <button class="btn-act" onclick="petMood('sad',15)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">Sad</button>
+          <button class="btn-act" onclick="petMood('crying',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#60A5FA;color:#60A5FA;">Cry</button>
+          <button class="btn-act" onclick="petMood('dancing',20)" style="padding:4px 8px;font-size:0.65rem;border-color:#A78BFA;color:#A78BFA;">Dance</button>
+          <button class="btn-act" onclick="petMood('excited',10)" style="padding:4px 8px;font-size:0.65rem;border-color:var(--cyan);color:var(--cyan);">Party</button>
+          <button class="btn-act" onclick="petMood('treat')" style="padding:4px 8px;font-size:0.65rem;">Treat</button>
+          <button class="btn-act" onclick="fetch(getApiUrl('/api/mode'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'pet'})})" style="padding:4px 8px;font-size:0.65rem;border-color:var(--cyan);color:var(--cyan);">Show Pet</button>
         </div>
       </div>
     </div>
@@ -679,7 +718,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     <div id="ipModalStatus" style="font-size:0.75rem;margin:10px 0 2px 0;min-height:18px;line-height:1.3;"></div>
     <div id="ipModalDirectBtn" style="display:none;margin-top:6px;">
       <a id="ipModalDirectLink" href="http://192.168.0.154/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
-        👉 Open Direct Link (http://<span class="bannerDirectIp">192.168.0.154</span>)
+        <span>Open Direct Link (http://<span class="bannerDirectIp">192.168.0.154</span>)</span>
       </a>
     </div>
     <div class="modal-btns">
@@ -792,8 +831,8 @@ async function testAndSaveDeviceIp(){
     document.getElementById('cIp').innerText = val;
     document.getElementById('cDot').className = 'dot';
     updateIpUrls();
-    if(st) { st.style.color = "var(--green)"; st.innerText = "✓ Connected! (RSSI: " + (d.wifi_rssi||"-") + " dBm, Heap: " + Math.round((d.heap_free||0)/1024) + " KB)"; }
-    if(btn) { btn.disabled = false; btn.innerText = "✓ Connected"; }
+    if(st) { st.style.color = "var(--green)"; st.innerText = "Connected (RSSI: " + (d.wifi_rssi||"-") + " dBm, Heap: " + Math.round((d.heap_free||0)/1024) + " KB)"; }
+    if(btn) { btn.disabled = false; btn.innerText = "Connected"; }
     if(db) db.style.display = 'none';
     pollStatus();
     loadFs('/');
@@ -806,7 +845,7 @@ async function testAndSaveDeviceIp(){
       errMsg = "Browser blocked HTTP call from HTTPS. Click the direct link below:";
     }
     if(db) db.style.display = 'block';
-    if(st) { st.style.color = "#EF4444"; st.innerText = "❌ " + errMsg; }
+    if(st) { st.style.color = "#EF4444"; st.innerText = "" + errMsg; }
     if(btn) { btn.disabled = false; btn.innerText = "Retry Connection"; }
   }
 }
@@ -1221,7 +1260,7 @@ function loadFs(dir){
         const row = document.createElement('div');
         row.className = 'file-item';
         const sizeStr = f.dir ? 'DIR' : (f.size > 1048576 ? (f.size/1048576).toFixed(1)+' MB' : (f.size/1024).toFixed(1)+' KB');
-        row.innerHTML = `<div class="file-name"><span>${f.dir?'📁':'📄'}</span><span>${f.name}</span><span style="color:var(--txt-muted);font-size:0.65rem;">(${sizeStr})</span></div>
+        row.innerHTML = `<div class="file-name"><span>${f.dir ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="var(--cyan)" style="vertical-align:middle;margin-right:4px;"><path d="M10 4H4c-1.1 0-2 .9-2 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" fill="var(--txt-muted)" style="vertical-align:middle;margin-right:4px;"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'}</span><span>${f.name}</span><span style="color:var(--txt-muted);font-size:0.65rem;">(${sizeStr})</span></div>
         <div class="file-ops">
           ${!f.dir ? `<button class="btn-act" onclick="downloadFile('${f.name}')">Get</button>` : `<button class="btn-act" onclick="loadFs('${curDir==='/'?'/':curDir+'/'}${f.name}')">Open</button>`}
           <button class="btn-act del" onclick="deleteFile('${f.name}')">Del</button>
@@ -1265,7 +1304,7 @@ function uploadSdFile(){
   const st = document.getElementById('sdUploadStatus');
   if(!fi.files || fi.files.length === 0){
     st.style.color = 'var(--red)';
-    st.innerText = '⚠️ Please tap above to select a file first!';
+    st.innerText = 'Please select a file first.';
     fi.click();
     return;
   }
@@ -1290,7 +1329,7 @@ function uploadSdFile(){
   xhr.onload = () => {
     if(xhr.status >= 200 && xhr.status < 300){
       st.style.color = 'var(--green)';
-      st.innerText = `✓ Uploaded ${f.name} successfully!`;
+      st.innerText = `Uploaded ${f.name} successfully.`;
       fi.value = '';
       document.getElementById('chosenFileName').innerText = 'Tap to select file from phone';
       document.getElementById('chosenFileName').style.color = '#fff';
@@ -1374,7 +1413,7 @@ async function pushCustomImg(){
 
   if(statusEl){
     statusEl.style.color = 'var(--cyan)';
-    statusEl.innerText = "⏳ Pushing image to display...";
+    statusEl.innerText = "Pushing image to display...";
   }
 
   const fd = new FormData();
@@ -1405,14 +1444,14 @@ async function pushCustomImg(){
     } catch(err1) {
       // Automatic quick retry on transient socket collision
       console.warn("Attempt 1 failed, retrying push...", err1);
-      if(statusEl) statusEl.innerText = "⏳ Retrying push...";
+      if(statusEl) statusEl.innerText = "Retrying push...";
       await new Promise(r => setTimeout(r, 250));
       result = await doAttempt();
     }
 
     if(statusEl){
       statusEl.style.color = 'var(--green)';
-      statusEl.innerText = "✓ Pushed image to display successfully!";
+      statusEl.innerText = "Pushed image to display successfully.";
     }
     // Render cropped image directly onto canvas preview so client doesn't need to fetch 61 KB RLE
     const cropEl = document.getElementById('cropCanvas');
@@ -1427,7 +1466,7 @@ async function pushCustomImg(){
     }
     if(statusEl){
       statusEl.style.color = 'var(--red)';
-      statusEl.innerText = "❌ Push failed: " + msg;
+      statusEl.innerText = "Push failed: " + msg;
     }
     alert("Push failed: " + msg);
   } finally {
@@ -1445,7 +1484,7 @@ function clearCustomImg(){
     screenAbortController = null;
   }
   fetch(getApiUrl('/api/display/clear'), {method:'POST'}).then(()=>{
-    if(statusEl){ statusEl.style.color = 'var(--cyan)'; statusEl.innerText = "✓ Display reset to live UI"; }
+    if(statusEl){ statusEl.style.color = 'var(--cyan)'; statusEl.innerText = "Display reset to live UI"; }
     setTimeout(fetchScreen, 150);
   });
 }
@@ -2000,6 +2039,49 @@ function renderAndPushSpotify(trackName, artistName, img, progressMs, durationMs
 // Initialize on page load
 initSpotify();
 fetchBuzzerMode();
+
+// --- PWA Installation & Service Worker ---
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'inline-flex';
+});
+
+function installPwa() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then((choice) => {
+      if (choice.outcome === 'accepted') {
+        const btn = document.getElementById('pwaInstallBtn');
+        if (btn) btn.style.display = 'none';
+      }
+      deferredInstallPrompt = null;
+    });
+  } else {
+    alert('To install STΔN studio as an App:\n\n• Android / Chrome:\nTap the ⋮ menu in Chrome > "Install app" or "Create shortcut" (adds the Delta icon to your home screen).\n\n• If "Install" says "This app cannot be installed":\n1. Open chrome://flags in Chrome\n2. In the search box, type: insecure (do NOT include #)\n3. Set "Insecure origins treated as secure" to Enabled\n4. In the box below it, add: http://' + window.location.host + '\n5. Tap Relaunch at bottom -> Reload page -> Tap Install!\n\n• iOS / Safari:\nTap Share icon > Add to Home Screen.');
+  }
+}
+
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js?v=12', { scope: '/' })
+      .then((reg) => {
+        reg.update();
+        console.log('[PWA] Service Worker registered with scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
+  });
+}
 </script>
 </body>
 </html>
