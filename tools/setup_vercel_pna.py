@@ -11,6 +11,7 @@ TARGET_IP = "192.168.137.35"
 PATTERNS = [
     "[*.]vercel.app",
     "https://*.vercel.app",
+    "https://web-tau-five-60.vercel.app",
     "http://" + TARGET_IP,
     "http://" + TARGET_IP + ":80"
 ]
