@@ -136,17 +136,21 @@ static ConnState connStateOf(const TelemetryData& d) {
 // ---------------- View state ------------------------------------------
 enum UiView : uint8_t { VIEW_BOOT = 0, VIEW_HOME, VIEW_MENU, VIEW_LEDLIST,
                         VIEW_CLOCK, VIEW_TIMER, VIEW_OVERLAY, VIEW_CUSTOM_IMAGE, VIEW_ABOUT,
-                        VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS, VIEW_DESK_PET, VIEW_PC_HUD };
+                        VIEW_SPOTIFY, VIEW_SPOTIFY_LYRICS, VIEW_DESK_PET, VIEW_PC_HUD,
+                        VIEW_WEATHER, VIEW_AI_STATS };
 static UiView view = VIEW_BOOT;
 
 static uint32_t s_last_user_activity_ms = 0;
 static bool s_pet_print_woken = false;  // pet->HOME wake fired once per print
+static bool s_pc_hud_latched = false;   // persistent latch: when true, never auto-timeout to pet
+static int8_t menu_focus = 0;       // row in current list
 
 bool uiIsPetMode() {
   return (view == VIEW_DESK_PET);
 }
 
 void uiActivateDeskPet() {
+  s_pc_hud_latched = false;
   view = VIEW_DESK_PET;
   s_pet_print_woken = true; // User explicitly summoned the pet: lock wake-to-home
   deskPetSetMood(PET_MOOD_NEUTRAL);
@@ -160,6 +164,83 @@ bool uiIsPcHud() {
 void uiActivatePcHud() {
   view = VIEW_PC_HUD;
   s_last_user_activity_ms = millis();
+}
+
+bool uiIsPcHudLatched() {
+  return s_pc_hud_latched;
+}
+
+void uiSetPcHudLatched(bool latched) {
+  s_pc_hud_latched = latched;
+}
+
+void uiSwitchView(const char* name) {
+  if (!name || !name[0]) return;
+  s_last_user_activity_ms = millis();
+  if (!strcmp(name, "pet") || !strcmp(name, "desk_pet")) {
+    s_pc_hud_latched = false;
+    uiActivateDeskPet();
+  } else if (!strcmp(name, "printer") || !strcmp(name, "home")) {
+    s_pc_hud_latched = false;
+    uiSetAppMode(MODE_PRINTER);
+    view = VIEW_HOME;
+  } else if (!strcmp(name, "pc_hud") || !strcmp(name, "stats") || !strcmp(name, "vitals")) {
+    s_pc_hud_latched = true;
+    view = VIEW_PC_HUD;
+  } else if (!strcmp(name, "weather")) {
+    s_pc_hud_latched = false;
+    view = VIEW_WEATHER;
+  } else if (!strcmp(name, "ai") || !strcmp(name, "ai_stats") || !strcmp(name, "cortex")) {
+    s_pc_hud_latched = false;
+    view = VIEW_AI_STATS;
+  } else if (!strcmp(name, "spotify")) {
+    s_pc_hud_latched = false;
+    uiSetAppMode(MODE_SPOTIFY);
+    view = VIEW_SPOTIFY;
+  } else if (!strcmp(name, "lyrics") || !strcmp(name, "spotify_lyrics")) {
+    s_pc_hud_latched = false;
+    uiSetAppMode(MODE_SPOTIFY);
+    view = VIEW_SPOTIFY_LYRICS;
+  } else if (!strcmp(name, "image") || !strcmp(name, "custom_image")) {
+    s_pc_hud_latched = false;
+    view = VIEW_CUSTOM_IMAGE;
+  } else if (!strcmp(name, "clock")) {
+    s_pc_hud_latched = false;
+    view = VIEW_CLOCK;
+  } else if (!strcmp(name, "timer")) {
+    s_pc_hud_latched = false;
+    view = VIEW_TIMER;
+  } else if (!strcmp(name, "menu") || !strcmp(name, "settings")) {
+    s_pc_hud_latched = false;
+    view = VIEW_MENU;
+    menu_focus = 0;
+  } else if (!strcmp(name, "ledlist") || !strcmp(name, "led")) {
+    s_pc_hud_latched = false;
+    view = VIEW_LEDLIST;
+    menu_focus = 0;
+  } else if (!strcmp(name, "about")) {
+    s_pc_hud_latched = false;
+    view = VIEW_ABOUT;
+  }
+}
+
+const char* uiGetCurrentViewName() {
+  switch (view) {
+    case VIEW_DESK_PET: return "pet";
+    case VIEW_HOME: return "printer";
+    case VIEW_PC_HUD: return "pc_hud";
+    case VIEW_WEATHER: return "weather";
+    case VIEW_AI_STATS: return "ai";
+    case VIEW_SPOTIFY: return "spotify";
+    case VIEW_SPOTIFY_LYRICS: return "lyrics";
+    case VIEW_CUSTOM_IMAGE: return "image";
+    case VIEW_CLOCK: return "clock";
+    case VIEW_TIMER: return "timer";
+    case VIEW_MENU: return "menu";
+    case VIEW_LEDLIST: return "ledlist";
+    case VIEW_ABOUT: return "about";
+    default: return "home";
+  }
 }
 static uint32_t boot_start_ms = 0;
 static uint16_t* s_custom_image_buf = nullptr;
@@ -295,7 +376,6 @@ void uiActivateSpotify() {
 }
 
 // menu state
-static int8_t menu_focus = 0;       // row in current list
 static int8_t timer_sel = 0;        // index into TIMER_OPTS
 static int8_t reset_arm = 0;        // 0=normal 1=armed confirm
 static const int8_t TIMER_OPTS[] = {5, 10, 15, 30, 60};
@@ -398,9 +478,9 @@ static void drawList(const char* title, const char* const* labels,
   }
   sprite.drawFastHLine(0, 112, W, COL_SEP);
   sprite.setFont(&fonts::Font0);
-  sprite.setTextDatum(textdatum_t::middle_left);
+  sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("M:down SEL:ok Mx2:home", 4, 120);  // 38ch hint = 228px, clipped
+  sprite.drawString(WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "STAN studio OS", W / 2, 119);
 }
 
 // ---------------- menu row values / active marks ----------------------
@@ -535,7 +615,7 @@ static void drawHomeFrame(const TelemetryData& d, uint32_t ms) {
     sprite.setTextColor(COL_TXT, 0x4240);
     sprite.drawString("print paused by printer", W / 2, H / 2 + 14);
     sprite.setFont(&fonts::Font0);
-    sprite.drawString("M-hold: home  SEL: menu", W / 2, H - 20);
+    sprite.drawString("Printer Job Paused", W / 2, H - 20);
     return;                               // skip dashboard below
   }
 
@@ -665,12 +745,9 @@ static void drawOverlayFrame(const TelemetryData& d, uint32_t ms) {
     sprite.setFont(&fonts::FreeSansBold9pt7b);
     sprite.drawString(ebuf, W / 2, 74);
   }
-  // pulsing OK hint
-  if ((ms / 400) % 2) {
-    sprite.setFont(&fonts::Font0);
-    sprite.setTextColor(COL_TXT_BLACK, bg);
-    sprite.drawString("press SELECT = OK", W / 2, 104);
-  }
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextColor(COL_TXT_BLACK, bg);
+  sprite.drawString("STAN studio", W / 2, 104);
 }
 
 // ============================================================
@@ -729,6 +806,18 @@ static void drawClockFrame(uint32_t ms) {
       sprite.setTextColor(COL_TXT, COL_BLACK);
       sprite.drawString(buf, W / 2, 74);
     }
+    // Subtle divider and network footer
+    sprite.drawFastHLine(8, 102, 144, COL_SEP);
+    sprite.setFont(&fonts::Font0);
+    sprite.setTextDatum(textdatum_t::middle_center);
+    sprite.setTextColor(COL_MUTED, COL_BLACK);
+    char foot[36];
+    if (WiFi.isConnected()) {
+      snprintf(foot, sizeof(foot), "IP: %s", WiFi.localIP().toString().c_str());
+    } else {
+      strncpy(foot, "STAN studio OS", sizeof(foot));
+    }
+    sprite.drawString(foot, W / 2, 115);
   } else {
     sprite.setTextDatum(textdatum_t::middle_center);
     sprite.setFont(&fonts::FreeSansBold9pt7b);
@@ -778,75 +867,100 @@ static void drawAboutFrame(uint32_t ms) {
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::middle_left);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("IP:", 8, 102);
+  sprite.drawString("IP:", 8, 98);
   sprite.setTextColor(COL_ONLINE, COL_BLACK);
-  sprite.drawString(WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "No Wi-Fi", 28, 102);
+  sprite.drawString(WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "No Wi-Fi", 28, 98);
 
   // Footer
-  sprite.drawFastHLine(0, 114, W, COL_SEP);
+  sprite.drawFastHLine(0, 108, W, COL_SEP);
   sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("Press any button to return", W / 2, 122);
+  char dev_foot[36];
+  uint32_t up_s = millis() / 1000;
+  snprintf(dev_foot, sizeof(dev_foot), "BUILD 2026.11 | UP %02lu:%02lu:%02lu",
+           (unsigned long)(up_s / 3600), (unsigned long)((up_s % 3600) / 60), (unsigned long)(up_s % 60));
+  sprite.drawString(dev_foot, W / 2, 118);
 }
 
 static void drawPcHudFrame(uint32_t ms) {
   (void)ms;
-  sprite.fillSprite(0xFFFF); // Clean paper white
+  bool is_light = g_settings.theme_light;
+  uint16_t bg_col = is_light ? 0xEFBC : 0x0000;
+  sprite.fillSprite(bg_col);
 
-  const uint16_t HUD_INK    = 0x0000;
-  const uint16_t HUD_MUTED  = 0x7BEF;
-  const uint16_t HUD_LINE   = 0xD69A;
-  const uint16_t HUD_BAR_BG = 0xEF7D;
+  const uint16_t HUD_INK    = is_light ? 0x18C3 : 0xFFFF;
+  const uint16_t HUD_MUTED  = is_light ? 0x7BCF : 0x9CD3;
+  const uint16_t HUD_LINE   = is_light ? 0xD635 : 0x2965;
+  const uint16_t HUD_BAR_BG = is_light ? 0xE6F8 : 0x18E3;
+  // Tangy highlighted neon in darkmode; same accent but faded paper ink in lightmode
+  const uint16_t HUD_BAR_FG = is_light ? 0xC346 : 0xFC40;
 
   // Header
   sprite.setFont(&fonts::Font0);
   sprite.setTextDatum(textdatum_t::top_left);
-  sprite.setTextColor(HUD_INK, 0xFFFF);
-  sprite.drawString("HARDWARE VITALS", 8, 5);
+  sprite.setTextColor(HUD_INK, bg_col);
+  sprite.drawString("HW VITALS", 8, 5);
 
-  char weather_buf[20];
-  if (g_pc_stats.weather_temp_c > -50.0f && g_pc_stats.weather_temp_c < 60.0f) {
-    snprintf(weather_buf, sizeof(weather_buf), "%.0fC %s", g_pc_stats.weather_temp_c, g_pc_stats.weather_desc);
+  char r_hdr[20];
+  if (pcStatsIsActive()) {
+    if (g_pc_stats.weather_temp_c > -50.0f && g_pc_stats.weather_temp_c < 60.0f) {
+      snprintf(r_hdr, sizeof(r_hdr), "%.0fC %.8s", g_pc_stats.weather_temp_c, g_pc_stats.weather_desc);
+    } else {
+      strncpy(r_hdr, "LIVE 100Hz", sizeof(r_hdr));
+    }
   } else {
-    strncpy(weather_buf, "DESK NODE", sizeof(weather_buf));
+    strncpy(r_hdr, "TELEMETRY", sizeof(r_hdr));
   }
   sprite.setTextDatum(textdatum_t::top_right);
-  sprite.setTextColor(HUD_MUTED, 0xFFFF);
-  sprite.drawString(weather_buf, 152, 5);
+  sprite.setTextColor(HUD_MUTED, bg_col);
+  sprite.drawString(r_hdr, 152, 5);
 
-  sprite.drawFastHLine(8, 17, 144, HUD_LINE);
+  sprite.drawFastHLine(8, 16, 144, HUD_LINE);
 
-  // Row 1: CPU
+  // Row 1: CPU (y=21)
   sprite.setTextDatum(textdatum_t::top_left);
-  sprite.setTextColor(HUD_INK, 0xFFFF);
-  sprite.drawString("CPU", 8, 23);
+  sprite.setTextColor(HUD_INK, bg_col);
+  sprite.drawString("CPU", 8, 21);
   char cpu_str[12];
   snprintf(cpu_str, sizeof(cpu_str), "%.0f%%", g_pc_stats.cpu_percent);
-  sprite.drawString(cpu_str, 36, 23);
+  sprite.drawString(cpu_str, 36, 21);
   int cpu_w = (int)((84.0f * constrain(g_pc_stats.cpu_percent, 0.0f, 100.0f)) / 100.0f);
-  sprite.fillRect(68, 25, 84, 5, HUD_BAR_BG);
-  if (cpu_w > 0) sprite.fillRect(68, 25, cpu_w, 5, HUD_INK);
+  sprite.fillRect(68, 23, 84, 5, HUD_BAR_BG);
+  if (cpu_w > 0) sprite.fillRect(68, 23, cpu_w, 5, HUD_BAR_FG);
 
-  // Row 2: GPU
-  sprite.drawString("GPU", 8, 39);
+  // Row 2: GPU (y=36)
+  sprite.drawString("GPU", 8, 36);
   char gpu_str[16];
   snprintf(gpu_str, sizeof(gpu_str), "%.0f%% %.0fC", g_pc_stats.gpu_percent, g_pc_stats.gpu_temp_c);
-  sprite.drawString(gpu_str, 36, 39);
+  sprite.drawString(gpu_str, 36, 36);
   int gpu_w = (int)((64.0f * constrain(g_pc_stats.gpu_percent, 0.0f, 100.0f)) / 100.0f);
-  sprite.fillRect(88, 41, 64, 5, HUD_BAR_BG);
-  if (gpu_w > 0) sprite.fillRect(88, 41, gpu_w, 5, HUD_INK);
+  sprite.fillRect(88, 38, 64, 5, HUD_BAR_BG);
+  if (gpu_w > 0) sprite.fillRect(88, 38, gpu_w, 5, HUD_BAR_FG);
 
-  // Row 3: RAM
-  sprite.drawString("RAM", 8, 55);
+  // Row 3: RAM (y=51)
+  sprite.drawString("RAM", 8, 51);
   char ram_str[20];
   snprintf(ram_str, sizeof(ram_str), "%.1f/%.1fG", g_pc_stats.ram_used_gb, g_pc_stats.ram_total_gb);
-  sprite.drawString(ram_str, 36, 55);
+  sprite.drawString(ram_str, 36, 51);
   int ram_w = (int)((46.0f * constrain(g_pc_stats.ram_percent, 0.0f, 100.0f)) / 100.0f);
-  sprite.fillRect(106, 57, 46, 5, HUD_BAR_BG);
-  if (ram_w > 0) sprite.fillRect(106, 57, ram_w, 5, HUD_INK);
+  sprite.fillRect(106, 53, 46, 5, HUD_BAR_BG);
+  if (ram_w > 0) sprite.fillRect(106, 53, ram_w, 5, HUD_BAR_FG);
 
-  // Row 4: NET
-  sprite.drawString("NET", 8, 71);
+  // Row 4: DISK C: (y=66)
+  sprite.drawString("DISK", 8, 66);
+  char disk_str[20];
+  if (g_pc_stats.disk_total_gb > 0.0f) {
+    snprintf(disk_str, sizeof(disk_str), "%.0f/%.0fG", g_pc_stats.disk_used_gb, g_pc_stats.disk_total_gb);
+  } else {
+    snprintf(disk_str, sizeof(disk_str), "%.0f%%", g_pc_stats.disk_percent);
+  }
+  sprite.drawString(disk_str, 36, 66);
+  int disk_w = (int)((46.0f * constrain(g_pc_stats.disk_percent, 0.0f, 100.0f)) / 100.0f);
+  sprite.fillRect(106, 68, 46, 5, HUD_BAR_BG);
+  if (disk_w > 0) sprite.fillRect(106, 68, disk_w, 5, HUD_BAR_FG);
+
+  // Row 5: NET (y=81)
+  sprite.drawString("NET", 8, 81);
   char net_str[28];
   if (g_pc_stats.net_down_kbs >= 1024.0f || g_pc_stats.net_up_kbs >= 1024.0f) {
     snprintf(net_str, sizeof(net_str), "D:%.1fM  U:%.1fM",
@@ -855,20 +969,148 @@ static void drawPcHudFrame(uint32_t ms) {
     snprintf(net_str, sizeof(net_str), "D:%.0fK  U:%.0fK",
              g_pc_stats.net_down_kbs, g_pc_stats.net_up_kbs);
   }
-  sprite.drawString(net_str, 36, 71);
+  sprite.drawString(net_str, 36, 81);
 
   // Footer divider
-  sprite.drawFastHLine(8, 87, 144, HUD_LINE);
+  sprite.drawFastHLine(8, 97, 144, HUD_LINE);
 
-  // Footer text
-  sprite.setTextColor(HUD_MUTED, 0xFFFF);
-  char city_str[32];
-  snprintf(city_str, sizeof(city_str), "DESK NODE · %s", g_pc_stats.city[0] ? g_pc_stats.city : "LOCAL");
-  sprite.drawString(city_str, 8, 93);
+  // Footer clean vitals: WiFi signal + system uptime
+  sprite.setTextColor(HUD_MUTED, bg_col);
+  char sys_str[36];
+  uint32_t up_s = millis() / 1000;
+  snprintf(sys_str, sizeof(sys_str), "WIFI %ddBm | UP %02lu:%02lu:%02lu",
+           WiFi.RSSI(), (unsigned long)(up_s / 3600), (unsigned long)((up_s % 3600) / 60), (unsigned long)(up_s % 60));
+  sprite.drawString(sys_str, 8, 105);
+}
 
-  sprite.setTextColor(0x9492, 0xFFFF);
-  sprite.drawString("DOUBLE CLICK -> DESK PET", 8, 106);
-  sprite.drawString("SELECT / MENU -> EXIT", 8, 116);
+static void drawWeatherFrame(uint32_t ms) {
+  (void)ms;
+  bool is_light = g_settings.theme_light;
+  uint16_t bg_col = is_light ? 0xFFFF : 0x0000;
+  sprite.fillSprite(bg_col);
+
+  const uint16_t TXT_INK   = is_light ? 0x0000 : 0xFFFF;
+  const uint16_t TXT_MUTED = is_light ? 0x7BEF : 0x9CD3;
+  const uint16_t LINE_COL  = is_light ? 0xD69A : 0x2965;
+  const uint16_t ACCENT    = is_light ? 0x03E0 : 0x3E07;
+
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextColor(TXT_INK, bg_col);
+  sprite.drawString("WEATHER VITALS", 8, 5);
+
+  sprite.setTextDatum(textdatum_t::top_right);
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  char city_hdr[16];
+  snprintf(city_hdr, sizeof(city_hdr), "%.12s", g_pc_stats.city[0] ? g_pc_stats.city : "LOCAL");
+  sprite.drawString(city_hdr, 152, 5);
+  sprite.drawFastHLine(8, 17, 144, LINE_COL);
+
+  // Big temperature display
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setFont(&fonts::FreeSansBold18pt7b);
+  sprite.setTextColor(TXT_INK, bg_col);
+  char temp_buf[16];
+  if (g_pc_stats.weather_temp_c > -50.0f && g_pc_stats.weather_temp_c < 60.0f) {
+    snprintf(temp_buf, sizeof(temp_buf), "%.0f C", g_pc_stats.weather_temp_c);
+  } else {
+    snprintf(temp_buf, sizeof(temp_buf), "-- C");
+  }
+  sprite.drawString(temp_buf, 12, 28);
+  int32_t t_w = sprite.textWidth(temp_buf);
+  int deg_x = 12 + t_w - 24;
+  if (deg_x > 12) {
+    sprite.drawCircle(deg_x, 33, 2, TXT_INK);
+  }
+
+  // Weather condition
+  sprite.setFont(&fonts::FreeSans9pt7b);
+  sprite.setTextColor(ACCENT, bg_col);
+  char desc_buf[20];
+  snprintf(desc_buf, sizeof(desc_buf), "%.16s", g_pc_stats.weather_desc[0] ? g_pc_stats.weather_desc : "Clear");
+  sprite.drawString(desc_buf, 12, 66);
+
+  // Sub vitals
+  sprite.setFont(&fonts::Font0);
+  sprite.drawFastHLine(8, 92, 144, LINE_COL);
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  char sub_buf[36];
+  snprintf(sub_buf, sizeof(sub_buf), "CITY: %.16s", g_pc_stats.city[0] ? g_pc_stats.city : "Unknown");
+  sprite.drawString(sub_buf, 10, 98);
+  sprite.drawString(pcStatsIsActive() ? "SYNC: Real-time Live" : "SYNC: Standby / Offline", 10, 112);
+}
+
+static void drawAiStatsFrame(uint32_t ms) {
+  (void)ms;
+  bool is_light = g_settings.theme_light;
+  uint16_t bg_col = is_light ? 0xFFFF : 0x0000;
+  sprite.fillSprite(bg_col);
+
+  const uint16_t TXT_INK   = is_light ? 0x0000 : 0xFFFF;
+  const uint16_t TXT_MUTED = is_light ? 0x7BEF : 0x9CD3;
+  const uint16_t LINE_COL  = is_light ? 0xD69A : 0x2965;
+  const uint16_t ACCENT    = is_light ? 0x001F : 0x64BD;
+
+  // Header: AI STATS | LIVE / IDLE
+  sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::top_left);
+  sprite.setTextColor(TXT_INK, bg_col);
+  sprite.drawString("AI STATS", 8, 5);
+
+  sprite.setTextDatum(textdatum_t::top_right);
+  bool active = pcStatsIsActive();
+  sprite.setTextColor(active ? (is_light ? 0x0400 : 0x07E0) : TXT_MUTED, bg_col);
+  sprite.drawString(active ? "LIVE" : "IDLE", 152, 5);
+  sprite.drawFastHLine(8, 17, 144, LINE_COL);
+
+  sprite.setTextDatum(textdatum_t::top_left);
+
+  // Row 1: GENRE
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  sprite.drawString("GENRE", 8, 24);
+  sprite.setTextColor(ACCENT, bg_col);
+  char g_buf[24];
+  snprintf(g_buf, sizeof(g_buf), "%.16s", g_pc_stats.music_genre[0] ? g_pc_stats.music_genre : "None");
+  sprite.drawString(g_buf, 52, 24);
+
+  // Row 2: ENERGY
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  sprite.drawString("ENERGY", 8, 40);
+  char v_str[16];
+  snprintf(v_str, sizeof(v_str), "%.0f%%", g_pc_stats.music_vibe * 100.0f);
+  sprite.setTextColor(TXT_INK, bg_col);
+  sprite.drawString(v_str, 52, 40);
+  int v_w = (int)(60.0f * constrain(g_pc_stats.music_vibe, 0.0f, 1.0f));
+  sprite.fillRect(84, 42, 60, 5, is_light ? 0xEF7D : 0x18E3);
+  if (v_w > 0) sprite.fillRect(84, 42, v_w, 5, ACCENT);
+
+  // Row 3: MOOD
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  sprite.drawString("MOOD", 8, 56);
+  sprite.setTextColor(TXT_INK, bg_col);
+  sprite.drawString(deskPetMoodName(deskPetGetMood()), 52, 56);
+
+  // Row 4: TRACK
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  sprite.drawString("TRACK", 8, 72);
+  sprite.setTextColor(TXT_INK, bg_col);
+  char t_buf[24];
+  const char* track = g_spotify.title[0] ? g_spotify.title : "No Track";
+  snprintf(t_buf, sizeof(t_buf), "%.16s", track);
+  sprite.drawString(t_buf, 52, 72);
+
+  // Divider
+  sprite.drawFastHLine(8, 90, 144, LINE_COL);
+
+  // Footer: Real system info (WiFi signal + uptime + IP)
+  sprite.setTextColor(TXT_MUTED, bg_col);
+  char f_buf1[36], f_buf2[36];
+  uint32_t up_s = millis() / 1000;
+  snprintf(f_buf1, sizeof(f_buf1), "WIFI %ddBm | UP %02lu:%02lu:%02lu",
+           WiFi.RSSI(), (unsigned long)(up_s / 3600), (unsigned long)((up_s % 3600) / 60), (unsigned long)(up_s % 60));
+  snprintf(f_buf2, sizeof(f_buf2), "IP %s", WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "No Wi-Fi");
+  sprite.drawString(f_buf1, 8, 98);
+  sprite.drawString(f_buf2, 8, 112);
 }
 
 static void drawTimerFrame(uint32_t ms) {
@@ -887,14 +1129,18 @@ static void drawTimerFrame(uint32_t ms) {
     sprite.setTextColor(COL_TXT, COL_BLACK);
   }
   sprite.drawString(buf, W / 2, 46);
+
   sprite.setFont(&fonts::Font0);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  if (timer_fired)      sprite.drawString("TIME!  SEL: clear", W / 2, 78);
-  else if (timerRunning()) sprite.drawString("running  SEL: stop", W / 2, 78);
-  else                  sprite.drawString("SEL: start  M: next", W / 2, 78);
+  if (timer_fired)         sprite.drawString("TIME EXPIRED", W / 2, 76);
+  else if (timerRunning()) sprite.drawString("COUNTDOWN ACTIVE", W / 2, 76);
+  else                     sprite.drawString("TIMER READY", W / 2, 76);
+
+  sprite.drawFastHLine(8, 98, 144, 0x2965);
   sprite.setFont(&fonts::Font0);
+  sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("M-hold: back", 4, 120);
+  sprite.drawString(WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "STAN studio", W / 2, 114);
 }
 
 static bool s_art_in_frame = false;   // sprite buffer currently holds art
@@ -1150,9 +1396,12 @@ static void drawSpotifyLyricsFrame(uint32_t ms) {
   sprite.setTextDatum(textdatum_t::top_left);
   sprite.drawString(curTime, 10, 96);
 
+  sprite.drawFastHLine(8, 108, 144, COL_SEP);
   sprite.setTextDatum(textdatum_t::middle_center);
   sprite.setTextColor(COL_MUTED, COL_BLACK);
-  sprite.drawString("SEL: Cover    M: Exit", W / 2, 118);
+  char art_buf[28];
+  snprintf(art_buf, sizeof(art_buf), "%.22s", g_spotify.artist[0] ? g_spotify.artist : "Spotify Lyrics");
+  sprite.drawString(art_buf, W / 2, 118);
 }
 
 // ============================================================
@@ -1217,8 +1466,22 @@ static void dispatchButtons(uint8_t ev) {
 
   switch (view) {
     case VIEW_HOME:
-      // Menu (1), Select (2, 5), UP (6), DOWN (7), RIGHT (9) opens Settings from Home
-      if (ev == 1 || ev == 2 || ev == 5 || ev == 6 || ev == 7 || ev == 9) {
+      if (ev == 2 || ev == 9) { // OK / Select / Right
+        static uint32_t s_last_home_ok_ms = 0;
+        uint32_t now_ms = millis();
+        if (now_ms - s_last_home_ok_ms < 380) {
+          s_last_home_ok_ms = 0;
+          beepButton();
+          s_pc_hud_latched = true;
+          view = VIEW_PC_HUD;
+          s_last_user_activity_ms = now_ms;
+          Serial.println(F("[UI] Double-click OK on Home -> LATCHED PC HUD"));
+        } else {
+          s_last_home_ok_ms = now_ms;
+          view = VIEW_MENU;
+          menu_focus = 0;
+        }
+      } else if (ev == 1 || ev == 5 || ev == 6 || ev == 7) {
         view = VIEW_MENU;
         menu_focus = 0;
       }
@@ -1349,15 +1612,17 @@ static void dispatchButtons(uint8_t ev) {
         petMoodCelebrate(ack_kind == 2 ? 2 : 0);
         break;
       }
-      if (ev == 2 || ev == 5 || ev == 9) { // SELECT or LONG-SELECT
-        // Double-click within 380ms toggles full-screen PC HUD!
+      if (ev == 2 || ev == 9) { // SELECT or RIGHT
+        // Double-click within 380ms toggles and latches full-screen PC HUD!
         static uint32_t s_last_pet_click_ms = 0;
         uint32_t now_ms = millis();
         if (now_ms - s_last_pet_click_ms < 380) {
           s_last_pet_click_ms = 0;
           beepButton();
+          s_pc_hud_latched = true;
           view = VIEW_PC_HUD;
           s_last_user_activity_ms = now_ms;
+          Serial.println(F("[UI] Double-click OK on Pet -> LATCHED PC HUD"));
         } else {
           s_last_pet_click_ms = now_ms;
           beepPet();
@@ -1375,16 +1640,38 @@ static void dispatchButtons(uint8_t ev) {
 
     case VIEW_PC_HUD:
       s_last_user_activity_ms = millis();
-      if (ev == 2 || ev == 5 || ev == 9) { // SELECT: Toggle back to Desk Pet
-        beepButton();
-        view = VIEW_DESK_PET;
+      if (ev == 2 || ev == 9) { // SELECT / OK
+        static uint32_t s_last_hud_ok_ms = 0;
+        uint32_t now_ms = millis();
+        if (now_ms - s_last_hud_ok_ms < 380) {
+          s_last_hud_ok_ms = 0;
+          beepButton();
+          s_pc_hud_latched = false;
+          view = VIEW_DESK_PET;
+          s_last_user_activity_ms = now_ms;
+          Serial.println(F("[UI] Double-click OK on PC HUD -> UNLATCHED to Desk Pet"));
+        } else {
+          s_last_hud_ok_ms = now_ms;
+          beepButton();
+          // Single OK does NOT exit - keeps PC HUD latched!
+        }
       } else if (ev == 1) { // MENU: Open Settings
         beepButton();
         view = VIEW_MENU;
         menu_focus = 0;
-      } else if (ev != 0) {
+      }
+      break;
+
+    case VIEW_WEATHER:
+    case VIEW_AI_STATS:
+      s_last_user_activity_ms = millis();
+      if (ev == 2 || ev == 9) {
         beepButton();
-        view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
+        view = VIEW_DESK_PET;
+      } else if (ev == 1) {
+        beepButton();
+        view = VIEW_MENU;
+        menu_focus = 0;
       }
       break;
 
@@ -1527,9 +1814,9 @@ static void uiTask(void* /*param*/) {
     telemetryRead(d);
 
     if (view == VIEW_BOOT && ms - boot_start_ms >= BOOT_MS) {
-      view = VIEW_HOME;
+      uiSwitchView(g_settings.default_screen[0] ? g_settings.default_screen : "pet");
       startBeepPattern(1);   // boot-complete beep (verifies GPIO19 buzzer)
-      Serial.println(F("[UI] boot done -> HOME (beep)"));
+      Serial.printf("[UI] boot done -> %s (beep)\n", uiGetCurrentViewName());
     }
 
     // --- timer expiry ---
@@ -1608,23 +1895,26 @@ static void uiTask(void* /*param*/) {
       uint32_t timeout_ms = (view == VIEW_MENU) ? 15000 : 8000;
       bool music_vibe_entry = (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000) &&
                                g_settings.pet_music_vibe && view != VIEW_SPOTIFY);
-      if ((printer_idle || music_vibe_entry) && (spotify_idle || music_vibe_entry) &&
+      bool is_default_printer = (strcmp(g_settings.default_screen, "printer") == 0 && view == VIEW_HOME);
+      if (!is_default_printer && (printer_idle || music_vibe_entry) && (spotify_idle || music_vibe_entry) &&
           (ms - s_last_user_activity_ms >= timeout_ms)) {
         view = VIEW_DESK_PET;
         deskPetSetMood(PET_MOOD_NEUTRAL);
         Serial.println(F("[UI] Idle timeout -> entered Desk Pet (100 FPS)"));
       }
     } else if (view == VIEW_PC_HUD) {
-      // 20s idle timeout in PC HUD returns to Desk Pet
-      if (ms - s_last_user_activity_ms >= 20000) {
-        view = VIEW_DESK_PET;
-      }
-      if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000)) {
-        view = VIEW_SPOTIFY;
-        s_last_user_activity_ms = ms;
-      } else if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
-        view = VIEW_HOME;
-        s_last_user_activity_ms = ms;
+      // If latched, NEVER auto-timeout to Desk Pet or anything else!
+      if (!s_pc_hud_latched) {
+        if (ms - s_last_user_activity_ms >= 20000) {
+          view = VIEW_DESK_PET;
+        }
+        if (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000)) {
+          view = VIEW_SPOTIFY;
+          s_last_user_activity_ms = ms;
+        } else if (d.state == PST_RUNNING || d.state == PST_PAUSED) {
+          view = VIEW_HOME;
+          s_last_user_activity_ms = ms;
+        }
       }
     }
 
@@ -1687,6 +1977,8 @@ static void uiTask(void* /*param*/) {
         drawPetVibeStrip(ms);
         break;
       case VIEW_PC_HUD:         drawPcHudFrame(ms); break;
+      case VIEW_WEATHER:        drawWeatherFrame(ms); break;
+      case VIEW_AI_STATS:       drawAiStatsFrame(ms); break;
       case VIEW_CUSTOM_IMAGE:
         if (custom_image_active) {
           static bool had_notif = false;

@@ -40,6 +40,8 @@ void settingsLoad() {
         g_settings.pet_sick        = doc["pet_sick"] | 0;
         g_settings.pet_show_stats  = doc["pet_show_stats"] | 1;
         g_settings.pet_show_music  = doc["pet_show_music"] | 1;
+        const char* def_sc = doc["default_screen"] | "";
+        if (def_sc && def_sc[0]) strncpy(g_settings.default_screen, def_sc, sizeof(g_settings.default_screen) - 1);
         const char* srt = doc["spotify_refresh_token"] | "";
         if (srt && srt[0]) strncpy(g_settings.spotify_refresh_token, srt, sizeof(g_settings.spotify_refresh_token) - 1);
         loaded_from_sd = true;
@@ -66,6 +68,8 @@ void settingsLoad() {
     g_settings.pet_sick        = prefs.getUChar("pet_sick", 0);
     g_settings.pet_show_stats  = prefs.getUChar("pet_stats", 1);
     g_settings.pet_show_music  = prefs.getUChar("pet_music", 1);
+    String defSc = prefs.getString("def_screen", "pet");
+    if (defSc.length() > 0) strncpy(g_settings.default_screen, defSc.c_str(), sizeof(g_settings.default_screen) - 1);
     String srtNvs = prefs.getString("sp_rtoken", "");
     if (srtNvs.length() > 0) strncpy(g_settings.spotify_refresh_token, srtNvs.c_str(), sizeof(g_settings.spotify_refresh_token) - 1);
     Serial.println(F("[SETTINGS] Loaded configuration from NVS Preferences"));
@@ -126,6 +130,7 @@ void settingsSave() {
               (g_settings.pet_sick        != s_saved_settings.pet_sick) ||
               (g_settings.pet_show_stats  != s_saved_settings.pet_show_stats) ||
               (g_settings.pet_show_music  != s_saved_settings.pet_show_music) ||
+              (strncmp(g_settings.default_screen, s_saved_settings.default_screen, sizeof(g_settings.default_screen)) != 0) ||
               (strncmp(g_settings.spotify_refresh_token, s_saved_settings.spotify_refresh_token, sizeof(g_settings.spotify_refresh_token)) != 0);
   }
 
@@ -150,6 +155,7 @@ void settingsSave() {
   prefs.putUChar("pet_sick", g_settings.pet_sick);
   prefs.putUChar("pet_stats", g_settings.pet_show_stats);
   prefs.putUChar("pet_music", g_settings.pet_show_music);
+  prefs.putString("def_screen", g_settings.default_screen);
   prefs.putString("sp_rtoken", g_settings.spotify_refresh_token);
 
   // 2. Save to SD card if present
@@ -171,6 +177,7 @@ void settingsSave() {
       doc["pet_sick"]        = g_settings.pet_sick;
       doc["pet_show_stats"]  = g_settings.pet_show_stats;
       doc["pet_show_music"]  = g_settings.pet_show_music;
+      doc["default_screen"]  = g_settings.default_screen;
       if (g_settings.spotify_refresh_token[0]) {
         doc["spotify_refresh_token"] = g_settings.spotify_refresh_token;
       }

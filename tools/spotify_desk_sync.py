@@ -647,6 +647,13 @@ def pc_telemetry_loop():
             cpu = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
             gpu_pct, gpu_temp = get_gpu_stats()
+            try:
+                disk = psutil.disk_usage('C:\\' if os.name == 'nt' else '/')
+                disk_pct = round(disk.percent, 1)
+                disk_used = round(disk.used / (1024**3), 1)
+                disk_total = round(disk.total / (1024**3), 1)
+            except Exception:
+                disk_pct, disk_used, disk_total = 0.0, 0.0, 0.0
 
             net = psutil.net_io_counters()
             dt = max(now - last_net_time, 0.1)
@@ -672,6 +679,9 @@ def pc_telemetry_loop():
                 "ram": mem.percent,
                 "ram_used": round(mem.used / (1024**3), 1),
                 "ram_total": round(mem.total / (1024**3), 1),
+                "disk": disk_pct,
+                "disk_used": disk_used,
+                "disk_total": disk_total,
                 "gpu": gpu_pct,
                 "gpu_temp": gpu_temp,
                 "net_down": down_kbs,

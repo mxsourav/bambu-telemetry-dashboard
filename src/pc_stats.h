@@ -10,6 +10,9 @@ struct PcStats {
   float ram_percent = 0.0f;
   float ram_used_gb = 0.0f;
   float ram_total_gb = 0.0f;
+  float disk_percent = 0.0f;
+  float disk_used_gb = 0.0f;
+  float disk_total_gb = 0.0f;
   float gpu_percent = 0.0f;
   float gpu_temp_c = 0.0f;
   float net_down_kbs = 0.0f;

@@ -671,6 +671,9 @@ static void handleSettingsGet() {
   doc["pet_sick"]       = g_settings.pet_sick;        // 0=ok 1=sick 2=fever
   doc["pet_show_stats"] = g_settings.pet_show_stats;  // 1=show PC stats pill, 0=hide
   doc["pet_show_music"] = g_settings.pet_show_music;  // 1=show music card, 0=hide
+  doc["default_screen"] = g_settings.default_screen;
+  doc["current_screen"] = uiGetCurrentViewName();
+  doc["pc_hud_latched"] = uiIsPcHudLatched();
   String out;
   serializeJson(doc, out);
   sendCorsHeaders();
@@ -723,6 +726,13 @@ static void handleSettingsSet() {
     if (!doc["pet_show_music"].isNull()) {
       g_settings.pet_show_music = doc["pet_show_music"] | 0;
       if (g_settings.pet_show_music > 1) g_settings.pet_show_music = 1;
+    }
+    if (!doc["default_screen"].isNull()) {
+      const char* ds = doc["default_screen"];
+      if (ds && ds[0]) {
+        strncpy(g_settings.default_screen, ds, sizeof(g_settings.default_screen) - 1);
+        uiSwitchView(ds);
+      }
     }
     settingsSave();
   }
@@ -791,6 +801,15 @@ static void handlePcStats() {
 
       if (!doc["ram_total"].isNull())        g_pc_stats.ram_total_gb   = doc["ram_total"].as<float>();
       else if (!doc["ram_total_gb"].isNull())g_pc_stats.ram_total_gb  = doc["ram_total_gb"].as<float>();
+
+      if (!doc["disk"].isNull())              g_pc_stats.disk_percent   = doc["disk"].as<float>();
+      else if (!doc["disk_percent"].isNull()) g_pc_stats.disk_percent   = doc["disk_percent"].as<float>();
+
+      if (!doc["disk_used"].isNull())         g_pc_stats.disk_used_gb   = doc["disk_used"].as<float>();
+      else if (!doc["disk_used_gb"].isNull()) g_pc_stats.disk_used_gb  = doc["disk_used_gb"].as<float>();
+
+      if (!doc["disk_total"].isNull())        g_pc_stats.disk_total_gb  = doc["disk_total"].as<float>();
+      else if (!doc["disk_total_gb"].isNull())g_pc_stats.disk_total_gb = doc["disk_total_gb"].as<float>();
 
       if (!doc["gpu"].isNull())              g_pc_stats.gpu_percent    = doc["gpu"].as<float>();
       else if (!doc["gpu_percent"].isNull())  g_pc_stats.gpu_percent    = doc["gpu_percent"].as<float>();
@@ -1067,33 +1086,61 @@ static void handleSpotifyTestArt() {
   server.send(200, "application/json", ok ? "{\"decoded\":true}" : "{\"decoded\":false}");
 }
 
-static void handleMode() {
+static void handleDisplayScreen() {
   sendCorsHeaders();
   if (server.method() == HTTP_POST) {
+    String scr = "";
+    bool save_def = true;
     if (server.hasArg("plain")) {
       JsonDocument doc;
       deserializeJson(doc, server.arg("plain"));
-      const char* m = doc["mode"] | "";
-      if (!strcmp(m, "spotify")) {
-        uiSetAppMode(MODE_SPOTIFY);
-      } else if (!strcmp(m, "printer")) {
-        uiSetAppMode(MODE_PRINTER);
-      } else if (!strcmp(m, "pet")) {
-        uiActivateDeskPet();
+      scr = doc["screen"].as<String>();
+      if (!doc["save_default"].isNull()) {
+        save_def = doc["save_default"].as<bool>();
       }
-    } else if (server.hasArg("mode")) {
-      String m = server.arg("mode");
-      if (m == "spotify") {
-        uiSetAppMode(MODE_SPOTIFY);
-      } else if (m == "printer") {
-        uiSetAppMode(MODE_PRINTER);
-      } else if (m == "pet") {
-        uiActivateDeskPet();
+    } else if (server.hasArg("screen")) {
+      scr = server.arg("screen");
+      if (server.hasArg("save")) save_def = (server.arg("save") == "1" || server.arg("save") == "true");
+    }
+
+    if (scr.length() > 0) {
+      uiSwitchView(scr.c_str());
+      if (save_def) {
+        strncpy(g_settings.default_screen, scr.c_str(), sizeof(g_settings.default_screen) - 1);
+        settingsSave();
       }
     }
   }
+
   JsonDocument resp;
-  resp["mode"] = (uiGetAppMode() == MODE_SPOTIFY) ? "spotify" : "printer";
+  resp["current_screen"] = uiGetCurrentViewName();
+  resp["default_screen"] = g_settings.default_screen;
+  resp["pc_hud_latched"] = uiIsPcHudLatched();
+  String out;
+  serializeJson(resp, out);
+  server.send(200, "application/json", out);
+}
+
+static void handleMode() {
+  sendCorsHeaders();
+  if (server.method() == HTTP_POST) {
+    String m = "";
+    if (server.hasArg("plain")) {
+      JsonDocument doc;
+      deserializeJson(doc, server.arg("plain"));
+      m = doc["mode"].as<String>();
+    } else if (server.hasArg("mode")) {
+      m = server.arg("mode");
+    }
+    if (m.length() > 0) {
+      uiSwitchView(m.c_str());
+      strncpy(g_settings.default_screen, m.c_str(), sizeof(g_settings.default_screen) - 1);
+      settingsSave();
+    }
+  }
+  JsonDocument resp;
+  resp["mode"] = uiGetCurrentViewName();
+  resp["default_screen"] = g_settings.default_screen;
   String out;
   serializeJson(resp, out);
   server.send(200, "application/json", out);
@@ -1156,6 +1203,8 @@ static void webTask(void* /*param*/) {
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/mode", HTTP_GET, handleMode);
   server.on("/api/mode", HTTP_POST, handleMode);
+  server.on("/api/screen", HTTP_GET, handleDisplayScreen);
+  server.on("/api/screen", HTTP_POST, handleDisplayScreen);
   server.on("/api/control/screen", HTTP_GET, handleScreen);
   server.on("/api/control/screen_rle", HTTP_GET, handleScreenRle);
   server.on("/api/control/button", HTTP_POST, handleButton);

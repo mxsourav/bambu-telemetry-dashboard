@@ -20,6 +20,7 @@ struct SystemSettings {
   uint8_t  pet_sick        = 0;  // 0 = healthy, 1 = sick, 2 = fever (manual)
   uint8_t  pet_show_stats  = 1;  // 1 = show bottom PC stats pill on pet, 0 = hide
   uint8_t  pet_show_music  = 1;  // 1 = show top now playing card on pet, 0 = hide
+  char     default_screen[16] = "pet"; // pet, printer, pc_hud, weather, ai, spotify, image, clock
   char     spotify_refresh_token[160] = {0};
 };
 

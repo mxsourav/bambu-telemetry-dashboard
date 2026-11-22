@@ -57,6 +57,12 @@ void uiActivateDeskPet();
 bool uiIsPetMode();
 void uiActivatePcHud();
 bool uiIsPcHud();
+void uiSetPcHudLatched(bool latched);
+bool uiIsPcHudLatched();
+
+// Screen / View Switcher (Admin Panel & Button controls)
+void uiSwitchView(const char* screen_name);
+const char* uiGetCurrentViewName();
 
 // Theme and Clock Format
 bool uiGetThemeLight();

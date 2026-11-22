@@ -462,6 +462,26 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
           <button class="btn-act" onclick="testBuzzer('alarm')" style="padding:4px 8px;font-size:0.65rem;border-color:#EF4444;color:#EF4444;">Siren</button>
         </div>
       </div>
+
+      <!-- Active Display View Switcher -->
+      <div style="display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:10px 12px;margin-top:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:0.75rem;font-weight:700;color:var(--txt);">Display Screen Tool</div>
+          <span id="curScreenVal" style="font-size:0.7rem;font-weight:700;color:var(--cyan);">PET</span>
+        </div>
+        <div style="font-size:0.65rem;color:var(--txt-muted);">Switch tool screen on device. Saves selection to SD card (/settings.json).</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+          <button class="led-chip active" id="scrBtn_pet" onclick="switchDisplayScreen('pet')" style="padding:5px 9px;font-size:0.68rem;">Desk Pet</button>
+          <button class="led-chip" id="scrBtn_printer" onclick="switchDisplayScreen('printer')" style="padding:5px 9px;font-size:0.68rem;">3D Printer</button>
+          <button class="led-chip" id="scrBtn_pc_hud" onclick="switchDisplayScreen('pc_hud')" style="padding:5px 9px;font-size:0.68rem;">PC Vitals</button>
+          <button class="led-chip" id="scrBtn_weather" onclick="switchDisplayScreen('weather')" style="padding:5px 9px;font-size:0.68rem;">Weather</button>
+          <button class="led-chip" id="scrBtn_ai" onclick="switchDisplayScreen('ai')" style="padding:5px 9px;font-size:0.68rem;">AI Brain</button>
+          <button class="led-chip" id="scrBtn_spotify" onclick="switchDisplayScreen('spotify')" style="padding:5px 9px;font-size:0.68rem;">Spotify</button>
+          <button class="led-chip" id="scrBtn_image" onclick="switchDisplayScreen('image')" style="padding:5px 9px;font-size:0.68rem;">Custom Image</button>
+          <button class="led-chip" id="scrBtn_clock" onclick="switchDisplayScreen('clock')" style="padding:5px 9px;font-size:0.68rem;">Clock</button>
+          <button class="led-chip" id="scrBtn_timer" onclick="switchDisplayScreen('timer')" style="padding:5px 9px;font-size:0.68rem;">Timer</button>
+        </div>
+      </div>
     </div>
 
     <!-- Telemetry Card -->
@@ -1212,6 +1232,36 @@ function fetchBuzzerMode(){
 function testBuzzer(pattern='1'){
   vib();
   fetch(getApiUrl('/api/buzzer/test?pattern=' + pattern + '&mode=' + currentBuzzerMode), {method:'POST'}).catch(()=>{});
+}
+
+function switchDisplayScreen(screenName){
+  updateDisplayScreenUI(screenName);
+  fetch(getApiUrl('/api/screen'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ screen: screenName, save_default: true })
+  }).catch(()=>{});
+}
+
+function updateDisplayScreenUI(screenName){
+  if (!screenName) return;
+  const screens = ['pet', 'printer', 'pc_hud', 'weather', 'ai', 'spotify', 'image', 'clock', 'timer'];
+  screens.forEach(s => {
+    const el = document.getElementById('scrBtn_' + s);
+    if (el) el.classList.toggle('active', s === screenName);
+  });
+  const lbl = document.getElementById('curScreenVal');
+  if (lbl) lbl.innerText = screenName.toUpperCase().replace('_', ' ');
+}
+
+function fetchDisplayScreen(){
+  fetch(getApiUrl('/api/screen'))
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.current_screen) {
+        updateDisplayScreenUI(d.current_screen);
+      }
+    }).catch(()=>{});
 }
 
 // --- Desk Pet mood controls ---
@@ -2330,6 +2380,7 @@ function renderAndPushSpotify(trackName, artistName, img, progressMs, durationMs
 // Initialize on page load
 initSpotify();
 fetchBuzzerMode();
+fetchDisplayScreen();
 
 // --- PWA Installation & Service Worker ---
 let deferredInstallPrompt = null;

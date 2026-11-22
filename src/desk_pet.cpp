@@ -43,7 +43,8 @@ static uint32_t s_transient_until_ms = 0;
 // Music vibe bounce parameters
 static float    s_vibe_amp = 0.0f;         // bounce amplitude (px)
 static float    s_vibe_hz  = 2.0f;         // bounce frequency (Hz)
-static uint8_t  s_vibe_style = 0;          // 0=groove 1=nod 2=hype 3=rock 4=chill
+static uint8_t  s_vibe_style = 0;          // 0=groove 1=nod 2=hype 3=rock 4=chill 5=breakup
+static float    s_breakup_sip_factor = 0.0f; // 0=rest/pour, 1=drinking/😖 pain grimace eyes
 
 void deskPetInit() {
   s_mood = PET_MOOD_NEUTRAL;
@@ -534,6 +535,11 @@ static inline void rotPoint(float cx, float cy, float dx, float dy, float cos_a,
   oy = (int)(cy + dx * sin_a + dy * cos_a + 0.5f);
 }
 
+static inline float smoothstep(float e0, float e1, float x) {
+  float t = fmaxf(0.0f, fminf(1.0f, (x - e0) / (e1 - e0)));
+  return t * t * (3.0f - 2.0f * t);
+}
+
 static inline void fillQuad(LGFX_Sprite& sprite, int x0, int y0, int x1, int y1, int x2, int y2, int x3, int y3, uint16_t col) {
   sprite.fillTriangle(x0, y0, x1, y1, x2, y2, col);
   sprite.fillTriangle(x0, y0, x2, y2, x3, y3, col);
@@ -546,11 +552,18 @@ static inline void drawQuadOutline(LGFX_Sprite& sprite, int x0, int y0, int x1, 
   sprite.drawLine(x3, y3, x0, y0, col);
 }
 
-static void drawBoozeBottle(LGFX_Sprite& sprite, float cx, float cy, float angle_deg, int& spout_x, int& spout_y) {
-  const uint16_t col_glass = 0x2104; // Smoked dark glass
-  const uint16_t col_amber = 0xFBE0; // Golden whiskey
-  const uint16_t col_cork  = 0xA345; // Cork stopper
-  const uint16_t col_dark  = 0x18C3; // Dark carbon outline
+// ---------------------------------------------------------------------
+// 1. Shaded Bourbon Bottle (Tapered body, shoulders, label, cork & cap)
+// ---------------------------------------------------------------------
+static void drawBoozeBottle(LGFX_Sprite& sprite, float cx, float cy, float angle_deg, int& spout_x, int& spout_y, bool is_dark) {
+  const uint16_t col_outline      = is_dark ? 0xDEFB : 0x18C3;
+  const uint16_t col_glass_dark   = is_dark ? 0x18E3 : 0x2965;
+  const uint16_t col_amber_deep   = 0x5941; // Deep mahogany base
+  const uint16_t col_amber_mid    = 0xBBE0; // Rich warm honey body
+  const uint16_t col_amber_bright = 0xFD20; // Golden amber meniscus
+  const uint16_t col_cap          = 0xC4A4; // Gold foil cap
+  const uint16_t col_cork         = 0x9306; // Cork stopper
+  const uint16_t col_label        = is_dark ? 0xD69A : 0xFFDE; // Vintage aged paper label
 
   float rad = angle_deg * (3.14159265f / 180.0f);
   float cos_a = cosf(rad);
@@ -558,248 +571,444 @@ static void drawBoozeBottle(LGFX_Sprite& sprite, float cx, float cy, float angle
 
   int x0, y0, x1, y1, x2, y2, x3, y3;
 
-  // 1. Bottle Body (12w x 20h centered at cx, cy)
-  rotPoint(cx, cy, -6.0f, -10.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  6.0f, -10.0f, cos_a, sin_a, x1, y1);
-  rotPoint(cx, cy,  6.0f,  10.0f, cos_a, sin_a, x2, y2);
-  rotPoint(cx, cy, -6.0f,  10.0f, cos_a, sin_a, x3, y3);
-  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass);
-  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_dark);
+  // Base & Body: Tapered bottle (-6.5 to 6.5 wide at base, -7.0 to 7.0 at top)
+  rotPoint(cx, cy, -6.5f,  9.5f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  6.5f,  9.5f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  7.0f, -4.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -7.0f, -4.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass_dark);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
 
-  // 2. Amber Booze Window inside bottle
-  rotPoint(cx, cy, -5.0f, -4.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  5.0f, -4.0f, cos_a, sin_a, x1, y1);
-  rotPoint(cx, cy,  5.0f,  9.0f, cos_a, sin_a, x2, y2);
-  rotPoint(cx, cy, -5.0f,  9.0f, cos_a, sin_a, x3, y3);
-  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber);
+  // Liquid layer 1 (Deep base)
+  rotPoint(cx, cy, -5.5f,  8.5f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  5.5f,  8.5f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  5.8f,  2.5f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -5.8f,  2.5f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber_deep);
 
-  // 3. Modern white label with center divider
-  rotPoint(cx, cy, -5.0f, -2.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  5.0f, -2.0f, cos_a, sin_a, x1, y1);
-  rotPoint(cx, cy,  5.0f,  4.0f, cos_a, sin_a, x2, y2);
-  rotPoint(cx, cy, -5.0f,  4.0f, cos_a, sin_a, x3, y3);
-  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, 0xFFFF);
-  rotPoint(cx, cy, -4.0f, 1.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  4.0f, 1.0f, cos_a, sin_a, x1, y1);
-  sprite.drawLine(x0, y0, x1, y1, col_dark);
+  // Liquid layer 2 (Mid body)
+  rotPoint(cx, cy, -5.8f,  2.5f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  5.8f,  2.5f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  6.0f, -2.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -6.0f, -2.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber_mid);
 
-  // 4. Bottle Neck (5w x 7h)
-  rotPoint(cx, cy, -2.0f, -17.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  2.0f, -17.0f, cos_a, sin_a, x1, y1);
-  rotPoint(cx, cy,  2.0f, -10.0f, cos_a, sin_a, x2, y2);
-  rotPoint(cx, cy, -2.0f, -10.0f, cos_a, sin_a, x3, y3);
-  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass);
+  // Liquid layer 3 (Bright top)
+  rotPoint(cx, cy, -6.0f, -2.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  6.0f, -2.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  6.0f, -4.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -6.0f, -4.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber_bright);
 
-  // 5. Cork Stopper (5w x 3h)
-  rotPoint(cx, cy, -2.0f, -20.0f, cos_a, sin_a, x0, y0);
-  rotPoint(cx, cy,  2.0f, -20.0f, cos_a, sin_a, x1, y1);
-  rotPoint(cx, cy,  2.0f, -17.0f, cos_a, sin_a, x2, y2);
-  rotPoint(cx, cy, -2.0f, -17.0f, cos_a, sin_a, x3, y3);
+  // Vintage Whiskey Label with center ruling lines
+  rotPoint(cx, cy, -5.0f, -1.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  5.0f, -1.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  5.0f,  5.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -5.0f,  5.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_label);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+  int lx0, ly0, lx1, ly1;
+  rotPoint(cx, cy, -3.5f, 1.0f, cos_a, sin_a, lx0, ly0);
+  rotPoint(cx, cy,  3.5f, 1.0f, cos_a, sin_a, lx1, ly1);
+  sprite.drawLine(lx0, ly0, lx1, ly1, col_outline);
+  rotPoint(cx, cy, -2.5f, 3.0f, cos_a, sin_a, lx0, ly0);
+  rotPoint(cx, cy,  2.5f, 3.0f, cos_a, sin_a, lx1, ly1);
+  sprite.drawLine(lx0, ly0, lx1, ly1, col_outline);
+
+  // Shoulders (tapering from body to neck)
+  rotPoint(cx, cy, -7.0f, -4.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  7.0f, -4.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  2.8f, -8.5f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -2.8f, -8.5f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass_dark);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // Neck (2.8w x 8.0h)
+  rotPoint(cx, cy, -2.8f, -8.5f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  2.8f, -8.5f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  2.8f, -16.5f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -2.8f, -16.5f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass_dark);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // Cork Stopper
+  rotPoint(cx, cy, -2.8f, -16.5f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  2.8f, -16.5f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  3.2f, -19.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -3.2f, -19.0f, cos_a, sin_a, x3, y3);
   fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_cork);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
 
-  // Spout coordinate (tip of bottle opening)
-  rotPoint(cx, cy, 0.0f, -20.0f, cos_a, sin_a, spout_x, spout_y);
+  // Gold Foil Cap
+  rotPoint(cx, cy, -3.2f, -19.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  3.2f, -19.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  3.2f, -22.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -3.2f, -22.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_cap);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // Specular shine line on left body
+  int sx0, sy0, sx1, sy1;
+  rotPoint(cx, cy, -4.8f, 7.5f, cos_a, sin_a, sx0, sy0);
+  rotPoint(cx, cy, -5.4f, -3.0f, cos_a, sin_a, sx1, sy1);
+  sprite.drawLine(sx0, sy0, sx1, sy1, 0xFFFF);
+
+  // Spout coordinate for pouring stream
+  rotPoint(cx, cy, 0.0f, -22.0f, cos_a, sin_a, spout_x, spout_y);
 }
 
-static void drawMickeyGlove(LGFX_Sprite& sprite, int cx, int cy, bool is_left, bool grasping_glass, bool grasping_bottle) {
+// ---------------------------------------------------------------------
+// 2. Heavy Cut-Crystal Tumbler Glass (Shaded amber whiskey & floating ice)
+// ---------------------------------------------------------------------
+static void drawBigTumblerGlass(LGFX_Sprite& sprite, float cx, float cy, float fill_pct, float angle_deg, bool is_dark) {
+  const uint16_t col_outline      = is_dark ? 0xDEFB : 0x18C3;
+  const uint16_t col_glass_tint   = is_dark ? 0x2124 : 0xEF7D;
+  const uint16_t col_base_crystal = is_dark ? 0x4228 : 0xDEFB;
+  const uint16_t col_amber_deep   = 0x5941;
+  const uint16_t col_amber_mid    = 0xD321;
+  const uint16_t col_amber_top    = 0xFE25;
+  const uint16_t col_ice          = 0xEF7D;
+  const uint16_t col_ice_edge     = 0xAD75;
+
+  float rad = angle_deg * (3.14159265f / 180.0f);
+  float cos_a = cosf(rad);
+  float sin_a = sinf(rad);
+
+  int x0, y0, x1, y1, x2, y2, x3, y3;
+
+  // Rocks glass body: h=24, w_top=21 (-10.5 to 10.5), w_bot=17 (-8.5 to 8.5)
+  rotPoint(cx, cy, -10.5f, -12.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  10.5f, -12.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,   8.5f,  12.0f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy,  -8.5f,  12.0f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_glass_tint);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // Solid Crystal Base (bottom 5px)
+  rotPoint(cx, cy, -8.9f,  7.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  8.9f,  7.0f, cos_a, sin_a, x1, y1);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_base_crystal);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // Cut-crystal fluting facets on base
+  for (float fx : {-5.0f, -1.6f, 1.6f, 5.0f}) {
+    int fx0, fy0, fx1, fy1;
+    rotPoint(cx, cy, fx * 0.95f, 7.5f, cos_a, sin_a, fx0, fy0);
+    rotPoint(cx, cy, fx * 0.90f, 11.5f, cos_a, sin_a, fx1, fy1);
+    sprite.drawLine(fx0, fy0, fx1, fy1, col_outline);
+  }
+
+  // Liquid Fill (Multi-tone whiskey gradient)
+  if (fill_pct > 0.03f) {
+    float max_h = 16.5f;
+    float liq_h = max_h * fminf(1.0f, fill_pct);
+    float liq_top_y = 7.0f - liq_h;
+
+    float t_w = (12.0f - liq_top_y) / 24.0f;
+    float w_liq_top = 8.5f + t_w * (10.5f - 8.5f) - 1.2f;
+    float w_liq_bot = 7.8f;
+
+    float mid_y = liq_top_y + liq_h * 0.5f;
+    float t_mid = (12.0f - mid_y) / 24.0f;
+    float w_liq_mid = 8.5f + t_mid * (10.5f - 8.5f) - 1.2f;
+
+    // Deep bottom layer
+    rotPoint(cx, cy, -w_liq_mid, mid_y, cos_a, sin_a, x0, y0);
+    rotPoint(cx, cy,  w_liq_mid, mid_y, cos_a, sin_a, x1, y1);
+    rotPoint(cx, cy,  w_liq_bot, 7.0f,  cos_a, sin_a, x2, y2);
+    rotPoint(cx, cy, -w_liq_bot, 7.0f,  cos_a, sin_a, x3, y3);
+    fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber_deep);
+
+    // Warm mid layer
+    rotPoint(cx, cy, -w_liq_top, liq_top_y, cos_a, sin_a, x0, y0);
+    rotPoint(cx, cy,  w_liq_top, liq_top_y, cos_a, sin_a, x1, y1);
+    rotPoint(cx, cy,  w_liq_mid, mid_y,     cos_a, sin_a, x2, y2);
+    rotPoint(cx, cy, -w_liq_mid, mid_y,     cos_a, sin_a, x3, y3);
+    fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_amber_mid);
+
+    // Bright golden meniscus line
+    rotPoint(cx, cy, -w_liq_top, liq_top_y, cos_a, sin_a, x0, y0);
+    rotPoint(cx, cy,  w_liq_top, liq_top_y, cos_a, sin_a, x1, y1);
+    sprite.drawLine(x0, y0, x1, y1, col_amber_top);
+
+    // Floating Ice Cube (bobs dynamically inside rocks glass)
+    if (fill_pct > 0.35f && liq_h > 7.0f) {
+      float ice_cx = -1.2f;
+      float ice_cy = liq_top_y + 4.0f;
+      rotPoint(cx, cy, ice_cx - 2.8f, ice_cy - 2.2f, cos_a, sin_a, x0, y0);
+      rotPoint(cx, cy, ice_cx + 2.8f, ice_cy - 3.0f, cos_a, sin_a, x1, y1);
+      rotPoint(cx, cy, ice_cx + 3.5f, ice_cy + 2.6f, cos_a, sin_a, x2, y2);
+      rotPoint(cx, cy, ice_cx - 2.2f, ice_cy + 3.5f, cos_a, sin_a, x3, y3);
+      fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_ice);
+      drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_ice_edge);
+      int ix0, iy0, ix1, iy1;
+      rotPoint(cx, cy, ice_cx - 1.6f, ice_cy - 1.5f, cos_a, sin_a, ix0, iy0);
+      rotPoint(cx, cy, ice_cx + 1.2f, ice_cy - 2.0f, cos_a, sin_a, ix1, iy1);
+      sprite.drawLine(ix0, iy0, ix1, iy1, 0xFFFF);
+    }
+  }
+
+  // Crystal specular glint line down left wall
+  int gx0, gy0, gx1, gy1;
+  rotPoint(cx, cy, -9.4f, -10.0f, cos_a, sin_a, gx0, gy0);
+  rotPoint(cx, cy, -7.6f,   5.0f, cos_a, sin_a, gx1, gy1);
+  sprite.drawLine(gx0, gy0, gx1, gy1, 0xFFFF);
+}
+
+// ---------------------------------------------------------------------
+// 3. Cute Cartoon Glove Palms (Wrist cuffs, 3 stitch darts & fingers)
+// ---------------------------------------------------------------------
+static void drawCartoonGlove(LGFX_Sprite& sprite, float cx, float cy, bool is_left, const char* grasp_mode, float angle_deg, bool is_dark) {
+  const uint16_t col_outline = is_dark ? 0xDEFB : 0x18C3;
+  const uint16_t col_white   = 0xFFFF;
+  const uint16_t col_cuff    = is_dark ? 0xD69A : 0xEF7D;
+
+  float rad = angle_deg * (3.14159265f / 180.0f);
+  float cos_a = cosf(rad);
+  float sin_a = sinf(rad);
+  float sign = is_left ? 1.0f : -1.0f;
+
+  int x0, y0, x1, y1, x2, y2, x3, y3;
+
+  // 1. Puffy Wrist Cuff
+  rotPoint(cx, cy, -4.5f, 5.0f, cos_a, sin_a, x0, y0);
+  rotPoint(cx, cy,  4.5f, 5.0f, cos_a, sin_a, x1, y1);
+  rotPoint(cx, cy,  4.5f, 9.5f, cos_a, sin_a, x2, y2);
+  rotPoint(cx, cy, -4.5f, 9.5f, cos_a, sin_a, x3, y3);
+  fillQuad(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_cuff);
+  drawQuadOutline(sprite, x0, y0, x1, y1, x2, y2, x3, y3, col_outline);
+
+  // 2. Main Puffy Palm (r=5)
+  sprite.fillCircle((int)cx, (int)cy, 5, col_white);
+  sprite.drawCircle((int)cx, (int)cy, 5, col_outline);
+
+  // 3. Three stitched darts on back of glove
+  for (float off : {-2.2f, 0.0f, 2.2f}) {
+    int p0x, p0y, p1x, p1y;
+    rotPoint(cx, cy, off * 0.9f, -3.0f + fabsf(off) * 0.4f, cos_a, sin_a, p0x, p0y);
+    rotPoint(cx, cy, off * 1.1f,  1.8f - fabsf(off) * 0.3f, cos_a, sin_a, p1x, p1y);
+    sprite.drawLine(p0x, p0y, p1x, p1y, col_outline);
+  }
+
+  // 4. Fingers & Thumb grasping
+  if (!strcmp(grasp_mode, "glass")) {
+    int tx, ty;
+    rotPoint(cx, cy, -sign * 4.2f, -1.2f, cos_a, sin_a, tx, ty);
+    sprite.fillEllipse(tx, ty, 3, 2, col_white);
+    sprite.drawEllipse(tx, ty, 3, 2, col_outline);
+
+    for (float fy : {-2.8f, 0.2f, 3.2f}) {
+      int fx, f_y;
+      rotPoint(cx, cy, sign * 4.8f, fy, cos_a, sin_a, fx, f_y);
+      sprite.fillEllipse(fx, f_y, 3, 2, col_white);
+      sprite.drawEllipse(fx, f_y, 3, 2, col_outline);
+    }
+  } else if (!strcmp(grasp_mode, "bottle")) {
+    int tx, ty;
+    rotPoint(cx, cy, -sign * 4.0f, 0.0f, cos_a, sin_a, tx, ty);
+    sprite.fillEllipse(tx, ty, 3, 2, col_white);
+    sprite.drawEllipse(tx, ty, 3, 2, col_outline);
+
+    for (float fy : {-2.6f, 0.4f, 3.4f}) {
+      int fx, f_y;
+      rotPoint(cx, cy, sign * 4.5f, fy, cos_a, sin_a, fx, f_y);
+      sprite.fillEllipse(fx, f_y, 3, 2, col_white);
+      sprite.drawEllipse(fx, f_y, 3, 2, col_outline);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// 4. Bitter Burn Pain Grimace Eyes (😖) with Forced Tear Bursts
+// ---------------------------------------------------------------------
+static void drawExpressivePainEyes(LGFX_Sprite& sprite, float left_cx, float right_cx, float cy, float sip_factor, uint32_t ms, bool is_dark) {
+  const uint16_t col_line  = is_dark ? 0xDEFB : 0x18C3;
+  const uint16_t col_tear  = 0x245F; // Vivid tear blue
   const uint16_t col_white = 0xFFFF;
-  const uint16_t col_dark  = 0x18C3; // Crisp carbon dark
 
-  // 1. Wrist Cuff (pill shape below palm)
-  int cuff_x = is_left ? (cx - 4) : (cx - 5);
-  int cuff_y = cy + 6;
-  sprite.fillRoundRect(cuff_x, cuff_y, 9, 4, 2, col_white);
-  sprite.drawRoundRect(cuff_x, cuff_y, 9, 4, 2, col_dark);
+  float tremble_y = sinf((float)ms * 0.05f) * 0.4f;
+  float h = 7.5f * sip_factor;
 
-  // 2. Main Puffy Palm (rounded circle r=6)
-  sprite.fillCircle(cx, cy, 6, col_white);
-  sprite.drawCircle(cx, cy, 6, col_dark);
+  for (int side = 0; side < 2; ++side) {
+    float cx = (side == 0) ? left_cx : right_cx;
+    float sign = (side == 0) ? 1.0f : -1.0f;
 
-  // 3. Three Iconic Mickey Mouse stitched darts on back of glove
-  sprite.drawLine(cx - 2, cy - 3, cx - 2, cy + 2, col_dark);
-  sprite.drawLine(cx,     cy - 4, cx,     cy + 3, col_dark);
-  sprite.drawLine(cx + 2, cy - 3, cx + 2, cy + 2, col_dark);
+    float x_in  = cx + sign * 11.0f; // Inner corner near nose
+    float x_out = cx - sign * 10.0f; // Outer corner pinched tight
+    float y_top = cy - h + tremble_y;
+    float y_bot = cy + h + tremble_y;
+    float y_mid = cy + tremble_y;
 
-  // 4. Cute Puffy Thumb wrapping around object
-  if (grasping_glass) {
-    if (is_left) {
-      // Thumb reaches right over glass edge
-      sprite.fillEllipse(cx + 5, cy - 1, 3, 2, col_white);
-      sprite.drawEllipse(cx + 5, cy - 1, 3, 2, col_dark);
-    } else {
-      // Thumb reaches left over glass edge
-      sprite.fillEllipse(cx - 5, cy - 1, 3, 2, col_white);
-      sprite.drawEllipse(cx - 5, cy - 1, 3, 2, col_dark);
+    // Heavy curved eyelid squeeze strokes
+    for (int t = -1; t <= 1; ++t) {
+      sprite.drawLine((int)x_in, (int)(y_top + 1.0f + t), (int)x_out, (int)(y_mid + t), col_line);
+      sprite.drawLine((int)x_in, (int)(y_bot - 1.0f + t), (int)x_out, (int)(y_mid + t), col_line);
     }
-  } else if (grasping_bottle) {
-    if (!is_left) {
-      sprite.fillEllipse(cx - 5, cy, 3, 2, col_white);
-      sprite.drawEllipse(cx - 5, cy, 3, 2, col_dark);
-    } else {
-      sprite.fillEllipse(cx + 5, cy, 3, 2, col_white);
-      sprite.drawEllipse(cx + 5, cy, 3, 2, col_dark);
-    }
+
+    // Radiating crow's-feet stress wrinkles at outer temple corner
+    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 5.0f), (int)(y_mid - 4.0f), col_line);
+    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 5.5f), (int)(y_mid + 4.0f), col_line);
+    sprite.drawLine((int)x_out, (int)y_mid, (int)(x_out - sign * 6.5f), (int)y_mid, col_line);
+
+    // Center squint pinch line
+    sprite.drawLine((int)(x_out + sign * 2.0f), (int)y_mid, (int)(x_in - sign * 2.0f), (int)y_mid, col_line);
+
+    // Forced teardrops bursting out of outer eye corner
+    float drop_progress = (float)(ms % 1000) / 1000.0f;
+    float drop_x = x_out - sign * 2.0f;
+    float drop_y = cy + 4.0f + drop_progress * 18.0f;
+    sprite.drawLine((int)x_out, (int)(cy + 2.0f), (int)drop_x, (int)(drop_y - 2.0f), col_tear);
+    sprite.fillCircle((int)drop_x, (int)drop_y, 3, col_tear);
+    sprite.drawCircle((int)drop_x, (int)drop_y, 3, col_line);
+    sprite.fillCircle((int)drop_x - 1, (int)drop_y - 1, 1, col_white);
   }
 }
 
-static void drawBigTumblerGlass(LGFX_Sprite& sprite, int gx, int gy, float fill_pct, bool is_dark) {
-  const int gw = 22;
-  const int gh = 26;
-
-  const uint16_t col_glass_edge = is_dark ? 0x632C : 0x2965; // Smoked crystal outline
-  const uint16_t col_glass_body = is_dark ? 0x2104 : 0xEF5D; // Translucent body
-  const uint16_t col_base       = is_dark ? 0x3186 : 0xCE79; // Heavy solid bottom base
-  const uint16_t col_amber_liq  = 0xFBE0;                   // Warm golden whiskey
-  const uint16_t col_amber_top  = 0xFE25;                   // Bright liquid surface
-  const uint16_t col_ice        = 0xE75C;                   // Crisp ice cube
-  const uint16_t col_ice_edge   = 0xAD75;                   // Cold ice edge
-  const uint16_t col_white      = 0xFFFF;
-
-  // 1. Glass body
-  sprite.fillRect(gx, gy, gw, gh, col_glass_body);
-  sprite.drawRect(gx, gy, gw, gh, col_glass_edge);
-
-  // 2. Heavy Solid Glass Bottom (Rocks glass base, 4px thick)
-  sprite.fillRect(gx + 1, gy + gh - 5, gw - 2, 4, col_base);
-
-  // 3. Amber Liquid Fill
-  int base_y = gy + gh - 5;
-  int max_liq_h = gh - 8;
-  if (fill_pct > 0.04f) {
-    int liq_h = (int)((float)max_liq_h * fill_pct);
-    if (liq_h > max_liq_h) liq_h = max_liq_h;
-    int liq_top = base_y - liq_h;
-    sprite.fillRect(gx + 2, liq_top, gw - 4, liq_h, col_amber_liq);
-    // Liquid surface line
-    sprite.drawFastHLine(gx + 2, liq_top, gw - 4, col_amber_top);
-
-    // 4. Floating Ice Cube inside rocks glass
-    if (fill_pct > 0.35f) {
-      int ice_x = gx + 4;
-      int ice_y = liq_top + 2;
-      if (ice_y + 6 < base_y) {
-        sprite.fillRect(ice_x, ice_y, 6, 6, col_ice);
-        sprite.drawRect(ice_x, ice_y, 6, 6, col_ice_edge);
-      }
-    }
-  }
-
-  // 5. Crystal specular highlight reflection line down left wall
-  sprite.drawFastVLine(gx + 2, gy + 2, gh - 7, col_white);
-}
-
+// ---------------------------------------------------------------------
+// 5. 100Hz Silky Smooth Breakup Scene Controller (10s continuous cycle)
+// ---------------------------------------------------------------------
 static void drawBreakupDrinkingScene(LGFX_Sprite& sprite, float mouth_x, float mouth_y, uint32_t ms) {
   float t_sec = (float)ms * 0.001f;
-  float cycle = fmodf(t_sec, 8.0f); // 8-second synchronized breakup loop
+  float cycle = fmodf(t_sec, 10.0f);
   bool is_dark = (s_bg_r < 60);
 
-  // Base layout coordinates
-  const int gx = 69;
-  const int gy = 94;
-  const int gw = 22;
+  const float bottle_home_x = 138.0f;
+  const float bottle_home_y = 105.0f;
+  const float glass_home_x  = 80.0f;
+  const float glass_home_y  = 107.0f;
 
-  float fill_pct = 0.10f;
-  float lift_y = 0.0f;
-
-  float bottle_x = 138.0f;
-  float bottle_y = 106.0f; // center of bottle body
+  float bottle_x = bottle_home_x;
+  float bottle_y = bottle_home_y;
   float bottle_ang = 0.0f;
   bool is_pouring = false;
 
-  float lpx = (float)(gx - 6);
-  float lpy = (float)(gy + 13);
-  float rpx = (float)(gx + gw + 6);
-  float rpy = (float)(gy + 13);
-  bool grasping_glass_r = true;
-  bool grasping_bottle_r = false;
+  float glass_x = glass_home_x;
+  float glass_y = glass_home_y;
+  float glass_ang = 0.0f;
+  float fill_pct = 0.15f;
+  float sip_factor = 0.0f;
 
-  if (cycle < 0.8f) {
-    // Phase 0: Reaching for bottle
-    float reach_p = cycle / 0.8f;
-    rpx = (float)(gx + gw + 6) + reach_p * (138.0f - (float)(gx + gw + 6));
-    rpy = (float)(gy + 13) - reach_p * 5.0f;
-    grasping_glass_r = false;
-    fill_pct = 0.10f;
-  } else if (cycle < 2.4f) {
-    // Phase 1: Pouring bottle into glass
-    float pour_p = (cycle - 0.8f) / 1.6f;
-    fill_pct = 0.10f + pour_p * 0.75f;
-    bottle_x = 118.0f;
-    bottle_y = 100.0f;
-    bottle_ang = -45.0f;
+  float r_hand_x = glass_x + 11.5f;
+  float r_hand_y = glass_y + 1.0f;
+  const char* r_grasp = "glass";
+
+  // 0.0s -> 1.5s: Resting sorrow slump
+  if (cycle < 1.5f) {
+    fill_pct = 0.15f;
+    r_hand_x = glass_x + 11.5f;
+    r_hand_y = glass_y + 1.0f;
+    r_grasp = "glass";
+  }
+  // 1.5s -> 3.2s: Reaching and Tilting Bottle (kept at x=130 to keep right eye 100% visible!)
+  else if (cycle < 3.2f) {
+    fill_pct = 0.15f;
+    float p = smoothstep(1.5f, 3.2f, cycle);
+    bottle_x = bottle_home_x + p * (130.0f - bottle_home_x);
+    bottle_y = bottle_home_y + p * (96.0f - bottle_home_y);
+    bottle_ang = p * (-48.0f);
+
+    r_hand_x = bottle_x + sinf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
+    r_hand_y = bottle_y + cosf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
+    r_grasp = "bottle";
+  }
+  // 3.2s -> 5.0s: Pouring Stream into Glass
+  else if (cycle < 5.0f) {
+    float p = smoothstep(3.2f, 5.0f, cycle);
+    bottle_x = 130.0f;
+    bottle_y = 96.0f;
+    bottle_ang = -48.0f;
     is_pouring = true;
-    rpx = 120.0f;
-    rpy = 106.0f;
-    grasping_glass_r = false;
-    grasping_bottle_r = true;
-  } else if (cycle < 3.4f) {
-    // Phase 2: Bottle set back down, right hand moves back to glass
-    float return_p = (cycle - 2.4f) / 1.0f;
-    bottle_x = 138.0f;
-    bottle_y = 106.0f;
-    bottle_ang = 0.0f;
-    rpx = 138.0f - return_p * (138.0f - (float)(gx + gw + 6));
-    rpy = 106.0f - return_p * (106.0f - (float)(gy + 13));
-    grasping_glass_r = (return_p > 0.8f);
-    fill_pct = 0.85f;
-  } else if (cycle < 4.4f) {
-    // Phase 3: Both palms lift heavy glass to mouth
-    float lift_p = (cycle - 3.4f) / 1.0f;
-    float ease = 0.5f - 0.5f * cosf(lift_p * 3.14159265f);
-    lift_y = ease * 16.0f;
-    fill_pct = 0.85f;
-    lpy -= lift_y;
-    rpy -= lift_y;
-    grasping_glass_r = true;
-  } else if (cycle < 5.8f) {
-    // Phase 4: The big swig (drinking at mouth)
-    lift_y = 16.0f;
-    lpy -= lift_y;
-    rpy -= lift_y;
-    float drink_p = (cycle - 4.4f) / 1.4f;
-    fill_pct = 0.85f * (1.0f - drink_p * 0.88f);
-    grasping_glass_r = true;
-    // Drunken gulp tear/amber droplet during peak gulp
-    if (drink_p > 0.35f && drink_p < 0.75f) {
-      sprite.fillCircle(78, (int)(gy - lift_y - 2), 2, 0xFBE0);
+    fill_pct = 0.15f + p * 0.75f;
+
+    r_hand_x = bottle_x + sinf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
+    r_hand_y = bottle_y + cosf(bottle_ang * (3.14159265f / 180.0f)) * 6.0f;
+    r_grasp = "bottle";
+  }
+  // 5.0s -> 6.5s: Bottle returns to table, right hand returns to glass
+  else if (cycle < 6.5f) {
+    float p = smoothstep(5.0f, 6.5f, cycle);
+    bottle_x = 130.0f + p * (bottle_home_x - 130.0f);
+    bottle_y = 96.0f + p * (bottle_home_y - 96.0f);
+    bottle_ang = -48.0f * (1.0f - p);
+    fill_pct = 0.90f;
+
+    float r_target_x = glass_x + 11.5f;
+    float r_target_y = glass_y + 1.0f;
+    r_hand_x = 130.0f + p * (r_target_x - 130.0f);
+    r_hand_y = 98.0f + p * (r_target_y - 98.0f);
+    r_grasp = (p < 0.4f) ? "bottle" : "glass";
+  }
+  // 6.5s -> 7.8s: Raising Rocks Glass to Mouth!
+  else if (cycle < 7.8f) {
+    float p = smoothstep(6.5f, 7.8f, cycle);
+    fill_pct = 0.90f;
+    glass_x = glass_home_x;
+    glass_y = glass_home_y - p * 5.5f; // aligns rim with mouth
+    glass_ang = p * 26.0f;
+
+    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
+    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+    r_grasp = "glass";
+    sip_factor = p * 0.4f;
+  }
+  // 7.8s -> 9.2s: SIPPING AT MOUTH (😖 Bitter Burn Grimace Eyes & Chug)
+  else if (cycle < 9.2f) {
+    float p_drink = smoothstep(7.8f, 9.2f, cycle);
+    glass_x = glass_home_x;
+    glass_y = glass_home_y - 5.5f; // exact mouth contact!
+    glass_ang = 26.0f + sinf(p_drink * 3.14159265f) * 8.0f; // tilts up to 34 deg
+
+    fill_pct = 0.90f - p_drink * 0.74f;
+
+    if (cycle < 8.1f) {
+      sip_factor = smoothstep(7.8f, 8.1f, cycle);
+    } else if (cycle < 8.9f) {
+      sip_factor = 1.0f;
+    } else {
+      sip_factor = 1.0f - smoothstep(8.9f, 9.2f, cycle) * 0.6f;
     }
-  } else if (cycle < 6.8f) {
-    // Phase 5: Lowering glass back down to table
-    float low_p = (cycle - 5.8f) / 1.0f;
-    float ease = 0.5f + 0.5f * cosf(low_p * 3.14159265f);
-    lift_y = ease * 16.0f;
-    lpy -= lift_y;
-    rpy -= lift_y;
-    fill_pct = 0.10f;
-    grasping_glass_r = true;
-  } else {
-    // Phase 6: Drunken sorrow slump on table
-    fill_pct = 0.10f;
-    grasping_glass_r = true;
+
+    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
+    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+    r_grasp = "glass";
+  }
+  // 9.2s -> 10.0s: Lowering Glass back to Table, Eyes slowly Reopening
+  else {
+    float p = smoothstep(9.2f, 10.0f, cycle);
+    fill_pct = 0.16f;
+    glass_x = glass_home_x;
+    glass_y = (glass_home_y - 5.5f) + p * 5.5f;
+    glass_ang = 26.0f * (1.0f - p);
+    sip_factor = fmaxf(0.0f, 0.4f * (1.0f - p * 1.6f));
+
+    r_hand_x = glass_x + 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
+    r_hand_y = glass_y + 1.0f + 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+    r_grasp = "glass";
   }
 
-  int eff_gy = (int)((float)gy - lift_y);
+  s_breakup_sip_factor = sip_factor;
 
-  // 1. Draw Bottle (Upright on table or tilted while pouring)
+  float l_hand_x = glass_x - 11.5f * cosf(glass_ang * (3.14159265f / 180.0f));
+  float l_hand_y = glass_y + 1.0f - 11.5f * sinf(glass_ang * (3.14159265f / 180.0f));
+
+  // 1. Draw Bourbon Bottle
   int spout_x = 0;
   int spout_y = 0;
-  drawBoozeBottle(sprite, bottle_x, bottle_y, bottle_ang, spout_x, spout_y);
+  drawBoozeBottle(sprite, bottle_x, bottle_y, bottle_ang, spout_x, spout_y, is_dark);
 
-  // 2. If pouring, draw golden amber stream splashing into glass
+  // 2. Draw Golden Amber Stream if pouring
   if (is_pouring) {
-    sprite.drawLine(spout_x, spout_y, gx + 12, eff_gy + 2, 0xFBE0);
-    sprite.drawLine(spout_x + 1, spout_y, gx + 13, eff_gy + 2, 0xFE25);
-    sprite.fillCircle(gx + 12, eff_gy + 2, 2, 0xFE25);
+    sprite.drawLine(spout_x, spout_y, (int)glass_x + 4, (int)glass_y - 8, 0xFD20);
+    sprite.drawLine(spout_x + 1, spout_y, (int)glass_x + 5, (int)glass_y - 8, 0xFE25);
+    sprite.fillCircle((int)glass_x + 4, (int)glass_y - 6, 2, 0xFE25);
   }
 
-  // 3. Draw Big Bitter Glass (Rocks glass tumbler with ice cube)
-  drawBigTumblerGlass(sprite, gx, eff_gy, fill_pct, is_dark);
+  // 3. Draw Heavy Tumbler Glass with Whiskey Gradient & Floating Ice
+  drawBigTumblerGlass(sprite, glass_x, glass_y, fill_pct, glass_ang, is_dark);
 
-  // 4. Draw Cute Mickey Mouse Glove Palms
-  // Left palm holds left side of tumbler
-  drawMickeyGlove(sprite, (int)lpx, (int)lpy, true, true, false);
-  // Right palm holds bottle while pouring, or right side of tumbler while drinking/resting
-  drawMickeyGlove(sprite, (int)rpx, (int)rpy, false, grasping_glass_r, grasping_bottle_r);
+  // 4. Draw Cute Puffy Cartoon Gloves
+  drawCartoonGlove(sprite, l_hand_x, l_hand_y, true, "glass", glass_ang, is_dark);
+  drawCartoonGlove(sprite, r_hand_x, r_hand_y, false, r_grasp, (r_grasp == "bottle" ? bottle_ang : glass_ang), is_dark);
 }
 
 // ---------------------------------------------------------------------
@@ -1157,9 +1366,16 @@ static void drawProceduralBrows(LGFX_Sprite& sprite, float left_cx, float right_
             arch_k = 0.024f;
             break;
           case 5: // Emotional / Heartbreak Ballad: deep weeping sorrow arch, vulnerable tremble
-            y_offset = 2.4f + sinf((float)ms * 0.012f) * 0.6f;
-            slope = 0.56f; // dramatic heartbroken slant (inner corners lifted high in grief, outer ends drooped low)
-            arch_k = 0.018f;
+            if (s_breakup_sip_factor > 0.05f) {
+              // During bitter burn sip: intense furrow down over squeezed 😖 eyes
+              y_offset = 3.5f * s_breakup_sip_factor;
+              slope = -0.35f * s_breakup_sip_factor;
+              arch_k = 0.012f;
+            } else {
+              y_offset = 2.4f + sinf((float)ms * 0.012f) * 0.6f;
+              slope = 0.56f; // dramatic heartbroken slant (inner corners lifted high in grief, outer ends drooped low)
+              arch_k = 0.018f;
+            }
             break;
           default: // Pop / Upbeat Groove: rhythmic bounce
             y_offset = -3.0f - fmaxf(0.0f, beat_sin) * 2.8f;
@@ -1604,6 +1820,31 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
   s_bg_g = (uint8_t)(s_curr_tint_g + 0.5f);
   s_bg_b = (uint8_t)(s_curr_tint_b + 0.5f);
 
+  // Synchronize breakup phase sipping factor for eyes, brows and drinking sequence
+  if (s_mood == PET_MOOD_DANCING && s_vibe_style == 5) {
+    float t_sec = (float)ms * 0.001f;
+    float cycle = fmodf(t_sec, 10.0f);
+    if (cycle >= 6.5f && cycle < 7.8f) {
+      float p = smoothstep(6.5f, 7.8f, cycle);
+      s_breakup_sip_factor = p * 0.4f;
+    } else if (cycle >= 7.8f && cycle < 9.2f) {
+      if (cycle < 8.1f) {
+        s_breakup_sip_factor = smoothstep(7.8f, 8.1f, cycle);
+      } else if (cycle < 8.9f) {
+        s_breakup_sip_factor = 1.0f;
+      } else {
+        s_breakup_sip_factor = 1.0f - smoothstep(8.9f, 9.2f, cycle) * 0.6f;
+      }
+    } else if (cycle >= 9.2f) {
+      float p = smoothstep(9.2f, 10.0f, cycle);
+      s_breakup_sip_factor = fmaxf(0.0f, 0.4f * (1.0f - p * 1.6f));
+    } else {
+      s_breakup_sip_factor = 0.0f;
+    }
+  } else {
+    s_breakup_sip_factor = 0.0f;
+  }
+
   uint16_t bg_val = makeRgb565(s_bg_r, s_bg_g, s_bg_b);
   uint16_t* pbuf = (uint16_t*)sprite.getBuffer();
   if (pbuf) {
@@ -1940,8 +2181,13 @@ void deskPetDrawFrame(LGFX_Sprite& sprite, uint32_t ms) {
           break;
         }
         case 5: { // Breakup Phase: Crying, Watering Eyes, Drunken Heartbroken Sway
-          // Heavy anime tears streaming down cheeks with shimmering liquid wave
-          drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
+          if (s_breakup_sip_factor > 0.05f) {
+            // Squeezed bitter burn anime pain grimace 😖 with forced outer-corner teardrop bursts
+            drawExpressivePainEyes(sprite, left_cx, right_cx, center_y, s_breakup_sip_factor, ms, (s_bg_r < 60));
+          } else {
+            // Heavy anime tears streaming down cheeks with shimmering liquid wave
+            drawWateringEyes(sprite, left_cx, right_cx, center_y, base_w, base_h, eye_r, ms, true, blink_progress);
+          }
           break;
         }
         default: { // Pop / Upbeat Groove: joyful smiling bounce
