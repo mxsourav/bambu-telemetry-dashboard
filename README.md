@@ -15,7 +15,7 @@ Phase 2 transitions the system from a passive 3D printer monitor into an active,
 | Primary Role | Dedicated Bambu Lab MQTT monitor | Dual-engine: Bambu telemetry plus autonomous companion |
 | Display Pipeline | Standard Adafruit GFX canvas at 15-20 FPS | LovyanGFX double-buffered vector pipeline at 100 FPS |
 | Desk Pet Engine | Not present | 11 parametric emotional states with Disney eyelid easing |
-| Music Visualization | Not present | Windows Media Foundation bridge with genre-specific dance engine |
+| Music Visualization | Not present | WASAPI loopback audio beat analyzer and beat-pattern genre classifier with 100 FPS dance engine |
 | PC Telemetry | Not present | Real-time CPU, GPU, RAM, and thermals HUD |
 | Sleep Progression | Fixed screen timeout | Dynamic daytime ladder (5m drowsy, 7m yawn, 8m sleep, 12m deep sleep) |
 | Web Platform | Basic status text endpoint | visionOS-inspired mobile PWA with live RLE display mirror |
@@ -142,15 +142,18 @@ Wakeup triggers: Any physical button press, incoming music packet, print state t
 
 ---
 
-## Music Dance and Genre Classification
+## Music Dance and Beat Pattern Audio Analysis
 
-The companion daemon (`tools/spotify_desk_sync.py`) monitors the Windows Media Control Session and Spotify desktop instances. It classifies genres and pushes real-time dynamic cues to the ESP32:
+The desk companion features a real-time Audio Beat Pattern Analyzer (`tools/audio_beat_analyzer.py`) and media sync daemon (`tools/spotify_desk_sync.py`). It captures Windows desktop audio loopback via WASAPI at 44.1 kHz, decomposes frequency bands via FFT, tracks kick onsets, estimates BPM via autocorrelation, and classifies beat patterns directly from acoustic energy:
 
-- Hip-Hop / Drill / Trap: 11.0px downward head nod, 6.0px lateral lean, dynamic squash and stretch, half-lidded attitude gaze, and beatbox mouth pulses.
-- Rock / Metal: 13.5px rapid vertical headbang with aggressive brow angle.
-- EDM / Dance: 10.0px high-frequency double-hop with wide specular flashes.
-- Lo-Fi / Chill: 4.5px gentle sinusoidal sway with relaxed eyelid curves.
-- Acoustic / Ballad: 2.5px slow breathing rhythm with steady gaze.
+- EDM / Party (Style 2): Detected via continuous 4-on-the-floor kick regularity at 120-138 BPM. Companion executes a 10.0px double-hop bounce, wide alert gaze, and happy upturned smile.
+- Hip-Hop / Drill / Trap (Style 1): Detected via dominant 808 sub-bass drops (30-80 Hz) and half-time intervals (65-88 BPM). Companion executes an 11.0px deep head nod, cocked attitude brow, and swagger smirk.
+- Rock / Metal (Style 3): Detected via sustained high-mid saturation (800-3500 Hz guitar overdrive) and driving 110-180 BPM tempo. Companion executes a 13.5px vertical headbang with sharp determined brow furrow.
+- Lo-Fi / Chill (Style 4): Detected via warm low-mids, attenuated treble (>5 kHz rolloff), and mellow tempo (70-95 BPM). Companion executes a 4.5px gentle sinusoidal sway with relaxed eyelid curves.
+- Acoustic / Ballad (Style 5): Detected via slow tempo (<68 BPM) and sparse acoustic transients. Companion executes a 2.5px slow breathing rhythm with steady gaze.
+- Pop / Commercial (Style 0): Detected via balanced rhythmic transients at 95-125 BPM. Companion executes a joyful upbeat bounce.
+
+The audio engine runs automatically inside `tools/spotify_desk_sync.py` or standalone via `python tools/audio_beat_analyzer.py` with an interactive terminal HUD.
 
 ---
 

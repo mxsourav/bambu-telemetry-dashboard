@@ -277,7 +277,7 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "study") || strstr(buf, "instrumental")) return 4;
 
   // 5. Explicit Emotional / Sad Ballads / Heartbreak (Only truly sad songs get tears)
-  if (strstr(buf, "sad version") || strstr(buf, "sad song") || strstr(buf, "heartbreak") ||
+  if (strstr(buf, "ballad") || strstr(buf, "sad version") || strstr(buf, "sad song") || strstr(buf, "heartbreak") ||
       strstr(buf, "crying") || strstr(buf, "tears") || strstr(buf, "goodbye") ||
       strstr(buf, "kal ho naa ho") || strstr(buf, "bela bose") || strstr(buf, "2441139") ||
       strstr(buf, "agar tum saath") || strstr(buf, "channa mereya") || strstr(buf, "tujhe bhula diya") ||
@@ -291,8 +291,6 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "boba tunnel") || strstr(buf, "someone like you") || strstr(buf, "easy on me") ||
       strstr(buf, "someone you loved") || strstr(buf, "drivers license") || strstr(buf, "glimpse of us") ||
       strstr(buf, "slow dancing in the dark") || strstr(buf, "die with a smile")) return 5;
-
-  return 0; // Pop / Commercial / Upbeat Groove
 
   return 0; // Pop / Commercial / Upbeat Groove
 }

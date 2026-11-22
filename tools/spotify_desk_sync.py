@@ -226,7 +226,12 @@ def clean_music_meta(artist, title):
 
     return clean_artist, chosen_title, detected_genre
 
+g_audio_analyzer = None
+
 def track_energy(artist, title):
+    global g_audio_analyzer
+    if g_audio_analyzer and g_audio_analyzer.is_playing:
+        return round(float(g_audio_analyzer.current_energy), 2)
     h = sum(ord(c) for c in (artist or "") + (title or ""))
     return round(0.3 + (h % 7) / 10.0, 2)  # 0.3 .. 0.9
 
@@ -428,7 +433,16 @@ def upload_album_art(source_path_or_url):
     return False
 
 def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True, genre=""):
-    global http_session
+    global http_session, g_music_genre, g_music_energy, g_audio_analyzer
+    # If live audio beat pattern analyzer is active, prioritize verified beat pattern
+    if g_audio_analyzer and g_audio_analyzer.is_playing:
+        with g_audio_analyzer.lock:
+            a_genre = g_audio_analyzer.detected_genre
+            g_music_energy = g_audio_analyzer.current_energy
+        if a_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi"]:
+            genre = a_genre
+            g_music_genre = a_genre
+
     payload = {
         "title": title,
         "artist": artist,
@@ -553,6 +567,13 @@ def pc_telemetry_loop():
             last_net_bytes = (net.bytes_recv, net.bytes_sent)
             last_net_time = now
 
+            # Sync live audio beat pattern telemetry if active
+            if g_audio_analyzer and g_audio_analyzer.is_playing:
+                with g_audio_analyzer.lock:
+                    if g_audio_analyzer.detected_genre in ["EDM", "Hip-Hop/Rap", "Rock", "Lofi"]:
+                        g_music_genre = g_audio_analyzer.detected_genre
+                    g_music_energy = g_audio_analyzer.current_energy
+
             payload = {
                 "cpu": cpu,
                 "ram": mem.percent,
@@ -608,6 +629,16 @@ def main():
     print(" PC Hardware Telemetry & Weather Sync: Active (2s interval)")
     print(" Listening for music playing on your PC...")
     print("=" * 65)
+
+    # Launch background real-time Audio Beat Pattern & Genre Analyzer
+    global g_audio_analyzer
+    try:
+        from audio_beat_analyzer import BeatPatternAnalyzer
+        g_audio_analyzer = BeatPatternAnalyzer(esp_ip=DEVICE_IP)
+        threading.Thread(target=g_audio_analyzer.run, kwargs={"print_dashboard": False}, daemon=True).start()
+        print(" Real-Time Audio Beat Pattern Analyzer: Active (WASAPI Loopback)")
+    except Exception as e:
+        print(f" Real-Time Audio Beat Pattern Analyzer: Inactive ({e})")
 
     # Launch background PC Telemetry & Weather thread
     threading.Thread(target=pc_telemetry_loop, daemon=True).start()
