@@ -377,6 +377,23 @@ class PetAICortex:
     # =====================================================================
     def inspect_presence_and_idle(self):
         """Monitors user presence at laptop. Handles Auto-Sleep and Auto-Wake."""
+        # Check if music is playing on ESP32 or locally
+        music_playing = False
+        try:
+            with urllib.request.urlopen(f"http://{self.esp_ip}/api/pet/mood", timeout=1.0) as resp:
+                if resp.status == 200:
+                    pst = json.loads(resp.read().decode())
+                    music_playing = pst.get("music", False)
+        except Exception:
+            pass
+
+        if music_playing:
+            # If music is playing, pet should NEVER enter sleep mode!
+            if self.user_is_away:
+                print("[PRESENCE] Music active - waking pet from away sleep!")
+                self.user_is_away = False
+            return
+
         idle_sec = get_user_idle_seconds()
         threshold = self.cfg.get("idle_sleep_seconds", 300)
 
@@ -578,12 +595,25 @@ class PetAICortex:
         if cache_key in self._genre_cache:
             return self._genre_cache[cache_key]
 
+        low_comb = f"{artist} {title}".lower()
+        # Fast local classifier for Aleemrk (Pakistani Urdu Rapper)
+        if any(a in low_comb for a in ["aleemrk", "aleem rk", "aleem r.k."]):
+            if any(w in low_comb for w in [
+                "cold hours", "surface", "out of love", "distance", "lost", "maine",
+                "rehnuma", "kyun", "humdum", "nadaan", "overthink", "late night",
+                "2 am", "fall", "guzaarish", "beqabu", "breakup", "sad"
+            ]):
+                self._genre_cache[cache_key] = "Ballad"
+                return "Ballad"
+            self._genre_cache[cache_key] = "Hip-Hop/Rap"
+            return "Hip-Hop/Rap"
+
         prompt = (
             f"Classify music genre of: \"{title}\" by \"{artist}\".\n"
             "Return ONLY JSON: {\"genre\": \"Hip-Hop/Rap\"|\"Rock\"|\"EDM\"|\"Lofi\"|\"Ballad\"|\"Pop\"}\n"
             "Rules:\n"
-            "- Sad, breakup, heartbreak, crying, emotional slow ballad -> \"Ballad\"\n"
-            "- Rap, drill, trap, 808, hip hop -> \"Hip-Hop/Rap\"\n"
+            "- Sad, breakup, heartbreak, crying, emo rap (e.g. Aleemrk Cold Hours/Maine/Surface, Juice WRLD, MC Stan Numb/Regret, Talha Anjum Downers at Dusk), emotional slow ballad -> \"Ballad\"\n"
+            "- Pakistani/Desi hip-hop, Urdu rap, drill, trap, 808 (e.g. Aleemrk Advice/Cant Lose, Talha Anjum, MC Stan, KR$NA) -> \"Hip-Hop/Rap\"\n"
             "- House, electro, dance, techno, edm -> \"EDM\"\n"
             "- Rock, metal, heavy guitar, punk -> \"Rock\"\n"
             "- Lofi, chillhop, ambient, study beats -> \"Lofi\"\n"

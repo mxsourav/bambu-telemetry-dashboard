@@ -878,6 +878,9 @@ static void handleSpotifyNow() {
     const char* genre = doc["genre"] | "";
     strncpy(g_spotify.genre, genre, sizeof(g_spotify.genre) - 1);
     g_spotify.genre[sizeof(g_spotify.genre) - 1] = 0;
+    if (playing && g_settings.pet_music_vibe) {
+      petMoodWakeFromMusic();
+    }
     // Note: Do NOT automatically hijack app mode or current view on incoming track updates.
     // App mode switching is strictly manual (via physical buttons or /api/mode).
   }

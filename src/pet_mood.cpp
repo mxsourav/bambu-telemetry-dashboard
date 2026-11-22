@@ -278,6 +278,13 @@ static uint8_t vibeStyleFromGenre() {
       // Talha Anjum melancholy & storytelling tracks:
       strstr(buf, "downers at dusk") || strstr(buf, "down at dusk") || strstr(buf, "gumaan") ||
       strstr(buf, "afsanay") || strstr(buf, "open letter") || strstr(buf, "glass half full") ||
+      // Aleemrk melancholy & emo rap tracks:
+      strstr(buf, "cold hours") || strstr(buf, "surface") || strstr(buf, "out of love") ||
+      strstr(buf, "distance") || strstr(buf, "lost") || strstr(buf, "maine") ||
+      strstr(buf, "rehnuma") || strstr(buf, "kyun") || strstr(buf, "humdum") ||
+      strstr(buf, "nadaan") || strstr(buf, "overthink") || strstr(buf, "late night") ||
+      strstr(buf, "2 am") || strstr(buf, "fall") || strstr(buf, "guzaarish") ||
+      strstr(buf, "beqabu") ||
       // XXXTentacion & Lil Peep emo classics:
       strstr(buf, "jocelyn flores") || strstr(buf, "star shopping") || strstr(buf, "save that shit") ||
       strstr(buf, "everybody dies in their nightmares") ||
@@ -317,6 +324,9 @@ static uint8_t vibeStyleFromGenre() {
       strstr(buf, "nanchaku") || strstr(buf, "11k") || strstr(buf, "emiway") ||
       strstr(buf, "bantai") || strstr(buf, "divine") || strstr(buf, "mc stan") ||
       strstr(buf, "krsna") || strstr(buf, "raftaar") || strstr(buf, "seedhe maut") ||
+      strstr(buf, "aleemrk") || strstr(buf, "aleem rk") || strstr(buf, "aleem r.k.") ||
+      strstr(buf, "can't lose") || strstr(buf, "cant lose") || strstr(buf, "lollipop") ||
+      strstr(buf, "advice") || strstr(buf, "genie") || strstr(buf, "khauf") ||
       strstr(buf, "sidhu") || strstr(buf, "shubh") || strstr(buf, "dhillon") ||
       strstr(buf, "drake") || strstr(buf, "travis") || strstr(buf, "future") ||
       strstr(buf, "metro boomin") || strstr(buf, "21 savage") || strstr(buf, "savage") ||
@@ -370,6 +380,16 @@ void petMoodUpdate(uint32_t ms, const TelemetryData& d) {
   // A transient click reaction owns the face briefly - yield to it.
   if (deskPetIsTransient()) return;
   if (ms < s_surprise_until_ms) return;   // track-change surprise window
+
+  // ---- music playback overrides and wakes pet up from ANY sleep/drowsy state ----
+  if (spotifyIsActive() && g_settings.pet_music_vibe) {
+    if (s_forced_mood == PET_MOOD_SLEEPING || s_forced_mood == PET_MOOD_DEEP_SLEEP ||
+        s_forced_mood == PET_MOOD_SLEEPY || s_forced_mood == PET_MOOD_YAWN) {
+      s_forced_until_ms = 0;
+      s_forced_mood = PET_MOOD_NEUTRAL;
+      s_forced_vibe_style = 0;
+    }
+  }
 
   // ---- forced web mood has top priority while its window is open ----
   if (s_forced_until_ms > ms) {
@@ -605,6 +625,21 @@ void petMoodOnLeave() {
 void petMoodCelebrate(uint8_t kind) {
   s_celebrate_kind = kind;
   s_celebrate_until_ms = millis() + (kind == 1 ? 5000 : 8000);
+}
+
+void petMoodWakeFromMusic() {
+  if (s_forced_mood == PET_MOOD_SLEEPING || s_forced_mood == PET_MOOD_DEEP_SLEEP ||
+      s_forced_mood == PET_MOOD_SLEEPY || s_forced_mood == PET_MOOD_YAWN) {
+    s_forced_until_ms = 0;
+    s_forced_mood = PET_MOOD_NEUTRAL;
+    s_forced_vibe_style = 0;
+  }
+  PetMood m = deskPetGetMood();
+  if (m == PET_MOOD_SLEEPING || m == PET_MOOD_DEEP_SLEEP ||
+      m == PET_MOOD_SLEEPY || m == PET_MOOD_YAWN) {
+    deskPetSetMood(PET_MOOD_DANCING, 0);
+    deskPetSetVibeStyle(vibeStyleFromGenre());
+  }
 }
 
 void petMoodStatusJson(char* out, size_t len) {

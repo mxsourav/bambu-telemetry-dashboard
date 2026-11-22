@@ -131,6 +131,10 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
         "cigarettes", "lean wit me", "flaws and sins", "scared of love", "hear me calling",
         # Specific Talha Anjum melancholy & storytelling tracks:
         "downers at dusk", "down at dusk", "gumaan", "afsanay", "open letter", "glass half full",
+        # Specific Aleemrk heartbreak & emo rap tracks:
+        "cold hours", "surface", "out of love", "distance", "lost", "maine",
+        "rehnuma", "kyun", "humdum", "nadaan", "overthink", "late night",
+        "2 am", "fall", "guzaarish", "beqabu",
         # XXXTentacion & Lil Peep emo classics:
         "jocelyn flores", "star shopping", "save that shit", "everybody dies in their nightmares",
         # Iconic Ballads & Heartbreak Classics:
@@ -151,6 +155,10 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
     if ("mc stan" in combined and "numb" in combined) or any(k in combined for k in sad_keywords):
         return "Ballad"
 
+    # Dedicated Aleemrk classification (Pakistani Urdu Rapper):
+    if any(a in combined for a in ["aleemrk", "aleem rk", "aleem r.k."]):
+        return "Hip-Hop/Rap"
+
     # 3. Hip-Hop / Drill / Trap / Rap / Desi Hip-Hop (Vibe 1 - Swagger 11px nod)
     hiphop_keywords = [
         "hip-hop", "hip hop", "rap", "drill", "trap", "808", "grime", "urban", "r&b",
@@ -158,6 +166,7 @@ def classify_track_genre(artist, title, raw_itunes_genre=""):
         "shob choritro", "bhooter raja", "juta abishkar", "yeda yung", "yung dsa",
         "shaggy dushing", "blood tears", "rehmani keeda", "emiway", "bantai", "divine",
         "mc stan", "krsna", "kr$na", "raftaar", "seedhe maut", "calm", "encore abj",
+        "aleemrk", "aleem rk", "aleem r.k.", "can't lose", "cant lose", "lollipop", "advice", "genie", "khauf",
         "karan aujla", "aujla", "sidhu moose", "moosewala", "shubh", "ap dhillon",
         "wazir patar", "talha anjum", "talhah yunus", "young stunners", "faris shafi",
         "badshah", "honey singh", "yo yo honey", "king", "mc square", "paradox",

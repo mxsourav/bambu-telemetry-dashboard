@@ -24,5 +24,8 @@ void petMoodOnLeave();
 // kind 1 = print complete (EXCITED party), 2 = failed (relieved sad).
 void petMoodCelebrate(uint8_t kind);
 
+// Wake the pet immediately from any sleep/drowsy state upon music playback
+void petMoodWakeFromMusic();
+
 // Status JSON for the web dashboard (mood, anger ramp, night, music).
 void petMoodStatusJson(char* out, size_t len);
