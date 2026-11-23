@@ -1888,19 +1888,18 @@ static void uiTask(void* /*param*/) {
         }
         s_last_user_activity_ms = ms;
       }
-    } else if (view == VIEW_HOME || view == VIEW_SPOTIFY || view == VIEW_MENU) {
-      // 8s idle silence timeout: transition to Desk Pet (15s if in settings menu).
-      // With vibe mode on, PLAYING MUSIC also summons the pet (it comes up
-      // to dance; the cover-art view stays reachable via the menu).
-      uint32_t timeout_ms = (view == VIEW_MENU) ? 15000 : 8000;
+    } else if (view == VIEW_MENU) {
+      // 15s timeout in settings menu: return to active mode
+      if (ms - s_last_user_activity_ms >= 15000) {
+        view = (s_app_mode == MODE_SPOTIFY) ? VIEW_SPOTIFY : VIEW_HOME;
+      }
+    } else if (view == VIEW_SPOTIFY) {
+      // With vibe mode on, PLAYING MUSIC summons the pet to dance
       bool music_vibe_entry = (g_spotify.is_playing && (ms - g_spotify.last_update_ms < 10000) &&
-                               g_settings.pet_music_vibe && view != VIEW_SPOTIFY);
-      bool is_default_printer = (strcmp(g_settings.default_screen, "printer") == 0 && view == VIEW_HOME);
-      if (!is_default_printer && (printer_idle || music_vibe_entry) && (spotify_idle || music_vibe_entry) &&
-          (ms - s_last_user_activity_ms >= timeout_ms)) {
+                               g_settings.pet_music_vibe);
+      if (music_vibe_entry && (ms - s_last_user_activity_ms >= 8000)) {
         view = VIEW_DESK_PET;
         deskPetSetMood(PET_MOOD_NEUTRAL);
-        Serial.println(F("[UI] Idle timeout -> entered Desk Pet (100 FPS)"));
       }
     } else if (view == VIEW_PC_HUD) {
       // If latched, NEVER auto-timeout to Desk Pet or anything else!
