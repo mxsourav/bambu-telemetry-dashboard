@@ -1,8 +1,32 @@
 # STΔN studio. - ESP32 3D Printer Monitor and Autonomous Desk Companion
 
-Phase 2 Stable Release.
+[![Release](https://img.shields.io/badge/Release-Phase%202%20Stable-10b981.svg?style=flat-square)]()
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32%20Core%202.0.17-f58220.svg?style=flat-square&logo=platformio)](https://platformio.org/)
+[![Graphics Engine](https://img.shields.io/badge/LovyanGFX-100%20FPS%20DMA-007acc.svg?style=flat-square)]()
+[![Web Platform](https://img.shields.io/badge/PWA-visionOS%20Dark-6366f1.svg?style=flat-square)](https://web-tau-five-60.vercel.app/)
+[![Cloud Backend](https://img.shields.io/badge/Render-FastAPI%20Gateway-46e3b7.svg?style=flat-square&logo=render)](https://dashboard.render.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 An embedded firmware for ESP32 powering an autonomous desk companion, Bambu Lab 3D printer telemetry monitor, PC hardware HUD, and synchronized media visualizer with an ST7735 1.8-inch TFT display.
+
+For the in-depth hardware, wiring, and driver troubleshooting manual, see [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md).
+
+---
+
+## Feature Status & Architecture Matrix
+
+| Subsystem / Feature | Status | Core / Runtime | Protocol / Interface | Highlights |
+|---|---|---|---|---|
+| **LovyanGFX Vector Pipeline** | 🟢 Production | ESP32 Core 1 | Hardware VSPI (40 MHz DMA) | Double-buffered 160×128 rendering at 100 FPS with anti-aliasing |
+| **Bambu Lab Telemetry Engine** | 🟢 Production | ESP32 Core 0 | MQTT over SSL/TLS (Port 8883) | Live nozzle/bed thermals, layer counts, print progress %, and fan status |
+| **Autonomous Desk Pet** | 🟢 Production | ESP32 Core 1 | Parametric Squircle & Bezier Easing | 11 parametric emotional states with dynamic Disney eyelid easing |
+| **Beat & Genre Audio Engine** | 🟢 Production | Windows (WASAPI) | 44.1 kHz FFT & Autocorrelation | Real-time dance choreography & genre classification (Hip-Hop, EDM, Rock) |
+| **PC Hardware Monitor HUD** | 🟢 Production | Windows Host | HTTP REST (`/api/pc/stats`) | CPU, GPU, RAM utilization, and thermals pushed every second |
+| **AI Cognitive Cortex** | 🟢 Production | Host / Cloud | NVIDIA NIM (Nemotron & Mistral) | Zero-cold-start inference, thermal sentinels, layer milestone analysis |
+| **Local Admin Server & Proxy** | 🟢 Production | Python 3.10+ | Port 3000, PNA/CORS reverse proxy | Auto-probes ESP32 IP and serves dashboard with zero browser blocks |
+| **Web PWA & RLE Screen Stream** | 🟢 Production | Browser / Vercel | RLE delta compression, WebSockets | visionOS dark UI, live screen mirror, RGB color wheel, D-Pad |
+| **MicroSD FAT File Explorer** | 🟢 Production | ESP32 Core 0 | HSPI (GPIO 13/15/25/26) | Remote SD card file browser, asset management, and OTA updates |
+| **Render Cloud Backend** | 🟢 Deployed | Render Cloud | Python 3.11 / FastAPI | 24/7 cloud fallback for AI inference and Spotify token refresh |
 
 ---
 
@@ -215,60 +239,77 @@ The ESP32 runs a multi-threaded HTTP server on port 80.
 
 ---
 
-## Installation and Flashing
+## Installation and Setup
 
-### 1. Build from Source with PlatformIO
+For a full step-by-step wiring guide, display offset troubleshooting, and environment configuration, refer to the [Setup & Deployment Guide](docs/SETUP_GUIDE.md).
+
+### 1. Build and Flash Firmware with PlatformIO
 Clone the repository and compile the firmware:
 ```bash
 git clone https://github.com/mxsourav/bambu-telemetry-dashboard.git
 cd bambu-telemetry-dashboard
 pio run
 ```
-
-### 2. Flash to ESP32
-Connect your ESP32 via USB and upload:
+Connect your ESP32 via USB and flash:
 ```bash
-pio run -t upload --upload-port COM11
+pio run -t upload
 ```
-Alternatively, flash the binary directly using esptool:
-```bash
-python -m esptool --chip esp32 --port COM11 --baud 460800 write-flash 0x10000 .pio/build/esp32dev/firmware.bin
-```
+*Note: To target a specific serial port, pass `--upload-port COM11`.*
 
-### 3. Run the Autonomous Companion Daemon (Zero-Command Master Launch)
-Install required Python dependencies:
+### 2. Autonomous Companion Daemon (Zero-Command Master Launch)
+Install host dependencies:
 ```bash
 pip install winsdk psutil requests urllib3 soundcard numpy scipy
 ```
+Double-click `STAN_AUTONOMOUS_START.bat` in the repository root. This autonomously:
+1. Verifies and turns on the Windows Mobile Hotspot (`192.168.137.1`).
+2. Registers a silent Windows Startup task (`tools/start_sync_silent.vbs`) for boot persistence.
+3. Launches the unified background daemon: WASAPI beat pattern analyzer, media sync, PC telemetry HUD, and NVIDIA AI Cortex.
+4. Activates auto-sleep when you leave your desk (>5 min idle), and auto-wakes with a greeting upon return.
 
-Simply double-click `STAN_AUTONOMOUS_START.bat` in the project root. It executes completely autonomously:
-1. Verifies and activates the Windows Mobile Hotspot for the ESP32.
-2. Registers a silent Windows Startup entry so the companion launches automatically every time your laptop boots or wakes.
-3. Spawns the unified background daemon (WASAPI beat pattern analyzer, media sync, PC telemetry HUD, and NVIDIA/Dahl AI Cortex).
-4. Auto-sleeps the desk pet when you walk away from your desk (>5 min idle), and auto-wakes with a greeting when you return.
-
-To chat with your desk companion at any time, double-click `TALK_TO_STAN.bat` or run:
+To chat with your desk companion at any time, run `TALK_TO_STAN.bat` or:
 ```bash
-python tools/talk_to_pet.py "Your question here"
+python tools/talk_to_pet.py "Your message here"
 ```
-To stop background execution cleanly:
+To stop all background processes:
 ```bash
 STAN_STOP.bat
 ```
 
-### 4. Open the Web PWA
-Navigate to the local IP of your ESP32 in any web browser:
+### 3. Localhost Admin Panel & Reverse Proxy
+For a seamless, zero-config local dashboard experience without private network browser blocks:
+```bash
+START_ADMIN_PANEL.bat
 ```
-http://192.168.137.171
-```
+This launches `tools/admin_server.py`, which:
+- Automatically probes and identifies the ESP32 IP on your subnet.
+- Hosts the web dashboard at `http://localhost:3000/`.
+- Injects Private Network Access (PNA) and CORS headers so the browser can freely communicate with the ESP32.
 
-For native standalone installation on mobile Chrome:
-1. Open `chrome://flags` in mobile Chrome.
-2. Search for `insecure` in the search box (do not type the `#` character).
-3. Set `Insecure origins treated as secure` to `Enabled`.
-4. Enter `http://192.168.137.171` in the text box.
-5. Tap `Relaunch`.
-6. Visit `http://192.168.137.171` and tap `Install app`.
+### 4. Cloud Web PWA & Vercel Deployment
+Deploy the visionOS web dashboard to Vercel:
+```bash
+npm i -g vercel
+cd web
+vercel --prod
+```
+When accessing the hosted app (`https://web-tau-five-60.vercel.app/`):
+- Run `AUTO_SETUP_VERCEL.bat` to launch Chrome/Edge/Brave with `--unsafely-treat-insecure-origin-as-secure` flags.
+- Alternatively, open `chrome://flags` -> enable **Insecure origins treated as secure** -> add your ESP32 IP (`http://192.168.137.35`).
+
+### 5. Render 24/7 Cloud Backend Gateway
+Deploy the Python FastAPI backend to Render using Blueprint:
+1. In [Render Dashboard](https://dashboard.render.com/), select **New +** -> **Blueprint**.
+2. Connect `bambu-telemetry-dashboard` (Render reads `backend/render.yaml`).
+3. Set environment variables: `NVIDIA_API_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`.
+4. The service will be live at `https://stan-desk-station-backend.onrender.com`.
+
+### 6. Spotify Integration & Token Pairing
+To authenticate Spotify for permanent headless playback tracking:
+```bash
+Pair_Spotify_Permanent.bat
+```
+Follow the browser authorization prompt; OAuth credentials will be cached in `.spotify_cache.json`.
 
 ---
 
