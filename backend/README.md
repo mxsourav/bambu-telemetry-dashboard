@@ -24,3 +24,15 @@ This backend provides a 24/7 cloud API gateway for the Desk Station, enabling cl
 - `GET /api/status`: Health check and system readiness
 - `POST /api/music/classify`: Fast music genre classifier
 - `POST /api/ai/ask`: Direct LLM query endpoint
+
+## Local Development & Testing
+
+Run all automated unit and integration tests across the backend and developer tools:
+
+```bash
+# Run full automated test suite
+python run_tests.py
+
+# Or run tests using standard unittest
+python -m unittest discover tests -v
+```
