@@ -9,6 +9,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 
 static WiFiClientSecure tlsClient;
 static PubSubClient mqtt(tlsClient);
@@ -307,7 +308,23 @@ static void mqttTask(void* /*param*/) {
                     WiFi.localIP().toString().c_str());
       configTime(5 * 3600 + 1800, 0, "pool.ntp.org", "time.nist.gov");
       Serial.println(F("[NTP] configured (IST)"));
+
+      ArduinoOTA.setHostname("bambu-desk-monitor");
+      ArduinoOTA.onStart([]() {
+        mqttPause();
+        Serial.println(F("[OTA] ArduinoOTA flashing started"));
+      });
+      ArduinoOTA.onEnd([]() {
+        Serial.println(F("[OTA] ArduinoOTA flashing complete. Rebooting..."));
+      });
+      ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("[OTA] Error[%u]\n", error);
+      });
+      ArduinoOTA.begin();
+      Serial.println(F("[OTA] ArduinoOTA service active (port 3232)"));
     }
+
+    ArduinoOTA.handle();
 
     // --- Network Throttling during Pet Mode (100 FPS Display Priority) ---
     bool pet_mode = uiIsPetMode();

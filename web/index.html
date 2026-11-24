@@ -1989,15 +1989,31 @@ function startOta(){
   const fd = new FormData();
   fd.append('firmware', f, f.name);
   const st = document.getElementById('otaStatus');
-  st.innerText = "Flashing OTA... DO NOT POWER OFF!";
-  fetch(getApiUrl('/api/system/update'), {method:'POST', body:fd})
-    .then(r=>r.text())
-    .then(t=>{
-      st.innerText = "OTA Complete (" + t + ")! ESP32 is rebooting...";
-    })
-    .catch(e=>{
-      st.innerText = "OTA Error: " + e;
-    });
+  st.style.color = "var(--amber)";
+  st.innerText = "Starting OTA... DO NOT POWER OFF!";
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', getApiUrl('/api/system/update'), true);
+  xhr.upload.onprogress = function(e){
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      st.innerText = "Flashing OTA: " + pct + "% (" + Math.round(e.loaded/1024) + " / " + Math.round(e.total/1024) + " KB) ... DO NOT POWER OFF!";
+    }
+  };
+  xhr.onload = function(){
+    if (xhr.status === 200) {
+      st.style.color = "var(--green)";
+      st.innerText = "OTA Complete (" + xhr.responseText + ")! ESP32 is rebooting...";
+    } else {
+      st.style.color = "var(--red)";
+      st.innerText = "OTA Failed (HTTP " + xhr.status + "): " + xhr.responseText;
+    }
+  };
+  xhr.onerror = function(){
+    st.style.color = "var(--green)";
+    st.innerText = "OTA Upload finished! ESP32 is rebooting...";
+  };
+  xhr.send(fd);
 }
 
 // --- Spotify Web API & Live Screen Sync (PKCE Auth) ---

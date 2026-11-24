@@ -632,6 +632,7 @@ static void handleDisplayClear() {
 static void handleOtaLoop() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    mqttPause();
     Serial.printf("[OTA] Flashing start: %s\n", upload.filename.c_str());
     if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
       Update.printError(Serial);
@@ -650,6 +651,7 @@ static void handleOtaLoop() {
 }
 
 static void handleOtaDone() {
+  sendCorsHeaders();
   server.sendHeader("Connection", "close");
   if (!Update.hasError()) {
     server.send(200, "text/plain", "OK");
@@ -1249,6 +1251,7 @@ static void webTask(void* /*param*/) {
   server.on("/api/display/image", HTTP_POST, handleDisplayImageDone, handleDisplayImageLoop);
   server.on("/api/display/clear", HTTP_OPTIONS, handleOptions);
   server.on("/api/display/clear", HTTP_POST, handleDisplayClear);
+  server.on("/api/system/update", HTTP_OPTIONS, handleOptions);
   server.on("/api/system/update", HTTP_POST, handleOtaDone, handleOtaLoop);
   server.on("/api/system/reboot", HTTP_POST, handleReboot);
   server.on("/api/notify", HTTP_POST, handleNotify);
