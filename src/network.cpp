@@ -140,13 +140,44 @@ static void mqttCallback(char* topic, byte* payload, uint32_t length) {
   parseTelemetry((const char*)payload, length);
 }
 
-static bool isPrinterReachable() {
+static char s_printer_ip[20] = PRINTER_IP;
+
+static bool probeIp(const char* ip, uint16_t timeout_ms = 800) {
+  if (!ip || !ip[0]) return false;
   WiFiClient probe;
-  probe.setTimeout(2);
-  // 1.5s TCP probe to port 8883 - zero TLS allocation!
-  bool ok = probe.connect(PRINTER_IP, MQTT_PORT, 1500);
-  probe.stop(); // Always close probe socket immediately to prevent lwIP PCB descriptor leaks!
+  probe.setTimeout(1);
+  bool ok = probe.connect(ip, MQTT_PORT, timeout_ms);
+  probe.stop();
   return ok;
+}
+
+static bool isPrinterReachable() {
+  // 1. Try current known IP first
+  if (probeIp(s_printer_ip, 800)) {
+    return true;
+  }
+  // 2. Try default PRINTER_IP from secrets
+  if (strcmp(s_printer_ip, PRINTER_IP) != 0 && probeIp(PRINTER_IP, 800)) {
+    strncpy(s_printer_ip, PRINTER_IP, sizeof(s_printer_ip) - 1);
+    Serial.printf("[MQTT] Printer found at secrets IP: %s\n", s_printer_ip);
+    return true;
+  }
+  // 3. Auto-discover printer across local subnet
+  IPAddress local = WiFi.localIP();
+  if (local[0] != 0) {
+    char test_ip[20];
+    const uint8_t common_hosts[] = { 133, 59, 112, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 113, 114, 115, 120, 125, 130, 131, 132, 134, 135, 140, 150, 2, 3, 4, 5, 10, 15, 20 };
+    for (uint8_t host : common_hosts) {
+      if (host == local[3]) continue;
+      snprintf(test_ip, sizeof(test_ip), "%u.%u.%u.%u", local[0], local[1], local[2], host);
+      if (probeIp(test_ip, 250)) {
+        strncpy(s_printer_ip, test_ip, sizeof(s_printer_ip) - 1);
+        Serial.printf("[MQTT] Auto-discovered printer at %s:8883!\n", s_printer_ip);
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 static void connectMQTT() {
@@ -179,13 +210,13 @@ static void connectMQTT() {
   tlsClient.setInsecure();
   tlsClient.setTimeout(3);           // 3 seconds socket timeout
   tlsClient.setHandshakeTimeout(4);  // 4 seconds TLS handshake timeout
-  mqtt.setServer(PRINTER_IP, MQTT_PORT);
+  mqtt.setServer(s_printer_ip, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE); // payloads exceed 2 KB
   mqtt.setSocketTimeout(3);                 // 3 seconds MQTT socket timeout
 
   Serial.printf("[MQTT] connecting TLS to %s:%d ... (free=%u, 8bit_free=%u, max_block=%u)\n",
-                PRINTER_IP, MQTT_PORT, (unsigned)ESP.getFreeHeap(),
+                s_printer_ip, MQTT_PORT, (unsigned)ESP.getFreeHeap(),
                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
