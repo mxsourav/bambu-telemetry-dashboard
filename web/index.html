@@ -595,8 +595,9 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
     <div class="card">
       <div class="card-title">Color Presets</div>
       <div class="led-chips">
-        <button class="led-chip active" onclick="setLedMode(0,this)">Auto-Sync</button>
-        <button class="led-chip" onclick="setLedMode(2,this)">Rainbow</button>
+        <button class="led-chip active" id="chipLedAuto" onclick="setLedMode(0,this)">Auto-Sync</button>
+        <button class="led-chip" id="chipLedMusic" onclick="setLedMode(9,this)">Music Sync</button>
+        <button class="led-chip" id="chipLedRainbow" onclick="setLedMode(2,this)">Rainbow</button>
         <button class="led-chip" onclick="setLedRgb(255,0,0,this)">Red</button>
         <button class="led-chip" onclick="setLedRgb(0,255,0,this)">Green</button>
         <button class="led-chip" onclick="setLedRgb(0,0,255,this)">Blue</button>
@@ -606,7 +607,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
         <button class="led-chip" onclick="setLedRgb(255,0,255,this)">Magenta</button>
         <button class="led-chip" onclick="setLedRgb(255,80,0,this)">Orange</button>
         <button class="led-chip" onclick="setLedRgb(140,0,255,this)">Purple</button>
-        <button class="led-chip chip-off" onclick="setLedMode(1,this)">OFF</button>
+        <button class="led-chip chip-off" id="chipLedOff" onclick="setLedMode(1,this)">OFF</button>
       </div>
     </div>
 

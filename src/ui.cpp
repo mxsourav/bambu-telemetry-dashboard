@@ -386,7 +386,7 @@ static bool     timer_fired = false;
 // ---------------- Button dispatch helpers -----------------------------
 // list row counts
 #define MENU_ROWS      14
-#define LEDLIST_ROWS   9
+#define LEDLIST_ROWS   10
 
 static const char* MENU_LABELS[MENU_ROWS] = {
   "Desk Pet", "Pet Stats", "Pet Music", "Spotify Mode", "PC Vitals",
@@ -394,7 +394,7 @@ static const char* MENU_LABELS[MENU_ROWS] = {
   "Timer", "Theme", "About", "Back" };
 
 static const char* LEDLIST_LABELS[LEDLIST_ROWS] = {
-  "Auto-Sync", "OFF", "RAINBOW", "RED", "GREEN", "BLUE", "WHITE",
+  "Auto-Sync", "Music Sync", "Rainbow", "OFF", "RED", "GREEN", "BLUE", "WHITE",
   "AMBER", "Back" };
 
 static void applySoundToggle();
@@ -550,6 +550,7 @@ static bool menuActive(int i) {
 static const char* ledListValue(int i) {
   switch (i) {
     case 0: return "auto";
+    case 1: return "beat";
     case 2: return "fx";
     default: return nullptr;
   }
@@ -559,13 +560,14 @@ static bool ledListActive(int i) {
   uint8_t ov = ledGetOverride();
   switch (i) {
     case 0: return ov == 0;
-    case 1: return ov == 1;
+    case 1: return ov == 9;
     case 2: return ov == 2;
-    case 3: return ov == 3;
-    case 4: return ov == 4;
-    case 5: return ov == 5;
-    case 6: return ov == 6;
-    case 7: return ov == 7;
+    case 3: return ov == 1;
+    case 4: return ov == 3;
+    case 5: return ov == 4;
+    case 6: return ov == 5;
+    case 7: return ov == 6;
+    case 8: return ov == 7;
     default: return false;
   }
 }
@@ -1555,8 +1557,20 @@ static void dispatchButtons(uint8_t ev) {
         startBeepPattern(1); // confirmation beep
         if (menu_focus == LEDLIST_ROWS - 1) { view = VIEW_MENU; menu_focus = 6; }
         else {
-          ledSetOverride(menu_focus);   // 0..7 map directly
-          g_settings.led_override = menu_focus;
+          uint8_t m = 0;
+          switch (menu_focus) {
+            case 0: m = 0; break; // Auto-Sync
+            case 1: m = 9; break; // Music Sync
+            case 2: m = 2; break; // Rainbow
+            case 3: m = 1; break; // OFF
+            case 4: m = 3; break; // Red
+            case 5: m = 4; break; // Green
+            case 6: m = 5; break; // Blue
+            case 7: m = 6; break; // White
+            case 8: m = 7; break; // Amber
+          }
+          ledSetOverride(m);
+          g_settings.led_override = m;
           settingsSave();
         }
       }

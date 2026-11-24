@@ -1,6 +1,7 @@
 #include "spotify_service.h"
 #include "settings_manager.h"
 #include "ui.h"
+#include "pc_stats.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -237,10 +238,19 @@ void spotifySetTrackInfo(const char* title, const char* artist, uint32_t prog_ms
   g_spotify.last_update_ms = millis();
 }
 
+bool musicIsActive() {
+  uint32_t now = millis();
+  // 1. Spotify track actively playing
+  if (g_spotify.is_playing && (now - g_spotify.last_update_ms < 15000)) return true;
+  // 2. Real-time audio FFT beat analyzer stream reporting music energy
+  if (pcStatsIsActive() && g_pc_stats.music_vibe > 0.08f && (now - g_pc_stats.last_update_ms < 6000)) return true;
+  // 3. Track title active within last 8 seconds
+  if (g_spotify.title[0] && (now - g_spotify.last_update_ms < 8000)) return true;
+  return false;
+}
+
 bool spotifyIsActive() {
-  if (!g_spotify.is_playing) return false;
-  // Active if updated in the last 15 seconds
-  return (millis() - g_spotify.last_update_ms < 15000);
+  return musicIsActive();
 }
 
 void spotifySetRefreshToken(const char* token) {

@@ -474,37 +474,62 @@ static void handleLedSet() {
     JsonDocument doc;
     deserializeJson(doc, server.arg("plain"));
     if (!doc["mode"].isNull()) {
-      uint8_t m = doc["mode"];
-      if (m == 1) { // OFF
-        ledSetOverride(1);
-      } else if (m == 2) { // Rainbow
-        ledSetOverride(2);
-      } else if (m == 3) { // Red
-        ledSetCustomRgb(255, 0, 0);
-      } else if (m == 4) { // Green
-        ledSetCustomRgb(0, 255, 0);
-      } else if (m == 5) { // Blue
-        ledSetCustomRgb(0, 0, 255);
-      } else if (m == 6) { // White
-        ledSetCustomRgb(255, 255, 255);
-      } else if (m == 7) { // Amber
-        ledSetCustomRgb(255, 180, 0);
-      } else if (m == 8 || !doc["r"].isNull()) { // Custom RGB from color wheel or direct RGB
-        uint8_t r = doc["r"] | 0;
-        uint8_t g = doc["g"] | 0;
-        uint8_t b = doc["b"] | 0;
-        ledSetCustomRgb(r, g, b);
+      if (doc["mode"].is<const char*>()) {
+        const char* sm = doc["mode"].as<const char*>();
+        if (!strcmp(sm, "music") || !strcmp(sm, "music_sync")) {
+          ledSetOverride(9);
+          g_settings.led_override = 9;
+        } else if (!strcmp(sm, "auto")) {
+          ledSetOverride(0);
+          g_settings.led_override = 0;
+        } else if (!strcmp(sm, "off")) {
+          ledSetOverride(1);
+          g_settings.led_override = 1;
+        } else if (!strcmp(sm, "rainbow")) {
+          ledSetOverride(2);
+          g_settings.led_override = 2;
+        }
       } else {
-        ledSetOverride(m);
+        uint8_t m = doc["mode"];
+        if (m == 1) { // OFF
+          ledSetOverride(1);
+        } else if (m == 2) { // Rainbow
+          ledSetOverride(2);
+        } else if (m == 9) { // Music Sync
+          ledSetOverride(9);
+        } else if (m == 3) { // Red
+          ledSetCustomRgb(255, 0, 0);
+        } else if (m == 4) { // Green
+          ledSetCustomRgb(0, 255, 0);
+        } else if (m == 5) { // Blue
+          ledSetCustomRgb(0, 0, 255);
+        } else if (m == 6) { // White
+          ledSetCustomRgb(255, 255, 255);
+        } else if (m == 7) { // Amber
+          ledSetCustomRgb(255, 180, 0);
+        } else if (m == 8 || !doc["r"].isNull()) { // Custom RGB from color wheel or direct RGB
+          uint8_t r = doc["r"] | 0;
+          uint8_t g = doc["g"] | 0;
+          uint8_t b = doc["b"] | 0;
+          ledSetCustomRgb(r, g, b);
+        } else {
+          ledSetOverride(m);
+        }
+        g_settings.led_override = ledGetOverride();
       }
+      settingsSave();
     } else if (!doc["r"].isNull()) {
       uint8_t r = doc["r"] | 0;
       uint8_t g = doc["g"] | 0;
       uint8_t b = doc["b"] | 0;
       ledSetCustomRgb(r, g, b);
+      g_settings.led_override = 8;
+      settingsSave();
     }
     if (!doc["brightness"].isNull()) {
       ledSetBrightness(doc["brightness"]);
+      g_settings.brightness = doc["brightness"];
+      settingsSave();
     }
   }
   sendCorsHeaders();

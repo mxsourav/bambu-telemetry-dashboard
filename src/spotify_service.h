@@ -19,6 +19,7 @@ extern SpotifyTrackInfo g_spotify;
 void spotifyServiceInit();
 void spotifySetTrackInfo(const char* title, const char* artist, uint32_t prog_ms, uint32_t dur_ms, bool playing, const char* img_url = nullptr, const char* lyric_cur = nullptr, const char* lyric_next = nullptr);
 bool spotifyIsActive();
+bool musicIsActive();
 void spotifySetRefreshToken(const char* token);
 const char* spotifyGetRefreshToken();
 void spotifyPollLoop();

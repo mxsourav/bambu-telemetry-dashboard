@@ -29,3 +29,7 @@ void petMoodWakeFromMusic();
 
 // Status JSON for the web dashboard (mood, anger ramp, night, music).
 void petMoodStatusJson(char* out, size_t len);
+
+// Expose vibe style and genre signature colors for LED music sync
+uint8_t petMoodGetVibeStyle();
+void petMoodGetGenreColor(uint8_t& r, uint8_t& g, uint8_t& b);

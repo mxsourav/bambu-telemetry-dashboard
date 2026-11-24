@@ -148,6 +148,22 @@ static void moodSoundEdge(PetMood prev, PetMood now) {
   (void)now;
 }
 
+uint8_t petMoodGetVibeStyle() {
+  return (s_forced_until_ms > millis() && s_forced_vibe_style != 0) ? s_forced_vibe_style : vibeStyleFromGenre();
+}
+
+void petMoodGetGenreColor(uint8_t& r, uint8_t& g, uint8_t& b) {
+  uint8_t style = petMoodGetVibeStyle();
+  switch (style) {
+    case 5: r = 20;  g = 80;  b = 255; break; // Breakup / Sad / Emo Rap: deep sorrow oceanic blue
+    case 3: r = 255; g = 25;  b = 20;  break; // Rock / Metal / Rage: fiery crimson rage
+    case 2: r = 255; g = 20;  b = 180; break; // EDM / Rave / Party: neon electric magenta
+    case 1: r = 160; g = 30;  b = 255; break; // Hip-Hop / Drill / Trap: midnight 808 purple
+    case 4: r = 255; g = 140; b = 35;  break; // Lo-Fi / Chill / Acoustic: warm sunset amber
+    default:r = 0;   g = 230; b = 255; break; // Pop / Commercial / Upbeat: electric cyan/fuchsia
+  }
+}
+
 // ---------------------------------------------------------------------
 // LED strip mirrors strong pet emotions while the user has auto mode
 // ---------------------------------------------------------------------
@@ -166,15 +182,7 @@ static void ledMirrorEdge(PetMood now) {
       case PET_MOOD_FEVER:    r = 255; g = 40; b = 40;  break;
       case PET_MOOD_HOT:      r = 255; g = 110; b = 30; break;
       case PET_MOOD_DANCING: {
-        uint8_t style = vibeStyleFromGenre();
-        switch (style) {
-          case 5: r = 20;  g = 70;  b = 255; break; // Breakup / Sad / Emo Rap: deep sorrow oceanic blue
-          case 3: r = 255; g = 20;  b = 20;  break; // Rock / Metal / Rage: fiery crimson rage
-          case 2: r = 240; g = 30;  b = 200; break; // EDM / Rave / Party: neon electric magenta
-          case 1: r = 140; g = 30;  b = 255; break; // Hip-Hop / Drill / Trap: midnight 808 purple
-          case 4: r = 255; g = 120; b = 35;  break; // Lo-Fi / Chill / Acoustic: warm sunset amber
-          default:r = 255; g = 180; b = 35;  break; // Pop / Happy: warm golden glow
-        }
+        petMoodGetGenreColor(r, g, b);
         break;
       }
       default: break;

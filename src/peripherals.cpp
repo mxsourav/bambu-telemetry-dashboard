@@ -5,6 +5,8 @@
 #include "settings_manager.h"
 #include "desk_pet.h"
 #include "spotify_service.h"
+#include "pc_stats.h"
+#include "pet_mood.h"
 
 #include <Arduino.h>
 
@@ -307,12 +309,16 @@ static void ledApply(uint8_t r, uint8_t g, uint8_t b, uint32_t ms = 0) {
   // Direct, instant, exact PWM output without lag or math truncation
   uint8_t eff_pct = led_brightness_pct;
   // Dynamic music beat pulsation: kick transients pump the LED strip in sync with the beat
-  if (ms > 0 && spotifyIsActive()) {
+  if (ms > 0 && musicIsActive()) {
     float hz = deskPetGetVibeHz();
     if (hz < 0.5f || hz > 8.0f) hz = 2.0f;
     float ph = (float)ms * 0.001f * hz * 6.2831853f;
-    float kick = powf(0.5f - 0.5f * cosf(ph), 4.0f);
-    eff_pct = (uint8_t)(led_brightness_pct * (0.50f + 0.50f * kick));
+    float kick = powf(0.5f - 0.5f * cosf(ph), 6.0f);
+    float energy = (pcStatsIsActive() && g_pc_stats.music_vibe > 0.05f) ? g_pc_stats.music_vibe : 0.75f;
+    if (energy > 1.0f) energy = 1.0f;
+    float pulse = 0.18f + 0.82f * kick * (0.35f + 0.65f * energy);
+    if (pulse > 1.0f) pulse = 1.0f;
+    eff_pct = (uint8_t)(led_brightness_pct * pulse);
   }
   uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
   uint8_t wr = (uint16_t)r * cap / 255;
@@ -330,6 +336,83 @@ static void ledApply(uint8_t r, uint8_t g, uint8_t b, uint32_t ms = 0) {
   ledcWrite(LEDC_CH_R, cur_r);
   ledcWrite(LEDC_CH_G, cur_g);
   ledcWrite(LEDC_CH_B, cur_b);
+}
+
+// Dedicated Real-Time Music Reactive LED Engine
+static void renderMusicSyncLed(uint32_t ms) {
+  bool active = musicIsActive();
+  uint8_t r, g, b;
+
+  if (active) {
+    // 1. Pick base music color: genre signature mood color, or custom RGB if set
+    if (led_override == 8 && (led_custom_r != 255 || led_custom_g != 255 || led_custom_b != 255)) {
+      r = led_custom_r;
+      g = led_custom_g;
+      b = led_custom_b;
+    } else {
+      petMoodGetGenreColor(r, g, b);
+    }
+
+    // 2. Frequency & Beat Phase
+    float hz = deskPetGetVibeHz();
+    if (hz < 0.5f || hz > 8.0f) hz = 2.0f;
+    float ph = (float)ms * 0.001f * hz * 6.2831853f;
+
+    // 3. Transient Flash Envelope:
+    // Power of 6 makes a punchy, sharp transient spike on the kick/snare beat
+    float kick = powf(0.5f - 0.5f * cosf(ph), 6.0f);
+
+    // Dynamic energy scaling from audio beat analyzer FFT
+    float energy = (pcStatsIsActive() && g_pc_stats.music_vibe > 0.05f) ? g_pc_stats.music_vibe : 0.75f;
+    if (energy > 1.0f) energy = 1.0f;
+
+    // 18% ambient floor + up to 82% punchy beat flash
+    float pulse = 0.18f + 0.82f * kick * (0.35f + 0.65f * energy);
+    if (pulse > 1.0f) pulse = 1.0f;
+
+    uint8_t eff_pct = (uint8_t)(led_brightness_pct * pulse);
+    uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
+    uint8_t wr = (uint16_t)r * cap / 255;
+    uint8_t wg = (uint16_t)g * cap / 255;
+    uint8_t wb = (uint16_t)b * cap / 255;
+
+    if (led_inverted) {
+      cur_r = 255 - wr;
+      cur_g = 255 - wg;
+      cur_b = 255 - wb;
+    } else {
+      cur_r = wr;
+      cur_g = wg;
+      cur_b = wb;
+    }
+    ledcWrite(LEDC_CH_R, cur_r);
+    ledcWrite(LEDC_CH_G, cur_g);
+    ledcWrite(LEDC_CH_B, cur_b);
+  } else {
+    // Music is paused or waiting for audio:
+    // Gentle rhythmic breathing standby glow in electric violet / cyber purple
+    float ph = (float)ms * 0.001f * 0.6f * 6.2831853f; // 0.6 Hz slow breath
+    float breath = 0.20f + 0.25f * (0.5f + 0.5f * sinf(ph));
+    uint8_t eff_pct = (uint8_t)(led_brightness_pct * breath);
+    uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
+    r = 150; g = 30; b = 255; // neon purple standby
+    uint8_t wr = (uint16_t)r * cap / 255;
+    uint8_t wg = (uint16_t)g * cap / 255;
+    uint8_t wb = (uint16_t)b * cap / 255;
+
+    if (led_inverted) {
+      cur_r = 255 - wr;
+      cur_g = 255 - wg;
+      cur_b = 255 - wb;
+    } else {
+      cur_r = wr;
+      cur_g = wg;
+      cur_b = wb;
+    }
+    ledcWrite(LEDC_CH_R, cur_r);
+    ledcWrite(LEDC_CH_G, cur_g);
+    ledcWrite(LEDC_CH_B, cur_b);
+  }
 }
 
 // Full 360-degree continuous HSV to RGB converter (pure integer math, zero glitch)
@@ -355,6 +438,10 @@ static void hsvToRgb360(uint16_t h, uint8_t s, uint8_t v,
 static void ledStateMachine(const TelemetryData& d, uint32_t ms) {
   // 1) USER FORCED PRESETS / WEB CONTROLS ALWAYS TAKE HIGHEST PRIORITY!
   if (led_override == 1) { ledApply(0, 0, 0); return; } // OFF
+  if (led_override == 9) { // Dedicated Music Sync Mode
+    renderMusicSyncLed(ms);
+    return;
+  }
   if (led_override == 2) { // Butter-smooth rainbow
     static uint32_t last_rb_ms = 0;
     if (ms - last_rb_ms >= 30) {
@@ -374,7 +461,12 @@ static void ledStateMachine(const TelemetryData& d, uint32_t ms) {
     return;
   }
   if (led_override == 8) {
-    ledApply(led_custom_r, led_custom_g, led_custom_b, ms);
+    // If music is active, pulse the custom RGB to the beat!
+    if (musicIsActive()) {
+      renderMusicSyncLed(ms);
+    } else {
+      ledApply(led_custom_r, led_custom_g, led_custom_b);
+    }
     return;
   }
 
@@ -396,10 +488,17 @@ static void ledStateMachine(const TelemetryData& d, uint32_t ms) {
     ledApply(led_flash_on ? 255 : 0, 0, 0);
     return;
   }
+
+  // 5) Auto-Sync Music: When printer is idle/disconnected and music is playing, sync LEDs to the beat!
+  if (musicIsActive() && d.state != PST_RUNNING && d.state != PST_PREPARE && d.state != PST_PAUSED) {
+    renderMusicSyncLed(ms);
+    return;
+  }
+
   switch (d.state) {
     case PST_RUNNING: {
-      // While printing: warm amber (zero blue draw, rock-solid power rail)
-      ledApply(255, 160, 0);
+      // While printing: warm amber; if music is playing, pulse in rhythm!
+      ledApply(255, 160, 0, ms);
       break;
     }
     case PST_FINISH:  ledApply(0, 255, 0);   break;  // solid green
