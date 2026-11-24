@@ -13,7 +13,8 @@ This guide walks through every step required to assemble, flash, configure, and 
 6. [Vercel Cloud Deployment & PNA Configuration](#6-vercel-cloud-deployment--pna-configuration)
 7. [Render Cloud Backend Deployment](#7-render-cloud-backend-deployment)
 8. [Spotify Media Integration Setup](#8-spotify-media-integration-setup)
-9. [Troubleshooting & Diagnostics](#9-troubleshooting--diagnostics)
+9. [Automated Test Suite & Quality Verification](#9-automated-test-suite--quality-verification)
+10. [Troubleshooting & Diagnostics](#10-troubleshooting--diagnostics)
 
 ---
 
@@ -202,7 +203,43 @@ A 24/7 cloud API gateway is provided in `backend/` to provide AI intelligence an
 
 ---
 
-## 9. Troubleshooting & Diagnostics
+## 9. Automated Test Suite & Quality Verification
+
+STΔN studio includes an automated test runner (`run_tests.py`) leveraging Python's built-in `unittest` framework to validate all backend services, music classifiers, asset generators, and developer CLI tools before deployment or firmware flashing.
+
+### Installing Test Dependencies
+Install the required testing packages:
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Running the Test Suite
+Run the full test suite and asset verification checks:
+```bash
+python run_tests.py
+```
+Or run using standard Python `unittest` test discovery:
+```bash
+python -m unittest discover tests -v
+```
+
+### Coverage and Validation Scope
+1. **Cloud Backend Endpoints (`tests/test_backend.py`)**:
+   - `GET /`: Verifies root welcome response and service descriptor.
+   - `GET /api/status`: Validates service availability, version string, and health metrics.
+   - `POST /api/music/classify`: Ensures heuristic genre classification maps acoustic features to valid companion dance styles (EDM, Hip-Hop/Drill, Rock/Metal, Lo-Fi, Ballad, and Pop).
+   - `POST /api/ai/ask`: Validates payload schema, prompt validation, and fallback mechanisms.
+
+2. **Developer Tools & Firmware Assets (`tests/test_tools.py`)**:
+   - `tools/admin_server.py`: Checks default and custom CLI arguments (`--port`, `--ip`, `--no-browser`).
+   - `tools/build_web_ui_header.py`: Verifies that the embedded C header `src/web_ui.h` is synchronized with `web/index.html`.
+   - `tools/create_delta_icons.py`: Validates isolated RGB icon generation.
+   - `tools/gen_pwa_header.py`: Verifies byte conversion and header format for PWA icons.
+   - `tools/test_push_image.py`: Tests RGB565 little-endian buffer generation and multipart payload structure for OTA display streaming.
+
+---
+
+## 10. Troubleshooting & Diagnostics
 
 | Symptom | Cause | Solution |
 |---|---|---|
@@ -211,3 +248,5 @@ A 24/7 cloud API gateway is provided in `backend/` to provide AI intelligence an
 | Web app fails to reach ESP32 | Browser PNA block or wrong IP | Run `AUTO_SETUP_VERCEL.bat` or use `START_ADMIN_PANEL.bat` on localhost |
 | MQTT disconnects from Bambu | TLS certificate or password mismatch | Verify Bambu Lab printer IP, Access Code, and Serial Number in config |
 | Audio beat analyzer high latency | Default audio device mismatch | Verify WASAPI loopback device in Windows Sound settings |
+| Web UI header desync warning | `web/index.html` modified without rebuild | Run `python tools/build_web_ui_header.py` to synchronize `src/web_ui.h` |
+| Test suite fails with ImportError | Dev dependencies missing | Run `pip install -r requirements-dev.txt` |

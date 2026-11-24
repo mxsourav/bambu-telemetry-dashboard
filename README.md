@@ -1,10 +1,13 @@
 # STΔN studio. - ESP32 3D Printer Monitor and Autonomous Desk Companion
 
 [![Release](https://img.shields.io/badge/Release-Phase%202%20Stable-10b981.svg?style=flat-square)]()
+[![Tests](https://img.shields.io/badge/Tests-16%20Passed-brightgreen.svg?style=flat-square)]()
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32%20Core%202.0.17-f58220.svg?style=flat-square&logo=platformio)](https://platformio.org/)
 [![Graphics Engine](https://img.shields.io/badge/LovyanGFX-100%20FPS%20DMA-007acc.svg?style=flat-square)]()
 [![Web Platform](https://img.shields.io/badge/PWA-visionOS%20Dark-6366f1.svg?style=flat-square)](https://web-tau-five-60.vercel.app/)
 [![Cloud Backend](https://img.shields.io/badge/Render-FastAPI%20Gateway-46e3b7.svg?style=flat-square&logo=render)](https://dashboard.render.com/)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776ab.svg?style=flat-square&logo=python)](https://python.org)
+[![FreeRTOS](https://img.shields.io/badge/FreeRTOS-Dual%20Core%20SMP-blue.svg?style=flat-square)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 An embedded firmware for ESP32 powering an autonomous desk companion, Bambu Lab 3D printer telemetry monitor, PC hardware HUD, and synchronized media visualizer with an ST7735 1.8-inch TFT display.
@@ -27,6 +30,8 @@ For the in-depth hardware, wiring, and driver troubleshooting manual, see [docs/
 | **Web PWA & RLE Screen Stream** | 🟢 Production | Browser / Vercel | RLE delta compression, WebSockets | visionOS dark UI, live screen mirror, RGB color wheel, D-Pad |
 | **MicroSD FAT File Explorer** | 🟢 Production | ESP32 Core 0 | HSPI (GPIO 13/15/25/26) | Remote SD card file browser, asset management, and OTA updates |
 | **Render Cloud Backend** | 🟢 Deployed | Render Cloud | Python 3.11 / FastAPI | 24/7 cloud fallback for AI inference and Spotify token refresh |
+| **Automated Test Suite & QA** | 🟢 Production | Python 3.10+ | `unittest` (`run_tests.py`) | 16 unit tests covering backend APIs, audio rules, asset pipelines & CLI tools |
+| **Private Network Access (PNA)** | 🟢 Production | Chrome / Edge | Chromium Security Flags / Script | Seamless cross-origin bypass for public Vercel PWA to private ESP32 IP |
 
 ---
 
@@ -310,6 +315,17 @@ To authenticate Spotify for permanent headless playback tracking:
 Pair_Spotify_Permanent.bat
 ```
 Follow the browser authorization prompt; OAuth credentials will be cached in `.spotify_cache.json`.
+
+### 7. Automated Testing & Verification Suite
+STΔN studio includes an automated verification runner to test backend API endpoints, music classification rules, asset generation pipelines, and CLI argument parsers:
+```bash
+# Install developer requirements
+pip install -r requirements-dev.txt
+
+# Run automated test suite
+python run_tests.py
+```
+This runs 16 unit tests and validates that embedded headers (`src/web_ui.h`) remain perfectly synchronized with source assets (`web/index.html`).
 
 ---
 
