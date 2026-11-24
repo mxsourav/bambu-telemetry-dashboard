@@ -117,6 +117,23 @@ class BackendApiTestCase(unittest.TestCase):
         resp = self.client.post("/api/ai/ask", json={"prompt": "What is the status of the desk station?"})
         self.assertIn(resp.status_code, [200, 500])
 
+    def test_weather_endpoint_defaults(self):
+        resp = self.client.get("/api/weather")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("city", data)
+        self.assertIn("temp", data)
+        self.assertIn("weather", data)
+        self.assertIn(data.get("source"), ["open-meteo", "fallback"])
+
+    def test_weather_endpoint_custom_params(self):
+        resp = self.client.get("/api/weather?lat=28.6139&lon=77.2090&city=Delhi")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data.get("city"), "Delhi")
+        self.assertIsInstance(data.get("temp"), (int, float))
+        self.assertIn(data.get("weather"), ["CLEAR", "CLOUDY", "FOG", "RAIN", "SNOW", "STORM"])
+
 
 if __name__ == "__main__":
     unittest.main()

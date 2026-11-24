@@ -19,13 +19,22 @@ from PIL import Image, ImageDraw, ImageFont
 OUT_DIR = "docs/images"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Fonts
-font_title = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 16)
-font_large = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 26)
-font_bold  = ImageFont.truetype("C:/Windows/Fonts/segoeuib.ttf", 13)
-font_mono  = ImageFont.truetype("C:/Windows/Fonts/consola.ttf", 12)
-font_small = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 11)
-font_tiny  = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 9)
+# Safe Font Loader with Cross-Platform Fallback
+def _load_font(font_path, size):
+    try:
+        return ImageFont.truetype(font_path, size)
+    except Exception:
+        try:
+            return ImageFont.load_default()
+        except Exception:
+            return None
+
+font_title = _load_font("C:/Windows/Fonts/segoeuib.ttf", 16)
+font_large = _load_font("C:/Windows/Fonts/segoeuib.ttf", 26)
+font_bold  = _load_font("C:/Windows/Fonts/segoeuib.ttf", 13)
+font_mono  = _load_font("C:/Windows/Fonts/consola.ttf", 12)
+font_small = _load_font("C:/Windows/Fonts/segoeui.ttf", 11)
+font_tiny  = _load_font("C:/Windows/Fonts/segoeui.ttf", 9)
 
 # Colors
 COL_DARK_BG = (12, 12, 14)
@@ -39,8 +48,10 @@ COL_WHITE   = (255, 255, 255)
 COL_MUTED   = (156, 163, 175)
 
 
-def render_bambu_telemetry():
+def render_bambu_telemetry(out_dir=None):
     """Generates clean, authentic Bambu Lab P1P telemetry dashboard."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), COL_DARK_BG)
     d = ImageDraw.Draw(im)
 
@@ -91,12 +102,14 @@ def render_bambu_telemetry():
     d.text((140, 216), "Speed: 100% (Standard)", fill=COL_MUTED, font=font_mono)
     d.text((260, 216), "Fan: 100%", fill=COL_CYAN, font=font_mono)
 
-    im.save(os.path.join(OUT_DIR, "bambu_printer_telemetry.png"))
+    im.save(os.path.join(target_dir, "bambu_printer_telemetry.png"))
     print("Saved bambu_printer_telemetry.png")
 
 
-def render_desk_pet_crying():
+def render_desk_pet_crying(out_dir=None):
     """Generates authentic Breakup Phase / Crying Pet face with anime tears and booze bottle."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     # Crystal anime blue background
     im = Image.new("RGB", (320, 256), (184, 213, 250))
     d = ImageDraw.Draw(im)
@@ -153,12 +166,14 @@ def render_desk_pet_crying():
     # Amber droplet glint
     d.ellipse([bx - 6, by - 14, bx - 2, by - 10], fill=(251, 190, 0))
 
-    im.save(os.path.join(OUT_DIR, "desk_pet_crying.png"))
+    im.save(os.path.join(target_dir, "desk_pet_crying.png"))
     print("Saved desk_pet_crying.png")
 
 
-def render_desk_pet_dancing():
+def render_desk_pet_dancing(out_dir=None):
     """Generates authentic Dancing Pet face with attitude swagger tilt and rhythm groove."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), (255, 255, 255))
     d = ImageDraw.Draw(im)
 
@@ -189,12 +204,14 @@ def render_desk_pet_dancing():
         by = 244 - h // 2
         d.rounded_rectangle([bx, by, bx + 6, 244], radius=3, fill=(168, 85, 247))
 
-    im.save(os.path.join(OUT_DIR, "desk_pet_dancing.png"))
+    im.save(os.path.join(target_dir, "desk_pet_dancing.png"))
     print("Saved desk_pet_dancing.png")
 
 
-def render_desk_pet_neutral():
+def render_desk_pet_neutral(out_dir=None):
     """Generates authentic Neutral living squircle eyes."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), (255, 255, 255))
     d = ImageDraw.Draw(im)
 
@@ -218,12 +235,14 @@ def render_desk_pet_neutral():
     d.rounded_rectangle([60, 218, 260, 244], radius=12, fill=(244, 244, 246), outline=(218, 220, 224), width=1)
     d.text((74, 224), "CPU 20%   GPU 48°C   RAM 52%", fill=(75, 85, 99), font=font_mono)
 
-    im.save(os.path.join(OUT_DIR, "desk_pet_neutral.png"))
+    im.save(os.path.join(target_dir, "desk_pet_neutral.png"))
     print("Saved desk_pet_neutral.png")
 
 
-def render_desk_pet_angry():
+def render_desk_pet_angry(out_dir=None):
     """Generates authentic Warning / Rage crimson state."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), (248, 113, 113))
     d = ImageDraw.Draw(im)
 
@@ -250,12 +269,14 @@ def render_desk_pet_angry():
     d.line([(vx - 7, vy - 18), (vx - 7, vy - 10)], fill=(220, 38, 38), width=4)
     d.line([(vx + 7, vy + 10), (vx + 7, vy + 18)], fill=(220, 38, 38), width=4)
 
-    im.save(os.path.join(OUT_DIR, "desk_pet_angry.png"))
+    im.save(os.path.join(target_dir, "desk_pet_angry.png"))
     print("Saved desk_pet_angry.png")
 
 
-def render_desk_pet_calm():
+def render_desk_pet_calm(out_dir=None):
     """Generates authentic Calm / Sleep state with sleeping curved crescents."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), (255, 255, 255))
     d = ImageDraw.Draw(im)
 
@@ -271,12 +292,14 @@ def render_desk_pet_calm():
     d.text((254, 70), "Z", fill=(195, 200, 210), font=font_title)
     d.text((272, 98), "z", fill=(210, 215, 225), font=font_bold)
 
-    im.save(os.path.join(OUT_DIR, "desk_pet_calm.png"))
+    im.save(os.path.join(target_dir, "desk_pet_calm.png"))
     print("Saved desk_pet_calm.png")
 
 
-def render_pc_hud():
+def render_pc_hud(out_dir=None):
     """Generates authentic PC Hardware HUD."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), COL_DARK_BG)
     d = ImageDraw.Draw(im)
 
@@ -318,12 +341,14 @@ def render_pc_hud():
     d.text((22, 224), "DOWN: 14.2 MB/s", fill=COL_GREEN, font=font_mono)
     d.text((170, 224), "UP: 1.8 MB/s", fill=COL_CYAN, font=font_mono)
 
-    im.save(os.path.join(OUT_DIR, "pc_hardware_hud.png"))
+    im.save(os.path.join(target_dir, "pc_hardware_hud.png"))
     print("Saved pc_hardware_hud.png")
 
 
-def render_spotify_media():
+def render_spotify_media(out_dir=None):
     """Generates authentic Spotify Media Visualizer."""
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
     im = Image.new("RGB", (320, 256), (10, 10, 12))
     d = ImageDraw.Draw(im)
 
@@ -362,17 +387,23 @@ def render_spotify_media():
         bx = spec_x + i * 17
         d.rounded_rectangle([bx, 246 - h, bx + 10, 246], radius=2, fill=COL_CYAN)
 
-    im.save(os.path.join(OUT_DIR, "spotify_media_sync.png"))
+    im.save(os.path.join(target_dir, "spotify_media_sync.png"))
     print("Saved spotify_media_sync.png")
 
 
-if __name__ == "__main__":
-    render_bambu_telemetry()
-    render_desk_pet_crying()
-    render_desk_pet_dancing()
-    render_desk_pet_neutral()
-    render_desk_pet_angry()
-    render_desk_pet_calm()
-    render_pc_hud()
-    render_spotify_media()
+def render_all(out_dir=None):
+    target_dir = out_dir or OUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
+    render_bambu_telemetry(target_dir)
+    render_desk_pet_crying(target_dir)
+    render_desk_pet_dancing(target_dir)
+    render_desk_pet_neutral(target_dir)
+    render_desk_pet_angry(target_dir)
+    render_desk_pet_calm(target_dir)
+    render_pc_hud(target_dir)
+    render_spotify_media(target_dir)
     print("All 8 documentation visuals generated successfully at 320x256!")
+
+
+if __name__ == "__main__":
+    render_all()

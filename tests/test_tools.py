@@ -13,11 +13,14 @@ TOOLS_DIR = os.path.join(REPO_ROOT, "tools")
 if TOOLS_DIR not in sys.path:
     sys.path.insert(0, TOOLS_DIR)
 
-from admin_server import build_parser as build_admin_parser
+from admin_server import build_parser as build_admin_parser, probe_esp_ip
 from build_web_ui_header import build_web_ui_header
 from gen_pwa_header import generate_pwa_header
 from create_delta_icons import generate_icons
 from test_push_image import create_rgb565_buffer, build_multipart_payload
+from pet_ai_cortex import load_config, DEFAULT_CONFIG
+from audio_beat_analyzer import SAMPLE_RATE, BLOCK_SIZE, HOP_SIZE
+from render_doc_images import render_all
 
 
 class ToolsTestCase(unittest.TestCase):
@@ -85,6 +88,43 @@ class ToolsTestCase(unittest.TestCase):
         self.assertIn(b'name="file"; filename="screen.bin"', payload)
         self.assertIn(b"Content-Type: application/octet-stream", payload)
         self.assertTrue(payload.endswith(b"--TEST_BOUNDARY_XYZ--\r\n"))
+
+    def test_admin_server_probe_esp_ip_fallback(self):
+        ip = probe_esp_ip(candidates=["127.0.0.1:9999", "10.255.255.1"])
+        self.assertIsInstance(ip, str)
+        self.assertEqual(len(ip.split(".")), 4)
+
+    def test_pet_ai_cortex_config_structure(self):
+        cfg = load_config()
+        self.assertIn("nvidia_base_url", cfg)
+        self.assertIn("primary_reflex_model", cfg)
+        self.assertIn("idle_sleep_seconds", cfg)
+        self.assertIn("thought_interval_seconds", cfg)
+        self.assertGreater(cfg["idle_sleep_seconds"], 0)
+
+    def test_audio_beat_analyzer_constants(self):
+        self.assertEqual(SAMPLE_RATE, 44100)
+        self.assertEqual(BLOCK_SIZE, 2048)
+        self.assertEqual(HOP_SIZE, 1024)
+        self.assertGreater(BLOCK_SIZE, HOP_SIZE)
+
+    def test_render_doc_images_temporary_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            render_all(out_dir=tmp_dir)
+            expected_images = [
+                "bambu_printer_telemetry.png",
+                "desk_pet_crying.png",
+                "desk_pet_dancing.png",
+                "desk_pet_neutral.png",
+                "desk_pet_angry.png",
+                "desk_pet_calm.png",
+                "pc_hardware_hud.png",
+                "spotify_media_sync.png"
+            ]
+            for img_name in expected_images:
+                fpath = os.path.join(tmp_dir, img_name)
+                self.assertTrue(os.path.isfile(fpath), f"{img_name} should exist in output dir")
+                self.assertGreater(os.path.getsize(fpath), 0)
 
 
 if __name__ == "__main__":

@@ -36,8 +36,7 @@ from scipy import signal
 try:
     import soundcard as sc
 except ImportError:
-    print("[ERROR] 'soundcard' package not installed. Run: pip install soundcard")
-    sys.exit(1)
+    sc = None
 
 
 # =====================================================================
@@ -127,6 +126,9 @@ class BeatPatternAnalyzer:
 
     def init_audio(self):
         """Initialize WASAPI loopback capture on the default Windows playback device."""
+        if sc is None:
+            print("[AUDIO ERROR] 'soundcard' package not installed. Run: pip install soundcard")
+            return False
         try:
             self.speaker = sc.default_speaker()
             self.mic = sc.get_microphone(id=self.speaker.id, include_loopback=True)
@@ -429,6 +431,9 @@ class BeatPatternAnalyzer:
 # Standalone CLI Entrypoint
 # =====================================================================
 if __name__ == "__main__":
+    if sc is None:
+        print("[ERROR] 'soundcard' package not installed. Run: pip install soundcard")
+        sys.exit(1)
     target_ip = sys.argv[1] if len(sys.argv) > 1 else None
     analyzer = BeatPatternAnalyzer(esp_ip=target_ip, standalone=True)
     analyzer.run(print_dashboard=True)

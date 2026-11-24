@@ -150,3 +150,49 @@ def ask_ai(req: AskRequest):
         raise HTTPException(status_code=res.status_code, detail=res.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/weather")
+def get_weather(lat: Optional[float] = None, lon: Optional[float] = None, city: Optional[str] = None):
+    """Provides weather vitals from Open-Meteo with fallback support."""
+    target_lat = lat if lat is not None else 28.6139
+    target_lon = lon if lon is not None else 77.2090
+    target_city = city or "Delhi"
+
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={target_lat}&longitude={target_lon}&current_weather=true"
+        res = requests.get(url, timeout=3.0, headers={"User-Agent": "STAN-Backend/1.0"})
+        if res.status_code == 200:
+            data = res.json()
+            cw = data.get("current_weather", {})
+            temp = float(cw.get("temperature", 0.0))
+            wcode = int(cw.get("weathercode", 0))
+
+            desc = "CLEAR"
+            if wcode in (1, 2, 3):
+                desc = "CLOUDY"
+            elif wcode in (45, 48):
+                desc = "FOG"
+            elif wcode in (51, 53, 55, 61, 63, 65, 80, 81, 82):
+                desc = "RAIN"
+            elif wcode in (71, 73, 75, 77, 85, 86):
+                desc = "SNOW"
+            elif wcode >= 95:
+                desc = "STORM"
+
+            return {
+                "city": target_city,
+                "temp": temp,
+                "weather": desc,
+                "source": "open-meteo",
+                "status": "success"
+            }
+    except Exception:
+        pass
+
+    return {
+        "city": target_city,
+        "temp": 24.0,
+        "weather": "CLEAR",
+        "source": "fallback",
+        "status": "offline"
+    }
