@@ -22,6 +22,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
 DEFAULT_CANDIDATE_IPS = [
+    "192.168.137.140",
     "192.168.137.35",
     "192.168.0.154",
     "192.168.1.35",
@@ -31,19 +32,71 @@ DEFAULT_CANDIDATE_IPS = [
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_DIR = os.environ.get("STAN_WEB_DIR", os.path.join(REPO_ROOT, "web"))
 
-g_target_ip = "192.168.137.35"
+g_target_ip = "192.168.137.140"
+g_printer_ip = "192.168.137.171"
+
+
+def find_devices_from_arp():
+    """Parses local ARP cache to find ESP32 and Bambu Lab printer MAC addresses."""
+    esp_ip = None
+    printer_ip = None
+    try:
+        import subprocess
+        out = subprocess.check_output("arp -a", shell=True).decode("latin1", errors="ignore")
+        for line in out.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                ip = parts[0]
+                mac = parts[1].lower().replace("-", ":")
+                if mac.startswith("b0:cb:d8") or mac == "b0:cb:d8:0a:a9:54":
+                    esp_ip = ip
+                elif mac.startswith("80:45:6b") or mac == "80:45:6b:33:57:14":
+                    printer_ip = ip
+    except Exception:
+        pass
+    return esp_ip, printer_ip
+
+
+def sync_printer_ip_to_esp(esp_ip, printer_ip):
+    """Pushes discovered printer IP to ESP32 /api/printer/ip."""
+    if not esp_ip or not printer_ip:
+        return False
+    try:
+        url = f"http://{esp_ip}/api/printer/ip"
+        payload = json.dumps({"ip": printer_ip}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
 
 
 def probe_esp_ip(candidates=None):
-    """Probes candidate IPs to discover an active ESP32 desk station."""
-    global g_target_ip
-    probe_list = candidates or DEFAULT_CANDIDATE_IPS
+    """Probes candidate IPs and ARP table to discover an active ESP32 desk station."""
+    global g_target_ip, g_printer_ip
+    arp_esp, arp_printer = find_devices_from_arp()
+    if arp_printer:
+        g_printer_ip = arp_printer
+        print(f" Discovered Bambu Printer via ARP: {g_printer_ip}")
+
+    probe_list = []
+    if arp_esp:
+        probe_list.append(arp_esp)
+    if candidates:
+        probe_list.extend(candidates)
+    else:
+        for ip in DEFAULT_CANDIDATE_IPS:
+            if ip not in probe_list:
+                probe_list.append(ip)
+
     for ip in probe_list:
         try:
             req = urllib.request.Request(f"http://{ip}/api/status", headers={"User-Agent": "AdminProbe/1.0"})
             with urllib.request.urlopen(req, timeout=1.2) as resp:
                 if resp.status == 200:
                     g_target_ip = ip
+                    if g_printer_ip:
+                        sync_printer_ip_to_esp(g_target_ip, g_printer_ip)
                     return ip
         except Exception:
             pass
@@ -84,7 +137,23 @@ class AdminRequestHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"device_ip": g_target_ip, "status": "online"}).encode())
+            self.wfile.write(json.dumps({
+                "device_ip": g_target_ip,
+                "printer_ip": g_printer_ip,
+                "status": "online"
+            }).encode())
+            return
+
+        if clean_path in ["/api/discover", "/api/rescan"]:
+            probe_esp_ip()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "device_ip": g_target_ip,
+                "printer_ip": g_printer_ip,
+                "status": "discovered"
+            }).encode())
             return
 
         # Reverse proxy: /esp/... -> http://{g_target_ip}/...

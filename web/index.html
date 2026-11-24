@@ -348,7 +348,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
       </button>
       <div class="badge" onclick="openIpModal()">
         <div class="dot" id="cDot"></div>
-        <span id="cIp">192.168.137.35</span>
+        <span id="cIp">192.168.137.140</span>
       </div>
     </div>
   </div>
@@ -362,15 +362,15 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
       <button onclick="document.getElementById('httpsWarningBanner').style.display='none'" style="background:none;border:none;color:var(--txt-muted);cursor:pointer;display:flex;align-items:center;padding:4px;"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
     <div style="font-size:0.75rem;color:var(--txt-muted);margin:6px 0 8px 0;line-height:1.45;">
-      Browsers block HTTPS sites (like Vercel) from fetching local devices (<span class="bannerDirectIp">192.168.137.35</span>) by default.<br>
+      Browsers block HTTPS sites (like Vercel) from fetching local devices (<span class="bannerDirectIp">192.168.137.140</span>) by default.<br>
       <b>To use this Vercel dashboard:</b> Click the lock/tune icon left of the address bar &rarr; <b>Site settings</b> &rarr; Set <b>Insecure content</b> to <b>Allow</b> &rarr; Click Test below!
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
       <button onclick="testVercelConnection()" id="btnVercelTest" style="display:inline-flex;align-items:center;gap:6px;background:var(--cyan);color:#08080a;font-weight:700;font-size:0.75rem;padding:7px 14px;border:none;border-radius:8px;cursor:pointer;">
         <span>Test Connection</span>
       </button>
-      <a id="httpsDirectDeviceLink" href="http://192.168.137.35/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-weight:600;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
-        <span>Open Direct Monitor (http://<span class="bannerDirectIp">192.168.137.35</span>)</span>
+      <a id="httpsDirectDeviceLink" href="http://192.168.137.140/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-weight:600;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
+        <span>Open Direct Monitor (http://<span class="bannerDirectIp">192.168.137.140</span>)</span>
       </a>
       <a href="http://localhost:3000/" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);font-weight:600;font-size:0.75rem;padding:7px 14px;border-radius:8px;text-decoration:none;">
         <span>Open Localhost (3000)</span>
@@ -861,11 +861,11 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
   <div class="modal-card">
     <div class="modal-title">Device Connection</div>
     <div class="modal-desc">Enter the IP address of your ESP32 Bambu Monitor on your local Wi-Fi network.</div>
-    <input type="text" class="modal-input" id="ipInput" placeholder="192.168.137.35" value="192.168.137.35">
+    <input type="text" class="modal-input" id="ipInput" placeholder="192.168.137.140" value="192.168.137.140">
     <div id="ipModalStatus" style="font-size:0.75rem;margin:10px 0 2px 0;min-height:18px;line-height:1.3;"></div>
     <div id="ipModalDirectBtn" style="display:none;margin-top:6px;">
-      <a id="ipModalDirectLink" href="http://192.168.137.35/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
-        <span>Open Direct Link (http://<span class="bannerDirectIp">192.168.137.35</span>)</span>
+      <a id="ipModalDirectLink" href="http://192.168.137.140/" target="_blank" style="display:block;text-align:center;background:rgba(255,255,255,0.08);color:var(--cyan);border:1px solid rgba(0,242,254,0.3);padding:8px;border-radius:10px;text-decoration:none;font-size:0.75rem;font-weight:600;">
+        <span>Open Direct Link (http://<span class="bannerDirectIp">192.168.137.140</span>)</span>
       </a>
     </div>
     <div class="modal-btns">
@@ -888,7 +888,7 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
   if (code) {
     let ip = null;
     try { ip = localStorage.getItem('bambu_esp32_ip'); } catch(e){}
-    if (!ip) ip = "192.168.137.35";
+    if (!ip) ip = "192.168.137.140";
     window.location.replace("http://" + ip + "/api/spotify/callback?code=" +
                             encodeURIComponent(code));
   }
@@ -896,8 +896,8 @@ input[type=range]{width:100%;accent-color:var(--red);cursor:pointer;}
 </script>
 <script>
 // --- IP Configuration & Host Management ---
-const DEFAULT_IP = "192.168.137.35";
-const CANDIDATE_IPS = ["192.168.137.35", "192.168.0.154", "192.168.1.35", "192.168.0.35"];
+const DEFAULT_IP = "192.168.137.140";
+const CANDIDATE_IPS = ["192.168.137.140", "192.168.137.35", "192.168.0.154", "192.168.1.35", "192.168.0.35", "192.168.1.154"];
 
 function getDeviceIp(){
   const urlParams = new URLSearchParams(window.location.search);
@@ -949,8 +949,22 @@ async function autoProbeDeviceIp() {
   if (window.location.hostname === deviceIp && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") return;
   isAutoProbing = true;
   try {
-    // If on localhost, probe local AI cortex / sync tool first
+    // If on localhost, probe local admin server / AI cortex first
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        const c = new AbortController();
+        setTimeout(() => c.abort(), 700);
+        const r = await fetch('/api/device/ip', { signal: c.signal });
+        if (r.ok) {
+          const d = await r.json();
+          if (d && d.device_ip && d.device_ip !== deviceIp) {
+            console.log('[AUTO-IP] Found live device IP via Admin Server:', d.device_ip);
+            setAndApplyDeviceIp(d.device_ip);
+            isAutoProbing = false;
+            return;
+          }
+        }
+      } catch(e) {}
       try {
         const c = new AbortController();
         setTimeout(() => c.abort(), 700);

@@ -119,6 +119,7 @@ static void handleStatus() {
   doc["clock_12h"]    = uiGetClock12h();
   doc["led_inverted"] = ledGetInverted();
   doc["custom_image"] = uiIsCustomImageActive();
+  doc["printer_ip"]   = networkGetPrinterIp();
   doc["app_mode"]     = (uiGetAppMode() == MODE_SPOTIFY) ? "spotify" : "printer";
 
   String out;
@@ -1248,6 +1249,28 @@ static void webTask(void* /*param*/) {
   });
   server.on("/api/settings", HTTP_GET, handleSettingsGet);
   server.on("/api/settings", HTTP_POST, handleSettingsSet);
+  server.on("/api/printer/ip", HTTP_OPTIONS, handleOptions);
+  server.on("/api/printer/ip", HTTP_GET, []() {
+    sendCorsHeaders();
+    JsonDocument doc;
+    doc["printer_ip"] = networkGetPrinterIp();
+    String out;
+    serializeJson(doc, out);
+    server.send(200, "application/json", out);
+  });
+  server.on("/api/printer/ip", HTTP_POST, []() {
+    sendCorsHeaders();
+    if (server.hasArg("plain")) {
+      JsonDocument doc;
+      deserializeJson(doc, server.arg("plain"));
+      if (!doc["ip"].isNull()) {
+        networkSetPrinterIp(doc["ip"].as<const char*>());
+      }
+    } else if (server.hasArg("ip")) {
+      networkSetPrinterIp(server.arg("ip").c_str());
+    }
+    server.send(200, "application/json", "{\"status\":\"ok\"}");
+  });
   server.on("/api/ai/config", HTTP_GET, handleAiConfigGet);
   server.on("/api/ai/config", HTTP_POST, handleAiConfigSet);
   server.on("/api/pet/mood", HTTP_GET, handlePetMood);

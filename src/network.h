@@ -16,3 +16,7 @@ bool mqttIsPaused();
 // App Mode MQTT enable / disable (Printer Mode vs Spotify Mode)
 void networkSetEnabled(bool enabled);
 bool networkIsEnabled();
+
+// Dynamic printer IP management
+void networkSetPrinterIp(const char* ip);
+const char* networkGetPrinterIp();

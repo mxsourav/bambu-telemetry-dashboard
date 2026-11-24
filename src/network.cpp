@@ -142,6 +142,18 @@ static void mqttCallback(char* topic, byte* payload, uint32_t length) {
 
 static char s_printer_ip[20] = PRINTER_IP;
 
+void networkSetPrinterIp(const char* ip) {
+  if (ip && ip[0]) {
+    strncpy(s_printer_ip, ip, sizeof(s_printer_ip) - 1);
+    Serial.printf("[MQTT] Printer IP set to %s\n", s_printer_ip);
+    s_mqtt_last_attempt = 0;
+  }
+}
+
+const char* networkGetPrinterIp() {
+  return s_printer_ip;
+}
+
 static bool probeIp(const char* ip, uint16_t timeout_ms = 800) {
   if (!ip || !ip[0]) return false;
   WiFiClient probe;
@@ -162,15 +174,23 @@ static bool isPrinterReachable() {
     Serial.printf("[MQTT] Printer found at secrets IP: %s\n", s_printer_ip);
     return true;
   }
-  // 3. Auto-discover printer across local subnet
+  // 3. Auto-discover printer across local subnet (Hotspot range 100-200 prioritized)
   IPAddress local = WiFi.localIP();
   if (local[0] != 0) {
     char test_ip[20];
-    const uint8_t common_hosts[] = { 133, 59, 112, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 113, 114, 115, 120, 125, 130, 131, 132, 134, 135, 140, 150, 2, 3, 4, 5, 10, 15, 20 };
-    for (uint8_t host : common_hosts) {
+    for (int host = 100; host <= 200; host++) {
       if (host == local[3]) continue;
       snprintf(test_ip, sizeof(test_ip), "%u.%u.%u.%u", local[0], local[1], local[2], host);
-      if (probeIp(test_ip, 250)) {
+      if (probeIp(test_ip, 120)) {
+        strncpy(s_printer_ip, test_ip, sizeof(s_printer_ip) - 1);
+        Serial.printf("[MQTT] Auto-discovered printer at %s:8883!\n", s_printer_ip);
+        return true;
+      }
+    }
+    for (int host = 2; host < 100; host++) {
+      if (host == local[3]) continue;
+      snprintf(test_ip, sizeof(test_ip), "%u.%u.%u.%u", local[0], local[1], local[2], host);
+      if (probeIp(test_ip, 100)) {
         strncpy(s_printer_ip, test_ip, sizeof(s_printer_ip) - 1);
         Serial.printf("[MQTT] Auto-discovered printer at %s:8883!\n", s_printer_ip);
         return true;

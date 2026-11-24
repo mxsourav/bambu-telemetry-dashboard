@@ -7,13 +7,16 @@ import winreg
 import urllib.request
 import json
 
-TARGET_IP = "192.168.137.35"
+TARGET_IP = "192.168.137.140"
 PATTERNS = [
     "[*.]vercel.app",
     "https://*.vercel.app",
     "https://web-tau-five-60.vercel.app",
-    "http://" + TARGET_IP,
-    "http://" + TARGET_IP + ":80"
+    "http://192.168.137.*",
+    "http://192.168.137.140",
+    "http://192.168.137.140:80",
+    "http://192.168.137.35",
+    "http://192.168.137.35:80"
 ]
 
 POLICIES = [
