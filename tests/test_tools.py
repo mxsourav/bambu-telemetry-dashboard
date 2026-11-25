@@ -126,6 +126,20 @@ class ToolsTestCase(unittest.TestCase):
                 self.assertTrue(os.path.isfile(fpath), f"{img_name} should exist in output dir")
                 self.assertGreater(os.path.getsize(fpath), 0)
 
+    def test_talk_to_pet_parser_defaults(self):
+        from tools.talk_to_pet import build_parser, DEFAULT_API_URL, DEFAULT_TIMEOUT
+        args = build_parser().parse_args([])
+        self.assertEqual(args.prompt, [])
+        self.assertEqual(args.url, DEFAULT_API_URL)
+        self.assertEqual(args.timeout, DEFAULT_TIMEOUT)
+
+    def test_talk_to_pet_parser_custom_args(self):
+        from tools.talk_to_pet import build_parser
+        args = build_parser().parse_args(["--url", "http://127.0.0.1:9000/ask", "--timeout", "5.5", "hello", "stan"])
+        self.assertEqual(args.prompt, ["hello", "stan"])
+        self.assertEqual(args.url, "http://127.0.0.1:9000/ask")
+        self.assertEqual(args.timeout, 5.5)
+
 
 if __name__ == "__main__":
     unittest.main()
