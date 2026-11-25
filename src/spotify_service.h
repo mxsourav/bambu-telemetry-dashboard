@@ -9,6 +9,8 @@ struct SpotifyTrackInfo {
   uint32_t duration_ms      = 0;
   char     image_url[128]   = {0};
   char     genre[32]        = {0};   // artist genre ("drill", "hip-hop", "ballad", "lofi", "rock", "edm", "pop")
+  float    bpm              = 120.0f;// tempo in BPM
+  float    energy           = 0.70f; // energy 0.0 .. 1.0
   char     lyric_cur[80]    = {0};
   char     lyric_next[80]   = {0};
   uint32_t last_update_ms   = 0;

@@ -72,3 +72,7 @@ void uiSetClock12h(bool is12h);
 
 // Live Notification Overlay (from Web / Phone / Laptop)
 void uiShowNotification(const char* title, const char* msg, uint32_t duration_ms = 4000);
+
+// OTA Update State (freezes Core 1 tasks to avoid Flash Cache contention)
+void uiSetOtaActive(bool active);
+bool uiIsOtaActive();

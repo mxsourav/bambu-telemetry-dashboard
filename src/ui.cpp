@@ -1795,6 +1795,10 @@ static void drawPetVibeStrip(uint32_t ms) {
 // ============================================================
 //  UI TASK
 // ============================================================
+static volatile bool s_ota_active = false;
+void uiSetOtaActive(bool active) { s_ota_active = active; }
+bool uiIsOtaActive() { return s_ota_active; }
+
 static void uiTask(void* /*param*/) {
   TickType_t last_wake = xTaskGetTickCount();
 
@@ -1823,6 +1827,10 @@ static void uiTask(void* /*param*/) {
   Serial.println(F("[UI] boot splash started"));
 
   while (true) {
+    if (s_ota_active) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
     uint32_t ms = millis();
     TelemetryData d;
     telemetryRead(d);

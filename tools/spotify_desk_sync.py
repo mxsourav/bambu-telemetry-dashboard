@@ -555,13 +555,16 @@ def push_spotify_now(title, artist, pos_ms=0, dur_ms=0, is_playing=True, genre="
                 g_music_genre = g_audio_analyzer.detected_genre
 
     resolved_genre = genre or g_music_genre or "Pop"
+    detected_bpm = getattr(g_audio_analyzer, "detected_bpm", 120.0) if g_audio_analyzer else 120.0
     payload = {
         "title": title,
         "artist": artist,
         "progress_ms": int(pos_ms),
         "duration_ms": int(dur_ms) if dur_ms > 0 else 180000,
         "is_playing": is_playing,
-        "genre": resolved_genre
+        "genre": resolved_genre,
+        "bpm": int(detected_bpm),
+        "vibe": round(float(g_music_energy), 2)
     }
     for attempt in range(2):
         try:
@@ -714,7 +717,10 @@ def pc_telemetry_loop():
                 "weather": weather_info["weather"],
                 "city": weather_info["city"],
                 "vibe": g_music_energy,
-                "genre": g_music_genre
+                "genre": g_music_genre,
+                "music_bpm": int(getattr(g_audio_analyzer, "detected_bpm", 120.0)) if g_audio_analyzer else 120,
+                "bpm": int(getattr(g_audio_analyzer, "detected_bpm", 120.0)) if g_audio_analyzer else 120,
+                "beat": bool(getattr(g_audio_analyzer, "is_beat", False)) if g_audio_analyzer else False
             }
             http_session.post(get_url("/api/pc/stats"), json=payload, timeout=1.5)
         except Exception:

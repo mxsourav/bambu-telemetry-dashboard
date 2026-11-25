@@ -308,18 +308,6 @@ bool ledGetInverted() { return led_inverted; }
 static void ledApply(uint8_t r, uint8_t g, uint8_t b, uint32_t ms = 0) {
   // Direct, instant, exact PWM output without lag or math truncation
   uint8_t eff_pct = led_brightness_pct;
-  // Dynamic music beat pulsation: kick transients pump the LED strip in sync with the beat
-  if (ms > 0 && musicIsActive()) {
-    float hz = deskPetGetVibeHz();
-    if (hz < 0.5f || hz > 8.0f) hz = 2.0f;
-    float ph = (float)ms * 0.001f * hz * 6.2831853f;
-    float kick = powf(0.5f - 0.5f * cosf(ph), 6.0f);
-    float energy = (pcStatsIsActive() && g_pc_stats.music_vibe > 0.05f) ? g_pc_stats.music_vibe : 0.75f;
-    if (energy > 1.0f) energy = 1.0f;
-    float pulse = 0.18f + 0.82f * kick * (0.35f + 0.65f * energy);
-    if (pulse > 1.0f) pulse = 1.0f;
-    eff_pct = (uint8_t)(led_brightness_pct * pulse);
-  }
   uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
   uint8_t wr = (uint16_t)r * cap / 255;
   uint8_t wg = (uint16_t)g * cap / 255;
@@ -338,10 +326,10 @@ static void ledApply(uint8_t r, uint8_t g, uint8_t b, uint32_t ms = 0) {
   ledcWrite(LEDC_CH_B, cur_b);
 }
 
-// Dedicated Real-Time Music Reactive LED Engine
+// Dedicated Real-Time Music Reactive LED Engine (punchy transient beat flash & genre strobe)
 static void renderMusicSyncLed(uint32_t ms) {
   bool active = musicIsActive();
-  uint8_t r, g, b;
+  uint8_t r = 0, g = 0, b = 0;
 
   if (active) {
     // 1. Pick base music color: genre signature mood color, or custom RGB if set
@@ -353,28 +341,92 @@ static void renderMusicSyncLed(uint32_t ms) {
       petMoodGetGenreColor(r, g, b);
     }
 
-    // 2. Frequency & Beat Phase
-    float hz = deskPetGetVibeHz();
-    if (hz < 0.5f || hz > 8.0f) hz = 2.0f;
-    float ph = (float)ms * 0.001f * hz * 6.2831853f;
+    // 2. Real Tempo (BPM) from PC audio analyzer, Spotify or Genre
+    float bpm = 120.0f;
+    if (pcStatsIsActive() && g_pc_stats.music_bpm >= 50.0f && g_pc_stats.music_bpm <= 220.0f) {
+      bpm = g_pc_stats.music_bpm;
+    } else if (g_spotify.bpm >= 50.0f && g_spotify.bpm <= 220.0f) {
+      bpm = g_spotify.bpm;
+    } else {
+      uint8_t style = petMoodGetVibeStyle();
+      switch (style) {
+        case 2: bpm = 128.0f; break; // EDM / Dance: 128 BPM
+        case 3: bpm = 138.0f; break; // Rock / Metal: 138 BPM
+        case 1: bpm = 75.0f;  break; // Hip-Hop / Drill: 75 BPM half-time
+        case 4: bpm = 84.0f;  break; // Lo-Fi / Chill: 84 BPM
+        case 5: bpm = 65.0f;  break; // Ballad / Sad: 65 BPM
+        default: bpm = 118.0f; break; // Pop / Commercial: 118 BPM
+      }
+    }
 
-    // 3. Transient Flash Envelope:
-    // Power of 6 makes a punchy, sharp transient spike on the kick/snare beat
-    float kick = powf(0.5f - 0.5f * cosf(ph), 6.0f);
+    uint32_t beat_interval_ms = (uint32_t)(60000.0f / bpm);
+    if (beat_interval_ms < 250) beat_interval_ms = 250;
+    if (beat_interval_ms > 1500) beat_interval_ms = 1500;
 
-    // Dynamic energy scaling from audio beat analyzer FFT
-    float energy = (pcStatsIsActive() && g_pc_stats.music_vibe > 0.05f) ? g_pc_stats.music_vibe : 0.75f;
+    // Time elapsed within current beat interval
+    uint32_t t_beat = ms % beat_interval_ms;
+
+    // 3. Dynamic Audio Energy
+    float energy = 0.70f;
+    if (pcStatsIsActive() && g_pc_stats.music_vibe > 0.05f) {
+      energy = g_pc_stats.music_vibe;
+    } else if (g_spotify.energy > 0.05f) {
+      energy = g_spotify.energy;
+    }
     if (energy > 1.0f) energy = 1.0f;
 
-    // 18% ambient floor + up to 82% punchy beat flash
-    float pulse = 0.18f + 0.82f * kick * (0.35f + 0.65f * energy);
+    // 4. Punchy Beat Flash Envelope:
+    // Fast attack (instant at t=0), snappy exponential decay within 90ms
+    float flash = 0.0f;
+    const uint32_t flash_decay_ms = 90;
+    if (t_beat < flash_decay_ms) {
+      float norm = 1.0f - ((float)t_beat / (float)flash_decay_ms);
+      flash = norm * norm; // Quadratic decay creates a crisp, punchy pop!
+    }
+
+    // Upbeat syncopation (secondary snare pulse on the half-beat) for energetic genres
+    uint8_t style = petMoodGetVibeStyle();
+    if ((style == 2 || style == 3 || style == 0) && beat_interval_ms > 350) {
+      uint32_t half_beat = beat_interval_ms / 2;
+      if (t_beat >= half_beat && t_beat < (half_beat + 60)) {
+        float norm_half = 1.0f - ((float)(t_beat - half_beat) / 60.0f);
+        float snare = 0.45f * norm_half * norm_half;
+        if (snare > flash) flash = snare;
+      }
+    }
+
+    // Hardware beat trigger from PC loopback spectral flux
+    if (g_pc_stats.last_beat_ms > 0 && (ms - g_pc_stats.last_beat_ms < 80)) {
+      float ext_norm = 1.0f - ((float)(ms - g_pc_stats.last_beat_ms) / 80.0f);
+      float ext_flash = ext_norm * ext_norm;
+      if (ext_flash > flash) flash = ext_flash;
+    }
+
+    // 5. Dynamic Contrast Mixing:
+    // Low ambient floor (10%) so beat hits flash with huge dynamic impact
+    float ambient_floor = 0.10f + 0.08f * energy;
+    float pulse = ambient_floor + (1.0f - ambient_floor) * flash * (0.45f + 0.55f * energy);
     if (pulse > 1.0f) pulse = 1.0f;
+
+    // High energy kick drum white burst: creates genuine stage visualizer strobing
+    uint8_t flash_white = 0;
+    if (flash > 0.60f && energy > 0.45f) {
+      flash_white = (uint8_t)((flash - 0.60f) / 0.40f * 95.0f * energy);
+    }
 
     uint8_t eff_pct = (uint8_t)(led_brightness_pct * pulse);
     uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
-    uint8_t wr = (uint16_t)r * cap / 255;
-    uint8_t wg = (uint16_t)g * cap / 255;
-    uint8_t wb = (uint16_t)b * cap / 255;
+
+    uint16_t mr = (uint16_t)r + flash_white;
+    uint16_t mg = (uint16_t)g + flash_white;
+    uint16_t mb = (uint16_t)b + flash_white;
+    if (mr > 255) mr = 255;
+    if (mg > 255) mg = 255;
+    if (mb > 255) mb = 255;
+
+    uint8_t wr = (uint16_t)mr * cap / 255;
+    uint8_t wg = (uint16_t)mg * cap / 255;
+    uint8_t wb = (uint16_t)mb * cap / 255;
 
     if (led_inverted) {
       cur_r = 255 - wr;
@@ -389,13 +441,11 @@ static void renderMusicSyncLed(uint32_t ms) {
     ledcWrite(LEDC_CH_G, cur_g);
     ledcWrite(LEDC_CH_B, cur_b);
   } else {
-    // Music is paused or waiting for audio:
-    // Gentle rhythmic breathing standby glow in electric violet / cyber purple
-    float ph = (float)ms * 0.001f * 0.6f * 6.2831853f; // 0.6 Hz slow breath
-    float breath = 0.20f + 0.25f * (0.5f + 0.5f * sinf(ph));
-    uint8_t eff_pct = (uint8_t)(led_brightness_pct * breath);
+    // Music is paused or stopped:
+    // Steady, calm atmospheric neon purple glow (22% brightness, no annoying fading)
+    uint8_t eff_pct = (uint8_t)(led_brightness_pct * 0.22f);
     uint16_t cap = (uint16_t)LED_MAX_BRIGHTNESS * eff_pct / 100;
-    r = 150; g = 30; b = 255; // neon purple standby
+    r = 130; g = 25; b = 255; // neon purple standby
     uint8_t wr = (uint16_t)r * cap / 255;
     uint8_t wg = (uint16_t)g * cap / 255;
     uint8_t wb = (uint16_t)b * cap / 255;
@@ -540,6 +590,10 @@ static void peripheralsTask(void* /*param*/) {
   TickType_t last_wake = xTaskGetTickCount();
 
   while (true) {
+    if (uiIsOtaActive()) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
     uint32_t ms = millis();
     telemetryRead(d);
 

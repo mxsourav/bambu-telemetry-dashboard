@@ -24,6 +24,8 @@ struct PcStats {
                              // (calm -> gentle sway, energetic -> big bounce)
   char  music_genre[24] = "";// track genre from iTunes lookup (Drill, Metal,
                              // Lo-Fi...) -> picks the pet's dance style
+  float music_bpm = 120.0f;  // real-time tempo from audio FFT or metadata
+  uint32_t last_beat_ms = 0; // timestamp of last detected beat pulse
   uint32_t last_update_ms = 0;
 };
 

@@ -632,6 +632,7 @@ static void handleDisplayClear() {
 static void handleOtaLoop() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
+    uiSetOtaActive(true);
     mqttPause();
     Serial.printf("[OTA] Flashing start: %s\n", upload.filename.c_str());
     if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
@@ -645,6 +646,7 @@ static void handleOtaLoop() {
     if (Update.end(true)) {
       Serial.printf("[OTA] Flashed %u bytes OK. Rebooting...\n", upload.totalSize);
     } else {
+      uiSetOtaActive(false);
       Update.printError(Serial);
     }
   }
@@ -658,6 +660,7 @@ static void handleOtaDone() {
     delay(500);
     ESP.restart();
   } else {
+    uiSetOtaActive(false);
     server.send(500, "text/plain", "FAIL");
   }
 }
@@ -868,6 +871,14 @@ static void handlePcStats() {
         g_pc_stats.music_vibe = doc["vibe"].as<float>();
         if (g_pc_stats.music_vibe < 0.0f || g_pc_stats.music_vibe > 1.0f) g_pc_stats.music_vibe = 0.5f;
       }
+      if (!doc["music_bpm"].isNull()) {
+        g_pc_stats.music_bpm = doc["music_bpm"].as<float>();
+      } else if (!doc["bpm"].isNull()) {
+        g_pc_stats.music_bpm = doc["bpm"].as<float>();
+      }
+      if (!doc["beat"].isNull() && doc["beat"].as<bool>()) {
+        g_pc_stats.last_beat_ms = millis();
+      }
       if (!doc["genre"].isNull()) {
         const char* gn = doc["genre"].as<const char*>();
         if (gn && gn[0]) {
@@ -925,6 +936,14 @@ static void handleSpotifyNow() {
     const char* genre = doc["genre"] | "";
     strncpy(g_spotify.genre, genre, sizeof(g_spotify.genre) - 1);
     g_spotify.genre[sizeof(g_spotify.genre) - 1] = 0;
+    if (!doc["bpm"].isNull()) {
+      g_spotify.bpm = doc["bpm"].as<float>();
+    }
+    if (!doc["vibe"].isNull()) {
+      g_spotify.energy = doc["vibe"].as<float>();
+    } else if (!doc["energy"].isNull()) {
+      g_spotify.energy = doc["energy"].as<float>();
+    }
     if (playing && g_settings.pet_music_vibe) {
       petMoodWakeFromMusic();
     }
