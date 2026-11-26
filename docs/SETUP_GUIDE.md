@@ -161,13 +161,11 @@ Modern browsers block public HTTPS websites (such as `https://*.vercel.app`) fro
 To enable seamless browser access:
 1. Run `AUTO_SETUP_VERCEL.bat` or run:
    ```bash
-   python tools/setup_vercel_pna.py
+   python tools/setup_vercel_pna.py --ip 192.168.137.35
    ```
-2. The helper automatically opens Chrome, Brave, or Edge with:
-   ```
-   --unsafely-treat-insecure-origin-as-secure="http://192.168.137.35"
-   ```
-3. Alternatively, in Chrome or Edge navigate to `chrome://flags` and set **Insecure origins treated as secure** to your ESP32's IP address.
+   Pass `--dry-run` to preview policy targets without modifying the Windows Registry, or `--skip-ping` to skip the ESP32 `/api/status` check.
+2. The helper writes HKCU `InsecureContentAllowedForUrls` and `InsecurePrivateNetworkRequestsAllowedForUrls` policies for Chrome, Edge, and Brave so `https://*.vercel.app` can reach your local ESP32 IP.
+3. Alternatively, in Chrome or Edge navigate to `chrome://flags` and set **Insecure origins treated as secure** to your ESP32's IP address (`http://192.168.137.35`).
 
 ---
 
@@ -229,12 +227,18 @@ python -m unittest discover tests -v
    - `GET /api/status`: Validates service availability, version string, and health metrics.
    - `POST /api/music/classify`: Ensures heuristic genre classification maps acoustic features to valid companion dance styles (EDM, Hip-Hop/Drill, Rock/Metal, Lo-Fi, Ballad, and Pop).
    - `POST /api/ai/ask`: Validates payload schema, prompt validation, and fallback mechanisms.
+   - `GET /api/weather`: Validates default and custom coordinate weather responses with Open-Meteo fallback handling.
 
 2. **Developer Tools & Firmware Assets (`tests/test_tools.py`)**:
-   - `tools/admin_server.py`: Checks default and custom CLI arguments (`--port`, `--ip`, `--no-browser`).
+   - `tools/admin_server.py`: Checks default and custom CLI arguments (`--port`, `--ip`, `--no-browser`) and ESP32 IP probe fallback.
+   - `tools/audio_beat_analyzer.py`: Verifies audio sampling and FFT block/hop constants.
    - `tools/build_web_ui_header.py`: Verifies that the embedded C header `src/web_ui.h` is synchronized with `web/index.html`.
    - `tools/create_delta_icons.py`: Validates isolated RGB icon generation.
    - `tools/gen_pwa_header.py`: Verifies byte conversion and header format for PWA icons.
+   - `tools/pet_ai_cortex.py`: Validates default configuration keys and interval bounds.
+   - `tools/render_doc_images.py`: Tests documentation visual rendering into temporary output directories.
+   - `tools/setup_vercel_pna.py`: Verifies PNA URL pattern generation, CLI flags (`--ip`, `--dry-run`, `--skip-ping`), and registry-safe dry-run behavior.
+   - `tools/talk_to_pet.py`: Checks CLI argument parser defaults and custom endpoint/timeout flags.
    - `tools/test_push_image.py`: Tests RGB565 little-endian buffer generation and multipart payload structure for OTA display streaming.
 
 ---
