@@ -161,13 +161,11 @@ Modern browsers block public HTTPS websites (such as `https://*.vercel.app`) fro
 To enable seamless browser access:
 1. Run `AUTO_SETUP_VERCEL.bat` or run:
    ```bash
-   python tools/setup_vercel_pna.py
+   python tools/setup_vercel_pna.py --ip 192.168.137.35
    ```
-2. The helper automatically opens Chrome, Brave, or Edge with:
-   ```
-   --unsafely-treat-insecure-origin-as-secure="http://192.168.137.35"
-   ```
-3. Alternatively, in Chrome or Edge navigate to `chrome://flags` and set **Insecure origins treated as secure** to your ESP32's IP address.
+   Pass `--dry-run` to preview policy targets without modifying the Windows Registry, or `--skip-ping` to skip the ESP32 `/api/status` check.
+2. The helper writes HKCU `InsecureContentAllowedForUrls` and `InsecurePrivateNetworkRequestsAllowedForUrls` policies for Chrome, Edge, and Brave so `https://*.vercel.app` can reach your local ESP32 IP.
+3. Alternatively, in Chrome or Edge navigate to `chrome://flags` and set **Insecure origins treated as secure** to your ESP32's IP address (`http://192.168.137.35`).
 
 ---
 
@@ -239,6 +237,7 @@ python -m unittest discover tests -v
    - `tools/gen_pwa_header.py`: Verifies byte conversion and header format for PWA icons.
    - `tools/pet_ai_cortex.py`: Validates default configuration keys and interval bounds.
    - `tools/render_doc_images.py`: Tests documentation visual rendering into temporary output directories.
+   - `tools/setup_vercel_pna.py`: Verifies PNA URL pattern generation, CLI flags (`--ip`, `--dry-run`, `--skip-ping`), and registry-safe dry-run behavior.
    - `tools/talk_to_pet.py`: Checks CLI argument parser defaults and custom endpoint/timeout flags.
    - `tools/test_push_image.py`: Tests RGB565 little-endian buffer generation and multipart payload structure for OTA display streaming.
 
