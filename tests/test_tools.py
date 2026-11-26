@@ -140,6 +140,21 @@ class ToolsTestCase(unittest.TestCase):
         self.assertEqual(args.url, "http://127.0.0.1:9000/ask")
         self.assertEqual(args.timeout, 5.5)
 
+    def test_setup_vercel_pna_parser_and_patterns(self):
+        from tools.setup_vercel_pna import build_parser, build_patterns, DEFAULT_TARGET_IP
+        args = build_parser().parse_args(["--ip", "192.168.1.42", "--dry-run", "--skip-ping"])
+        self.assertEqual(args.ip, "192.168.1.42")
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.skip_ping)
+        patterns = build_patterns(args.ip)
+        self.assertIn("http://192.168.1.42", patterns)
+        self.assertIn("http://192.168.1.42:80", patterns)
+        self.assertIn("http://" + DEFAULT_TARGET_IP, build_patterns())
+
+    def test_setup_vercel_pna_dry_run_no_registry_writes(self):
+        from tools.setup_vercel_pna import apply_browser_policies
+        self.assertEqual(apply_browser_policies(target_ip="192.168.1.42", dry_run=True), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
